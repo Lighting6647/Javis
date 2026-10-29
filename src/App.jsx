@@ -17,6 +17,7 @@ import { ALL_PROJECT_DESIGN_TOKENS } from './data/designTokensData';
 import { EnvironmentMatrixView } from './components/dashboard/EnvironmentMatrixView';
 import { AgentsSquadView } from './components/dashboard/AgentsSquadView';
 import { AiCompanyHubView } from './components/dashboard/AiCompanyHubView';
+import { JarvisHudView } from './components/dashboard/JarvisHudView';
 import { UptimeMonitorView } from './components/dashboard/UptimeMonitorView';
 import { AuditLogsView } from './components/dashboard/AuditLogsView';
 import { Toast } from './components/ui/Toast';
@@ -28,7 +29,7 @@ import { isSoundEnabled, setSoundEnabled, playSuccessSound, playClickSound, play
 export default function App() {
   const [projects] = useState(INITIAL_PROJECTS);
   const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
-  const [activeView, setActiveView] = useState('company'); // 'company' | 'dashboard' | 'environments' | 'uptime' | 'logs' | 'agents'
+  const [activeView, setActiveView] = useState('jarvis'); // 'jarvis' | 'company' | 'dashboard' | 'environments' | 'uptime' | 'logs' | 'agents'
   const [selectedProject, setSelectedProject] = useState(null);
   const [isHooksModalOpen, setIsHooksModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -269,6 +270,29 @@ export default function App() {
         <StatCards projects={projects} />
 
         {/* Content Views */}
+        {activeView === 'jarvis' && (
+          <div className="mt-8">
+            <JarvisHudView
+              onRunAudit={handleRunFullAudit}
+              onOpenQuotation={() => {
+                setActiveView('company');
+                showToast('info', 'J.A.R.V.I.S. เปิดหน้าใบเสนอราคา', 'เข้าสู่ระบบออกใบเสนอราคาพร้อม QR PromptPay เรียบร้อย');
+              }}
+              onOpenDoctor={() => { playClickSound(); setIsDoctorModalOpen(true); }}
+              onOpenDesignSystem={() => { playClickSound(); setIsDesignModalOpen(true); }}
+              onSelectBrandTheme={(brandId) => {
+                playClickSound();
+                setActiveBrandTheme(brandId);
+                const brand = ALL_PROJECT_DESIGN_TOKENS.find((p) => p.id === brandId);
+                if (brand) {
+                  showToast('info', 'J.A.R.V.I.S. ปรับธีมแบรนด์', `แสดงผลพาเลทสีของ "${brand.name}" เรียบร้อย`);
+                }
+              }}
+              onShowToast={showToast}
+            />
+          </div>
+        )}
+
         {activeView === 'company' && (
           <AiCompanyHubView onShowToast={showToast} />
         )}

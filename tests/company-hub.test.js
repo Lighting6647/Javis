@@ -133,3 +133,33 @@ test('Impeccable Design System standardizes all 17 projects with curated zero-AI
   assert.equal(defaultTheme.palette.primary, '#06b6d4');
   assert.equal(defaultTheme.palette.accent, '#10b981');
 });
+
+test('J.A.R.V.I.S. MARK 3 Neural Brain processes Thai voice commands and dispatches system actions accurately', async () => {
+  const { processJarvisCommand, SYSTEM_TELEMETRY } = await import('../src/utils/jarvisBrain.js');
+  
+  assert.equal(SYSTEM_TELEMETRY.codename, 'J.A.R.V.I.S. MARK 3');
+  assert.equal(SYSTEM_TELEMETRY.status, 'ACTIVE');
+
+  // 1. Audit Command
+  const auditRes = processJarvisCommand('ช่วยตรวจระบบทั้งหมดหน่อย');
+  assert.equal(auditRes.action, 'RUN_AUDIT');
+  assert.ok(auditRes.reply.includes('17 โปรเจกต์'));
+
+  // 2. POS Query
+  const posRes = processJarvisCommand('ระบบ pos ขายหน้าร้านเป็นยังไง');
+  assert.equal(posRes.action, 'NAV_DASHBOARD');
+  assert.ok(posRes.reply.includes('฿390'));
+
+  // 3. Ticket Query
+  const ticketRes = processJarvisCommand('ดูระบบบัตรคอนเสิร์ตหน่อย');
+  assert.ok(ticketRes.reply.includes('ThaiTicket'));
+
+  // 4. Quotation Command
+  const quoteRes = processJarvisCommand('ออกใบเสนอราคาพร้อมเพย์');
+  assert.equal(quoteRes.action, 'OPEN_QUOTATION');
+
+  // 5. Theme Command
+  const themeRes = processJarvisCommand('สลับธีมสีแดงคอนเสิร์ต');
+  assert.equal(themeRes.action, 'CHANGE_THEME');
+  assert.equal(themeRes.brandId, 'concert-ticket');
+});

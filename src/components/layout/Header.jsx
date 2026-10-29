@@ -101,6 +101,21 @@ export function Header({
           {/* View Toggles */}
           <div className="flex rounded-xl bg-slate-800/80 p-1 border border-slate-700/60 text-xs">
             <button
+              onClick={() => setActiveView('jarvis')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-bold transition-all ${
+                activeView === 'jarvis'
+                  ? 'bg-gradient-to-r from-cyan-600 to-emerald-600 text-white shadow-lg shadow-cyan-500/20'
+                  : 'text-cyan-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+              title="เปิดห้องควบคุม J.A.R.V.I.S. สั่งการด้วยเสียงภาษาไทย"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
+              <span>J.A.R.V.I.S. AI</span>
+            </button>
+            <button
               onClick={() => setActiveView('company')}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold transition-all ${
                 activeView === 'company' ? 'bg-cyan-600 text-white shadow-sm' : 'text-cyan-300 hover:text-white'
