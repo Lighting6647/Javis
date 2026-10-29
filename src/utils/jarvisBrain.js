@@ -51,6 +51,7 @@ export function processJarvisCommand(input, _context = {}) {
     return {
       action: 'CHANGE_THEME',
       brandId: brandId,
+      squadId: 'eng',
       delegatedTo: 'ทีม AI UI/UX Design System',
       reply: `ปรับเปลี่ยนโทนสีหน้าจอและแสงโฮโลแกรมเป็น "${brandName}" เรียบร้อยแล้วครับ บอส`,
       speech: `ปรับเปลี่ยนโทนสีหน้าจอตามที่บอสสั่งเรียบร้อยแล้วครับ`,
@@ -69,6 +70,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'RUN_AUDIT',
+      squadId: 'sec',
       delegatedTo: 'ทีม AI QA Automation & Security Auditor',
       reply:
         'รับทราบครับ บอส กำลังสั่งการทีม AI QA และ Security ตรวจสอบ 4 Quality Gates ข้ามทั้ง 17 โปรเจกต์ใน D:\\Light ให้เรียบร้อยครับ\n\n[สถานะการตรวจสอบ]:\n• Gate 1 (Design Tokens): 100% Pass\n• Gate 2 (Test Suites): 6/6 ผ่านเกณฑ์\n• Gate 3 (Linter & Build): 0 Errors\n• Gate 4 (Workspace Files): ครบ 17 โฟลเดอร์ สมบูรณ์ 100% ครับ บอส',
@@ -97,6 +99,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'OPEN_QUOTATION',
+      squadId: 'fin',
       delegatedTo: 'ทีม AI Finance & Sales Closer',
       reply:
         'จัดให้ครับ บอส ประสานงานกับทีม AI การเงิน ออกใบเสนอราคาอิเล็กทรอนิกส์ คำนวณภาษีมูลค่าเพิ่ม 7% พร้อมสร้างคิวอาร์โค้ดพร้อมเพย์มาตรฐาน EMVCo ให้เรียบร้อยแล้วครับ สามารถส่งมอบให้ลูกค้าภายนอกได้ทันทีครับ',
@@ -125,6 +128,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'VIEW_PROJECT',
+      squadId: 'eng',
       delegatedTo: 'ทีม AI Software Engineering (Krob POS)',
       reply:
         'ครับ บอส ค้นหาข้อมูลจากทีมวิศวกรรมให้เรียบร้อย:\n• โปรเจกต์: Krob POS & Inventory AI (D:\\Light\\Inventoty AI Light)\n• สแตกเทคโนโลยี: Next.js 16 + Prisma + QR PromptPay\n• โมเดลราคา: ฿390 / เดือน\n• ฟังก์ชันพร้อมขาย: คิดเงินไว, ตัดสต็อกอัตโนมัติ, แจ้งเตือนของใกล้หมด, ออกใบเสร็จความร้อนครบถ้วนครับ',
@@ -153,6 +157,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'VIEW_PROJECT',
+      squadId: 'sales',
       delegatedTo: 'ทีม AI Event Ticketing Architect',
       reply:
         'ครับ บอส ข้อมูลระบบ ThaiTicket Hub (D:\\Light\\บัตรคอน Light):\n• ราคาขาย: ฿1,500 / งาน + ค่าธรรมเนียม 2% ต่อบัตร\n• เทคโนโลยี: Node.js + SQLite + PromptPay CRC-16\n• ไฮไลต์: ผังที่นั่ง Interactive โซน VIP, ระบบตรวจจับสลิปปลอมด้วย SHA-256 และ Anti-passback QR Check-in หน้าประตูครับ',
@@ -181,6 +186,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'VIEW_PROJECT',
+      squadId: 'mkt',
       delegatedTo: 'ทีม AI Fitness IoT Architect',
       reply:
         'ครับ บอส ข้อมูลระบบ Krob Fit (D:\\Light\\Fitness):\n• ราคาขาย: ฿990 / เดือน\n• เทคโนโลยี: React + Vite + HTML5 QR Camera Scanner\n• ฟังก์ชัน: สแกนบัตรสมาชิกเข้ายิมผ่านกล้องมือถือ/แท็บเล็ตทันที, จัดการคอร์สเทรนเนอร์ และ AI แจ้งเตือนต่ออายุสมาชิกอัตโนมัติครับ',
@@ -209,6 +215,7 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'OPEN_VAULT',
+      squadId: 'sec',
       delegatedTo: 'ทีม AI Cyber Security & Vault Guard',
       reply:
         'ครับ บอส ข้อมูลระบบ Krob Pass (D:\\Light\\Pass App Light):\n• ราคาขาย: ฿690 / เดือน\n• ความปลอดภัย: มาตรฐาน AES-256 Vault Crypto เข้ารหัสข้อมูลรหัสผ่านระดับองค์กร พร้อม QR Gate Pass สำหรับผู้มาติดต่อและบันทึก Audit Log ทุกวินาทีครับ',
@@ -243,6 +250,7 @@ export function processJarvisCommand(input, _context = {}) {
 
     return {
       action: 'VIEW_SQUAD',
+      squadId: 'ops',
       delegatedTo: 'ทีม AI Core Executive Squad',
       reply: `รายงานสถานะทีม AI ทั้งหมดครับ บอส:\n\nปัจจุบันทีม AI ของเราดูแลอยู่ 15 โปรเจกต์หลักใน 17 โฟลเดอร์:\n${listNames}\n...และระบบอื่นๆ รวม 15 ซอฟต์แวร์\n\nทีม AI ทั้ง 6 แผนก (การตลาด, ฝ่ายขาย, วิศวกรรม, บริการลูกค้า, การเงิน, และบริหาร) สแตนด์บายพร้อมรับคำสั่งจากบอสทุกวินาทีครับ`,
       speech: 'รายงานสถานะครับ บอส ทีมเอไอทั้งหมดสแตนด์บายพร้อมค้นหาข้อมูลและสั่งการทุกระบบตามที่บอสต้องการครับ',
@@ -263,6 +271,7 @@ export function processJarvisCommand(input, _context = {}) {
   // 9. Conversational Fallback
   return {
     action: 'CHAT',
+    squadId: 'ops',
     delegatedTo: 'J.A.R.V.I.S. Neural Core',
     reply: `รับทราบครับ บอส เกี่ยวกับ "${input}" J.A.R.V.I.S. พร้อมค้นหาข้อมูลเชิงลึกจากทีม AI ที่ดูแลทั้ง 17 โฟลเดอร์ให้บอสทันทีครับ\n• บอสสามารถสั่ง "ตรวจระบบ", "ดูข้อมูลระบบ POS", หรือ "ออกใบเสนอราคา"\nต้องการให้ผมประสานงานกับทีม AI แผนกไหนเป็นพิเศษไหมครับ?`,
     speech: `รับทราบครับ บอส J.A.R.V.I.S. พร้อมค้นหาข้อมูลและสั่งการทุกทีมเอไอให้บอสทันทีครับ`,

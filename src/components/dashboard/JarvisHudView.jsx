@@ -48,6 +48,9 @@ export function JarvisHudView({
   const [cpuUsage, setCpuUsage] = useState(58);
   const [diskUsage] = useState('R 32KB/s // W 2.8MB/s');
   const [activeHologram, setActiveHologram] = useState(null); // On-demand holographic projection payload
+  const [activeSquadId, setActiveSquadId] = useState(null); // Currently delegated AI Squad satellite node
+  const [wakeWordActive, setWakeWordActive] = useState(true); // "เฮ้ จาร์วิส" / "Hey Jarvis" Wake Word
+  const [dragStartX, setDragStartX] = useState(null); // Gesture swipe flick
   const [isSmartControlOpen, setIsSmartControlOpen] = useState(true);
   const [isMonitorOpen, setIsMonitorOpen] = useState(true);
   const [activeLeftDock, setActiveLeftDock] = useState('ai');
@@ -167,6 +170,50 @@ export function JarvisHudView({
       ctx.arc(centerX, centerY, coreR * 2.2, 0, Math.PI * 2);
       ctx.fill();
 
+      // Orbiting AI Squad Satellite Nodes (Multi-AI Live Delegation Matrix)
+      const aiSquadNodes = [
+        { id: 'mkt', label: 'AI-MKT', color: '#06b6d4' },
+        { id: 'sales', label: 'AI-SALES', color: '#10b981' },
+        { id: 'eng', label: 'AI-ENG', color: '#8b5cf6' },
+        { id: 'fin', label: 'AI-FIN', color: '#f59e0b' },
+        { id: 'sec', label: 'AI-SEC', color: '#f43f5e' },
+        { id: 'ops', label: 'AI-OPS', color: '#0ea5e9' },
+      ];
+
+      const orbitRadius = radius + 62;
+      aiSquadNodes.forEach((node, i) => {
+        const nodeAngle = angle * 0.6 + (i / aiSquadNodes.length) * Math.PI * 2;
+        const nx = centerX + orbitRadius * Math.cos(nodeAngle);
+        const ny = centerY + orbitRadius * Math.sin(nodeAngle) * 0.58;
+
+        const isDelegated = activeSquadId === node.id || (hudState === 'SEARCHING' && i % 2 === 0);
+
+        // Beam glowing laser line to central core when delegated
+        if (isDelegated) {
+          ctx.beginPath();
+          ctx.strokeStyle = node.color;
+          ctx.lineWidth = 1.8;
+          ctx.shadowBlur = 14;
+          ctx.shadowColor = node.color;
+          ctx.moveTo(centerX, centerY);
+          ctx.lineTo(nx, ny);
+          ctx.stroke();
+        }
+
+        // Draw satellite node dot
+        ctx.beginPath();
+        ctx.fillStyle = isDelegated ? '#ffffff' : node.color;
+        ctx.shadowBlur = isDelegated ? 16 : 6;
+        ctx.shadowColor = node.color;
+        ctx.arc(nx, ny, isDelegated ? 5.5 : 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Node label
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = isDelegated ? '#ffffff' : 'rgba(255,255,255,0.65)';
+        ctx.fillText(node.label, nx + 7, ny + 3);
+      });
+
       ctx.restore();
 
       angle += isLive ? 0.035 : 0.012;
@@ -175,7 +222,7 @@ export function JarvisHudView({
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [hudState]);
+  }, [hudState, activeSquadId]);
 
   // Web Speech Synthesis (Thai Executive Voice Output)
   const speakThai = useCallback(
@@ -250,6 +297,10 @@ export function JarvisHudView({
         setMessages((prev) => [...prev, jarvisMsg]);
         playSuccessSound();
 
+        // Illuminate Delegated AI Squad Satellite Node
+        setActiveSquadId(result.squadId || 'ops');
+        setTimeout(() => setActiveSquadId(null), 4500);
+
         // Project Holographic Card on demand if payload exists
         if (result.hologram) {
           setActiveHologram(result.hologram);
@@ -296,10 +347,35 @@ export function JarvisHudView({
       };
 
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setIsListening(false);
-        setHudState('SEARCHING');
-        handleDispatchCommand(transcript);
+        const transcript = event.results[0][0].transcript.trim();
+        const lower = transcript.toLowerCase();
+
+        // Iron Man Wake Word Detection ("เฮ้ จาร์วิส" / "จาร์วิส" / "hey jarvis")
+        const isWakeWord =
+          lower.includes('จาร์วิส') ||
+          lower.includes('เฮ้ จาร์วิส') ||
+          lower.includes('hey jarvis') ||
+          lower.includes('jarvis');
+
+        if (wakeWordActive && isWakeWord) {
+          playSuccessSound();
+          const stripped = transcript
+            .replace(/เฮ้\s*จาร์วิส/gi, '')
+            .replace(/จาร์วิส/gi, '')
+            .replace(/hey\s*jarvis/gi, '')
+            .replace(/jarvis/gi, '')
+            .trim();
+
+          if (stripped.length > 2) {
+            handleDispatchCommand(stripped);
+          } else {
+            speakThai('ครับ บอส กำลังฟังอยู่ครับ');
+            setIsListening(true);
+            setHudState('LISTENING');
+          }
+        } else {
+          handleDispatchCommand(transcript);
+        }
       };
 
       recognition.onerror = (event) => {
@@ -315,7 +391,7 @@ export function JarvisHudView({
 
       recognitionRef.current = recognition;
     }
-  }, [isSpeaking, handleDispatchCommand, onShowToast]);
+  }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai, wakeWordActive]);
 
   const toggleMic = () => {
     playClickSound();
@@ -407,6 +483,37 @@ export function JarvisHudView({
               <span className="text-slate-400">UPDATED 03:15</span>
             </div>
           </div>
+
+          {/* Wake Word Standby Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              playClickSound();
+              setWakeWordActive((w) => !w);
+              if (onShowToast) {
+                onShowToast(
+                  'info',
+                  'ระบบ Wake Word',
+                  wakeWordActive
+                    ? 'ปิดระบบจับเสียง "เฮ้ จาร์วิส" แล้ว'
+                    : 'เปิดระบบจับเสียง "เฮ้ จาร์วิส" (Standby พร้อมเพรียง)'
+                );
+              }
+            }}
+            className={`hidden lg:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border transition-all ${
+              wakeWordActive
+                ? 'border-cyan-500/50 bg-cyan-950/70 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'border-slate-800 bg-slate-900 text-slate-500'
+            }`}
+            title="คลิกเพื่อเปิด / ปิดการดักฟัง 'เฮ้ จาร์วิส' อัตโนมัติ"
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                wakeWordActive ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'
+              }`}
+            />
+            <span>WAKE WORD: {wakeWordActive ? 'HEY JARVIS [ON]' : 'OFF'}</span>
+          </button>
 
           {/* Time & Fullscreen Toggle */}
           <div className="flex items-center gap-2">
@@ -589,7 +696,25 @@ export function JarvisHudView({
 
           {/* ON-DEMAND HOLOGRAPHIC PROJECTION POPUP (Appears only when Boss requests info) */}
           {activeHologram && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg animate-fade-in">
+            <div
+              className="absolute top-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg animate-fade-in select-none cursor-grab active:cursor-grabbing"
+              onTouchStart={(e) => setDragStartX(e.touches[0].clientX)}
+              onTouchEnd={(e) => {
+                if (dragStartX !== null && Math.abs(e.changedTouches[0].clientX - dragStartX) > 50) {
+                  setActiveHologram(null);
+                  playSuccessSound();
+                }
+                setDragStartX(null);
+              }}
+              onMouseDown={(e) => setDragStartX(e.clientX)}
+              onMouseUp={(e) => {
+                if (dragStartX !== null && Math.abs(e.clientX - dragStartX) > 50) {
+                  setActiveHologram(null);
+                  playSuccessSound();
+                }
+                setDragStartX(null);
+              }}
+            >
               <div className="rounded-2xl border-2 border-cyan-400/60 bg-slate-950/95 p-5 shadow-[0_0_50px_rgba(6,182,212,0.35)] backdrop-blur-xl">
                 <div className="flex items-start justify-between border-b border-cyan-500/30 pb-3">
                   <div>
@@ -620,13 +745,18 @@ export function JarvisHudView({
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
                   <span className="text-emerald-400 font-bold">{activeHologram.badge}</span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveHologram(null)}
-                    className="text-slate-400 hover:text-white underline"
-                  >
-                    DISMISS PROJECTION
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-cyan-400/80 font-mono">
+                      ← ปัดซ้าย/ขวาเพื่อปิด (Gesture Flick) →
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveHologram(null)}
+                      className="text-slate-400 hover:text-white underline ml-2"
+                    >
+                      DISMISS
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
