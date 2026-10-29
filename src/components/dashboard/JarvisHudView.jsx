@@ -229,24 +229,51 @@ export function JarvisHudView({
     (text) => {
       if (!voiceEnabled) return;
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'th-TH';
-        utterance.rate = 1.05;
-        utterance.pitch = 0.95; // Calm executive Jarvis tone
-        utterance.onstart = () => {
-          setIsSpeaking(true);
-          setHudState('SPEAKING');
-        };
-        utterance.onend = () => {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'th-TH';
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+
+          // Select best native Thai voice in Windows / Chrome
+          const availVoices = window.speechSynthesis.getVoices();
+          const thaiVoice = availVoices.find(
+            (v) =>
+              v.lang === 'th-TH' ||
+              v.lang.toLowerCase().startsWith('th') ||
+              v.name.toLowerCase().includes('thai') ||
+              v.name.includes('ภาษาไทย') ||
+              v.name.includes('Premwadee') ||
+              v.name.includes('Niwat')
+          );
+          if (thaiVoice) {
+            utterance.voice = thaiVoice;
+          }
+
+          utterance.onstart = () => {
+            setIsSpeaking(true);
+            setHudState('SPEAKING');
+          };
+          utterance.onend = () => {
+            setIsSpeaking(false);
+            setHudState('READY');
+          };
+          utterance.onerror = (e) => {
+            console.warn('Speech error:', e);
+            setIsSpeaking(false);
+            setHudState('READY');
+          };
+
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+          window.speechSynthesis.speak(utterance);
+        } catch (err) {
+          console.warn('TTS error:', err);
           setIsSpeaking(false);
           setHudState('READY');
-        };
-        utterance.onerror = () => {
-          setIsSpeaking(false);
-          setHudState('READY');
-        };
-        window.speechSynthesis.speak(utterance);
+        }
       }
     },
     [voiceEnabled]
@@ -382,11 +409,33 @@ export function JarvisHudView({
         console.warn('Speech error:', event.error);
         setIsListening(false);
         setHudState('READY');
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          if (onShowToast) {
+            onShowToast(
+              'warning',
+              'ไมโครโฟนถูกปิดกั้น (Mic Blocked)',
+              'กรุณากดไอคอนแม่กุญแจ 🔒 หรือรูปกล้องที่ช่อง URL ด้านบน เพื่อเลือก "Allow" ให้ใช้ไมโครโฟน หรือคลิกปุ่มคำสั่งภาษาไทยด้านล่างได้ทันทีครับ'
+            );
+          }
+        }
       };
 
       recognition.onend = () => {
         setIsListening(false);
         if (!isSpeaking) setHudState('READY');
+
+        // Continuous Wake Word standby: restart listening loop
+        if (wakeWordActive && !isSpeaking) {
+          setTimeout(() => {
+            try {
+              if (wakeWordActive && recognitionRef.current) {
+                recognitionRef.current.start();
+              }
+            } catch {
+              // Ignore if already active
+            }
+          }, 600);
+        }
       };
 
       recognitionRef.current = recognition;
@@ -947,20 +996,43 @@ export function JarvisHudView({
               ))}
             </div>
 
+            {/* Quick Thai Voice & Command Chips for Instant Conversation */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 text-[10px] scrollbar-none border-t border-slate-800/80">
+              <span className="text-slate-500 shrink-0 font-bold">ลองคลิก/พูด:</span>
+              {[
+                'สวัสดี จาร์วิส',
+                'คุยภาษาไทยได้ไหม',
+                'ตรวจระบบทั้งหมด',
+                'ดูข้อมูลระบบ POS',
+                'ออกใบเสนอราคา',
+                'ทีม AI มีใครบ้าง',
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => handleDispatchCommand(chip)}
+                  className="shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400 transition-all font-sans cursor-pointer"
+                  title={`ส่งคำสั่ง "${chip}"`}
+                >
+                  "{chip}"
+                </button>
+              ))}
+            </div>
+
             {/* Input Box (Matching `INITIALIZE COMMAND...` in screenshot) */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleDispatchCommand(inputText);
               }}
-              className="mt-3 flex items-center gap-2 pt-2 border-t border-slate-800/80"
+              className="mt-1 flex items-center gap-2 pt-1"
             >
               <input
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="INITIALIZE COMMAND..."
-                className="flex-1 rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs text-cyan-200 placeholder-slate-600 focus:border-cyan-500 focus:outline-none font-mono"
+                placeholder="พิมพ์คำสั่งภาษาไทย หรือกดไมค์พูดคุย..."
+                className="flex-1 rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs text-cyan-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-sans"
               />
               <button
                 type="button"
@@ -970,7 +1042,7 @@ export function JarvisHudView({
                     ? 'border-red-500 bg-red-600 text-white animate-pulse'
                     : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
                 }`}
-                title="พูดสั่งการภาษาไทย"
+                title="กดเพื่อเปิด/ปิดไมโครโฟนพูดภาษาไทย"
               >
                 <Mic className="h-4 w-4" />
               </button>

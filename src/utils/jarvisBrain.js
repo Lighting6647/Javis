@@ -58,6 +58,106 @@ export function processJarvisCommand(input, _context = {}) {
     };
   }
 
+  // 1.1 Thai Language Capabilities & Greetings (Conversational Thai)
+  if (
+    clean.includes('คุยภาษาไทย') ||
+    clean.includes('พูดภาษาไทย') ||
+    clean.includes('พูดไทย') ||
+    clean.includes('ภาษาไทย') ||
+    clean.includes('เข้าใจภาษาไทย')
+  ) {
+    return {
+      action: 'CHAT',
+      squadId: 'ops',
+      delegatedTo: 'J.A.R.V.I.S. Neural Voice Core',
+      reply:
+        'ผมคุยและโต้ตอบเป็นภาษาไทยได้ 100% ครับ บอส!\n\nบอสสามารถสั่งการด้วยเสียงพูดภาษาไทยหรือพิมพ์ข้อความได้ทุกเรื่อง เช่น:\n• "ตรวจระบบทั้งหมด" (สั่ง AI QA ตรวจสอบ 17 โปรเจกต์ในเครื่อง)\n• "ดูข้อมูลระบบ POS" (ดึงราคาและฟังก์ชันระบบคลังสินค้า)\n• "ออกใบเสนอราคา" (สร้างใบเสนอราคาพร้อม QR พร้อมเพย์)\n• "ดูระบบบัตรคอนเสิร์ต" (ระบบ ThaiTicket Hub)\n• "เปลี่ยนธีมหน้าจอเป็นสีส้ม"\n\nบอสมีคำสั่งหรืออยากให้ค้นหาข้อมูลส่วนไหนต่อ แจ้งได้ทันทีครับ!',
+      speech:
+        'ผมคุยและโต้ตอบภาษาไทยได้ร้อยเปอร์เซ็นต์ครับ บอส สั่งงานด้วยเสียงพูดภาษาไทยได้เลยครับ',
+      hologram: {
+        title: 'THAI NATURAL LANGUAGE // ONLINE',
+        category: 'VOICE & INTELLIGENCE CORE',
+        badge: '100% THAI NATIVE',
+        details: [
+          { label: 'Voice Model', val: 'Thai Speech Engine (th-TH)' },
+          { label: 'Wake Word', val: '"เฮ้ จาร์วิส" / "Hey Jarvis"' },
+          { label: 'Command Routing', val: '6 AI Squads Delegated' },
+          { label: 'Status', val: 'Listening & Ready' },
+        ],
+      },
+    };
+  }
+
+  // 1.2 Greetings & Casual Rapport
+  if (
+    clean.includes('สวัสดี') ||
+    clean.includes('หวัดดี') ||
+    clean.includes('ฮัลโหล') ||
+    clean === 'hello' ||
+    clean === 'hi' ||
+    clean === 'hey' ||
+    clean.includes('เป็นไงบ้าง') ||
+    clean.includes('สบายดีไหม')
+  ) {
+    return {
+      action: 'CHAT',
+      squadId: 'ops',
+      delegatedTo: 'J.A.R.V.I.S. Executive Core',
+      reply:
+        'สวัสดีครับ บอส! วันนี้ผม J.A.R.V.I.S. และทีม AI ทั้ง 6 แผนก สแตนด์บายพร้อมช่วยบอสเต็มที่ครับ\n\nสถานะระบบตอนนี้:\n• ซอฟต์แวร์ทั้ง 15 ตัวใน 17 โฟลเดอร์: ออนไลน์พร้อมใช้งาน 100%\n• การรักษาความปลอดภัย: ปกติทุกระบบ\n\nบอสต้องการให้ผมช่วยค้นหาข้อมูล หรือสั่งงานทีม AI ในระบบไหนเป็นพิเศษไหมครับ?',
+      speech:
+        'สวัสดีครับ บอส ผม จาร์วิส พร้อมช่วยจัดการและค้นหาข้อมูลให้บอสทุกอย่างครับ',
+    };
+  }
+
+  // 1.3 Identity & Purpose
+  if (
+    clean.includes('คุณคือใคร') ||
+    clean.includes('นายคือใคร') ||
+    clean.includes('เธอคือใคร') ||
+    clean.includes('แนะนำตัว') ||
+    clean.includes('who are you')
+  ) {
+    return {
+      action: 'CHAT',
+      squadId: 'ops',
+      delegatedTo: 'J.A.R.V.I.S. Persona Core',
+      reply:
+        'ผมคือ J.A.R.V.I.S. MARK 3 ระบบปัญญาประดิษฐ์ผู้ช่วยส่วนตัวของบอสครับ\n\nหน้าที่หลักของผมคือ:\n1. เป็นศูนย์กลางค้นหาข้อมูลและสั่งการทีม AI เบื้องหลังทั้ง 6 แผนก (การตลาด, ฝ่ายขาย, วิศวกรรม, การเงิน, DevOps, และความปลอดภัย)\n2. ควบคุมและตรวจสอบความพร้อมของ 15 โปรเจกต์ใน D:\\Light\n3. ฉายโฮโลแกรมรายงานข้อมูลแบบกระชับเฉพาะตอนที่บอสต้องการครับ',
+      speech:
+        'ผมคือ จาร์วิส มาร์คทรี ผู้ช่วยส่วนตัวของบอส พร้อมค้นหาข้อมูลและสั่งการทีมเอไอทุกแผนกครับ',
+    };
+  }
+
+  // 1.4 Capabilities & Help
+  if (
+    clean.includes('ช่วยอะไรได้บ้าง') ||
+    clean.includes('ทำอะไรได้บ้าง') ||
+    clean.includes('สั่งอะไรได้บ้าง') ||
+    clean.includes('ความสามารถ')
+  ) {
+    return {
+      action: 'VIEW_SQUAD',
+      squadId: 'ops',
+      delegatedTo: 'J.A.R.V.I.S. Feature Matrix',
+      reply:
+        'ผมสามารถช่วยบอสได้หลากหลายด้านเลยครับ:\n\n1. 🔍 ตรวจสอบระบบ: พูดว่า "ตรวจระบบทั้งหมด" เพื่อเช็คความพร้อมของ 17 โปรเจกต์\n2. 💼 ดูข้อมูลโปรเจกต์: ถามข้อมูลระบบ เช่น "ดูระบบ POS", "ดูระบบบัตรคอน", "ดูระบบฟิตเนส"\n3. 💰 การเงินและเอกสาร: สั่ง "ออกใบเสนอราคา" เพื่อสร้างใบเสนอราคาพร้อม QR พร้อมเพย์\n4. 🎨 ปรับแต่งหน้าจอ: สั่ง "เปลี่ยนธีมเป็นสีส้ม" หรือ "เปลี่ยนธีมเป็นสีแดง"\n5. 🛡️ ความปลอดภัย: สั่ง "เช็คความปลอดภัย vault"\n\nบอสต้องการให้ผมจัดการเรื่องไหนก่อนดีครับ?',
+      speech:
+        'ผมช่วยบอสตรวจระบบ ค้นหาข้อมูลโปรเจกต์ ออกใบเสนอราคา และสั่งการทีมเอไอได้ทั้งหมดครับ บอสต้องการให้เริ่มที่จุดไหนดีครับ',
+    };
+  }
+
+  // 1.5 Gratitude
+  if (clean.includes('ขอบคุณ') || clean.includes('ขอบใจ') || clean.includes('thanks')) {
+    return {
+      action: 'CHAT',
+      squadId: 'ops',
+      delegatedTo: 'J.A.R.V.I.S. Executive Core',
+      reply: 'ยินดีรับใช้เสมอครับ บอส! มีข้อมูลอะไรให้ผมค้นหาเพิ่มเติม แจ้งได้ทุกเวลาครับ',
+      speech: 'ยินดีรับใช้เสมอครับ บอส',
+    };
+  }
+
   // 2. Audit / Health Check -> Delegate to AI QA & Security Squad
   if (
     clean.includes('ตรวจ') ||
