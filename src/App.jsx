@@ -230,74 +230,75 @@ export default function App() {
   const isDark = theme === 'dark';
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${isDark ? 'bg-[#0b0f19] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
-      {/* Header */}
-      <Header
-        activeView={activeView}
-        setActiveView={(v) => { playClickSound(); setActiveView(v); }}
-        onRunAudit={handleRunFullAudit}
-        isAuditing={isAuditing}
-        onExportMarkdown={handleExportMarkdown}
-        onExportPdf={handleExportPdf}
-        onExportCsv={handleExportCsv}
-        onExportJson={handleExportJson}
-        onOpenHooksModal={() => { playClickSound(); setIsHooksModalOpen(true); }}
-        onOpenNotificationModal={() => { playClickSound(); setIsNotificationModalOpen(true); }}
-        onOpenEnvVaultModal={() => { playClickSound(); setIsEnvVaultModalOpen(true); }}
-        onOpenVulnModal={() => { playClickSound(); setIsVulnModalOpen(true); }}
-        onOpenBackupModal={() => { playClickSound(); setIsBackupModalOpen(true); }}
-        onOpenDoctorModal={() => { playClickSound(); setIsDoctorModalOpen(true); }}
-        onOpenDesignSystemModal={() => { playClickSound(); setIsDesignModalOpen(true); }}
-        activeBrandTheme={activeBrandTheme}
-        onSelectBrandTheme={(brandId) => {
-          playClickSound();
-          setActiveBrandTheme(brandId);
-          const brand = ALL_PROJECT_DESIGN_TOKENS.find((p) => p.id === brandId);
-          if (brand) {
-            showToast('info', 'สลับธีมแบรนด์สด', `แสดงผลพาเลทสีของ "${brand.name}" บนแดชบอร์ด CEO`);
-          }
-        }}
-        onOpenCommandPalette={() => { playClickSound(); setIsCommandPaletteOpen(true); }}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        isSoundActive={isSoundActive}
-        onToggleSound={handleToggleSound}
-      />
+    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${isDark ? 'bg-[#02050e] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
+      {/* 1. Fullscreen Cockpit HUD View for J.A.R.V.I.S. (Zero Clutter, 1:1 Iron Man Replica) */}
+      {activeView === 'jarvis' ? (
+        <JarvisHudView
+          onRunAudit={handleRunFullAudit}
+          onOpenQuotation={() => {
+            setActiveView('company');
+            showToast('info', 'J.A.R.V.I.S. เปิดหน้าใบเสนอราคา', 'เข้าสู่ระบบออกใบเสนอราคาพร้อม QR PromptPay เรียบร้อย');
+          }}
+          onOpenDoctor={() => { playClickSound(); setIsDoctorModalOpen(true); }}
+          onOpenDesignSystem={() => { playClickSound(); setIsDesignModalOpen(true); }}
+          onOpenAdmin={() => { playClickSound(); setActiveView('dashboard'); }}
+          onOpenCompany={() => { playClickSound(); setActiveView('company'); }}
+          onSelectBrandTheme={(brandId) => {
+            playClickSound();
+            setActiveBrandTheme(brandId);
+            const brand = ALL_PROJECT_DESIGN_TOKENS.find((p) => p.id === brandId);
+            if (brand) {
+              showToast('info', 'J.A.R.V.I.S. ปรับธีมแบรนด์', `แสดงผลพาเลทสีของ "${brand.name}" เรียบร้อย`);
+            }
+          }}
+          onShowToast={showToast}
+        />
+      ) : (
+        <>
+          {/* Header */}
+          <Header
+            activeView={activeView}
+            setActiveView={(v) => { playClickSound(); setActiveView(v); }}
+            onRunAudit={handleRunFullAudit}
+            isAuditing={isAuditing}
+            onExportMarkdown={handleExportMarkdown}
+            onExportPdf={handleExportPdf}
+            onExportCsv={handleExportCsv}
+            onExportJson={handleExportJson}
+            onOpenHooksModal={() => { playClickSound(); setIsHooksModalOpen(true); }}
+            onOpenNotificationModal={() => { playClickSound(); setIsNotificationModalOpen(true); }}
+            onOpenEnvVaultModal={() => { playClickSound(); setIsEnvVaultModalOpen(true); }}
+            onOpenVulnModal={() => { playClickSound(); setIsVulnModalOpen(true); }}
+            onOpenBackupModal={() => { playClickSound(); setIsBackupModalOpen(true); }}
+            onOpenDoctorModal={() => { playClickSound(); setIsDoctorModalOpen(true); }}
+            onOpenDesignSystemModal={() => { playClickSound(); setIsDesignModalOpen(true); }}
+            activeBrandTheme={activeBrandTheme}
+            onSelectBrandTheme={(brandId) => {
+              playClickSound();
+              setActiveBrandTheme(brandId);
+              const brand = ALL_PROJECT_DESIGN_TOKENS.find((p) => p.id === brandId);
+              if (brand) {
+                showToast('info', 'สลับธีมแบรนด์สด', `แสดงผลพาเลทสีของ "${brand.name}" บนแดชบอร์ด CEO`);
+              }
+            }}
+            onOpenCommandPalette={() => { playClickSound(); setIsCommandPaletteOpen(true); }}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            isSoundActive={isSoundActive}
+            onToggleSound={handleToggleSound}
+          />
 
-      {/* Main Content Area */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
-        {/* KPI Stats Bar */}
-        <StatCards projects={projects} />
+          {/* Main Content Area */}
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+            {/* KPI Stats Bar */}
+            <StatCards projects={projects} />
 
-        {/* Content Views */}
-        {activeView === 'jarvis' && (
-          <div className="mt-8">
-            <JarvisHudView
-              onRunAudit={handleRunFullAudit}
-              onOpenQuotation={() => {
-                setActiveView('company');
-                showToast('info', 'J.A.R.V.I.S. เปิดหน้าใบเสนอราคา', 'เข้าสู่ระบบออกใบเสนอราคาพร้อม QR PromptPay เรียบร้อย');
-              }}
-              onOpenDoctor={() => { playClickSound(); setIsDoctorModalOpen(true); }}
-              onOpenDesignSystem={() => { playClickSound(); setIsDesignModalOpen(true); }}
-              onSelectBrandTheme={(brandId) => {
-                playClickSound();
-                setActiveBrandTheme(brandId);
-                const brand = ALL_PROJECT_DESIGN_TOKENS.find((p) => p.id === brandId);
-                if (brand) {
-                  showToast('info', 'J.A.R.V.I.S. ปรับธีมแบรนด์', `แสดงผลพาเลทสีของ "${brand.name}" เรียบร้อย`);
-                }
-              }}
-              onShowToast={showToast}
-            />
-          </div>
-        )}
+            {/* Content Views */}
+            {activeView === 'company' && (
+              <AiCompanyHubView onShowToast={showToast} />
+            )}
 
-        {activeView === 'company' && (
-          <AiCompanyHubView onShowToast={showToast} />
-        )}
-
-        {activeView === 'dashboard' && (
+            {activeView === 'dashboard' && (
           <div className="mt-8 space-y-6">
             {/* Filter and Search Bar */}
             <div className={`flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between transition-colors ${isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-white shadow-sm'}`}>
@@ -399,6 +400,8 @@ export default function App() {
       <footer className={`border-t py-6 text-center text-xs transition-colors ${isDark ? 'border-slate-800/80 bg-slate-950/60 text-slate-500' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
         <p>© 2026 Antigravity CEO Master Platform • Enforcing Zero "AI Slop" & Production Standards</p>
       </footer>
+        </>
+      )}
 
       {/* Modals & Command Palette */}
       <ProjectDetailModal

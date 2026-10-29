@@ -17,8 +17,6 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  Maximize2,
-  Minimize2,
 } from 'lucide-react';
 import { playClickSound, playSuccessSound } from '../../utils/soundEffects';
 import { processJarvisCommand } from '../../utils/jarvisBrain';
@@ -30,6 +28,8 @@ export function JarvisHudView({
   _onOpenDesignSystem,
   onSelectBrandTheme,
   onShowToast,
+  onOpenAdmin,
+  onOpenCompany,
 }) {
   const [messages, setMessages] = useState([
     {
@@ -428,10 +428,10 @@ export function JarvisHudView({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full overflow-hidden bg-[#030712] text-slate-100 font-mono select-none transition-all duration-300 ${
+      className={`relative w-full min-h-screen overflow-hidden bg-[#02050e] text-slate-100 font-mono select-none transition-all duration-300 ${
         isFullscreen
           ? 'fixed inset-0 z-50 h-screen w-screen'
-          : 'min-h-[860px] rounded-3xl border border-cyan-500/25 shadow-[0_0_80px_rgba(6,182,212,0.15)]'
+          : 'flex flex-col'
       }`}
     >
       {/* Sci-Fi Atmospheric Grid Lines & Vignette */}
@@ -515,19 +515,62 @@ export function JarvisHudView({
             <span>WAKE WORD: {wakeWordActive ? 'HEY JARVIS [ON]' : 'OFF'}</span>
           </button>
 
-          {/* Time & Fullscreen Toggle */}
+          {/* Time, View Switchers & Window Controls (Matching Iron Man HUD) */}
           <div className="flex items-center gap-2">
+            {onOpenCompany && (
+              <button
+                type="button"
+                onClick={onOpenCompany}
+                className="hidden xl:inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-900/40 transition-all"
+                title="เปิดศูนย์ AI Company Hub (6 แผนก)"
+              >
+                AI COMPANY
+              </button>
+            )}
+            {onOpenAdmin && (
+              <button
+                type="button"
+                onClick={onOpenAdmin}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:text-white hover:border-slate-500 transition-all"
+                title="สลับไปยังหน้า Admin Dashboard"
+              >
+                ADMIN DASHBOARD
+              </button>
+            )}
             <div className="rounded-lg bg-slate-900/90 px-3 py-1 font-bold text-cyan-400 border border-cyan-500/30">
               {currentTime || '03:25:18 AM'}
             </div>
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 p-1.5 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 transition-colors"
-              title="สลับโหมดขยายเต็มหน้าจอ (Fullscreen)"
-            >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </button>
+            <div className="flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSmartControlOpen((o) => !o);
+                  setIsMonitorOpen((o) => !o);
+                }}
+                className="rounded border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-slate-400 hover:text-white transition-colors"
+                title="ยุบ/ขยายพาเนลเสริม"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="rounded border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-slate-400 hover:text-cyan-300 transition-colors"
+                title="ขยายเต็มจอ (Fullscreen)"
+              >
+                ◻
+              </button>
+              {onOpenAdmin && (
+                <button
+                  type="button"
+                  onClick={onOpenAdmin}
+                  className="rounded border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-slate-400 hover:text-red-400 hover:border-red-500/50 transition-colors"
+                  title="ออกจากโหมด HUD สู่หน้า Admin Dashboard"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
