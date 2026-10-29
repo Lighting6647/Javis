@@ -137,8 +137,8 @@ test('Impeccable Design System standardizes all 17 projects with curated zero-AI
 test('J.A.R.V.I.S. MARK 3 Neural Brain processes Thai voice commands and dispatches system actions accurately', async () => {
   const { processJarvisCommand, SYSTEM_TELEMETRY } = await import('../src/utils/jarvisBrain.js');
   
-  assert.equal(SYSTEM_TELEMETRY.codename, 'J.A.R.V.I.S. MARK 3');
-  assert.equal(SYSTEM_TELEMETRY.status, 'ACTIVE');
+  assert.equal(SYSTEM_TELEMETRY.codename, 'J.A.R.V.I.S. MK III');
+  assert.equal(SYSTEM_TELEMETRY.status, 'ONLINE');
 
   // 1. Audit Command
   const auditRes = processJarvisCommand('ช่วยตรวจระบบทั้งหมดหน่อย');
@@ -147,7 +147,7 @@ test('J.A.R.V.I.S. MARK 3 Neural Brain processes Thai voice commands and dispatc
 
   // 2. POS Query
   const posRes = processJarvisCommand('ระบบ pos ขายหน้าร้านเป็นยังไง');
-  assert.equal(posRes.action, 'NAV_DASHBOARD');
+  assert.equal(posRes.action, 'VIEW_PROJECT');
   assert.ok(posRes.reply.includes('฿390'));
 
   // 3. Ticket Query

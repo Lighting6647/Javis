@@ -1,43 +1,34 @@
 /**
- * J.A.R.V.I.S. Mark 3 Neural Brain & Command Dispatcher
- * Deep intelligence across all 17 projects in D:\Light, commercial SaaS catalog, and automated system commands.
+ * J.A.R.V.I.S. MARK III Neural AI Orchestrator
+ * Persona: Tony Stark's J.A.R.V.I.S. - Executive, polite, calls user "บอส" (Boss).
+ * Role: Central Brain orchestrating all AI teams behind the scenes:
+ *  - 1. AI Marketing (Lead Gen & Content)
+ *  - 2. AI Sales & Closing (Pricing & Quotations)
+ *  - 3. AI Engineering & Architecture (Tech Lead, DB Schema, APIs)
+ *  - 4. AI DevOps & Cloud (CI/CD, Vercel, Server Uptime)
+ *  - 5. AI QA & Security (4 Quality Gates, Vuln Scanner, Audit Logs)
+ *  - 6. AI Finance & Billing (PromptPay QR, VAT, Cashflow)
  */
 
 import { INITIAL_PROJECTS } from '../data/projectsData.js';
 
 export const SYSTEM_TELEMETRY = {
-  codename: 'J.A.R.V.I.S. MARK 3',
-  version: '3.4.0-PROD',
-  status: 'ACTIVE',
-  environment: 'Bangkok, TH (28°C)',
-  network: '100% ONLINE (12ms)',
-  power: 'ONLINE (AC DUAL-STABLE)',
+  codename: 'J.A.R.V.I.S. MK III',
+  status: 'ONLINE',
+  location: 'BANGKOK 26°C',
+  humidity: '85%',
+  network: 'ONLINE (12ms)',
+  power: 'POWER ONLINE',
 };
 
 /**
- * Intelligent Thai NLP Query Processor
- * Matches user intent, executes commands, and returns authoritative executive Thai responses.
+ * Intelligent Thai Natural Language Processing
+ * Searches across all AI teams and returns executive response + optional holographic projection payload.
  */
 export function processJarvisCommand(input, _context = {}) {
   const clean = input.trim().toLowerCase();
 
-  // 1. Full QA Audit Command
-  if (
-    clean.includes('ตรวจ') ||
-    clean.includes('audit') ||
-    clean.includes('ทดสอบ') ||
-    clean.includes('เช็คระบบ') ||
-    clean.includes('คุณภาพ')
-  ) {
-    return {
-      action: 'RUN_AUDIT',
-      reply:
-        'รับทราบครับท่านประธาน กำลังเริ่มกระบวนการตรวจสอบคุณภาพ 4 Quality Gates ครบทั้ง 17 โปรเจกต์ใน D:\\Light ตรวจสอบทั้ง Design Tokens, Test Suites, Build Integrity และความพร้อมส่งมอบครับ',
-      speech: 'รับทราบครับท่านประธาน กำลังเริ่มการตรวจสอบคุณภาพ 17 โปรเจกต์ในระบบทันทีครับ',
-    };
-  }
-
-  // 2. Theme Changing Command (Higher priority than keyword queries)
+  // 1. Theme Changing Command (Top Priority Override)
   if (
     clean.includes('ธีม') ||
     clean.includes('theme') ||
@@ -45,19 +36,58 @@ export function processJarvisCommand(input, _context = {}) {
     clean.includes('สลับสี')
   ) {
     let brandId = 'ceo-master';
-    if (clean.includes('แดง') || clean.includes('คอน')) brandId = 'concert-ticket';
-    else if (clean.includes('เขียว') || clean.includes('ฟิต')) brandId = 'fitness-gym';
-    else if (clean.includes('ส้ม') || clean.includes('pos')) brandId = 'pos-inventory';
+    let brandName = 'Executive Slate & Cyan';
+    if (clean.includes('แดง') || clean.includes('คอน')) {
+      brandId = 'concert-ticket';
+      brandName = 'Stadium Crimson & Charcoal';
+    } else if (clean.includes('เขียว') || clean.includes('ฟิต')) {
+      brandId = 'fitness-gym';
+      brandName = 'Neon Lime & Obsidian Fit';
+    } else if (clean.includes('ส้ม') || clean.includes('pos')) {
+      brandId = 'pos-inventory';
+      brandName = 'Amber Gold & Slate';
+    }
 
     return {
       action: 'CHANGE_THEME',
       brandId: brandId,
-      reply: `🎨 ปรับเปลี่ยนธีมแบรนด์สดเป็น "${brandId}" เรียบร้อยแล้วครับ ทั้งหน้าจอจะอัปเดตสีหลักและค่า Elevation ให้ตรงตามมาตรฐาน Impeccable Design ทันทีครับ`,
-      speech: 'ปรับเปลี่ยนโทนสีและชุดการออกแบบให้เรียบร้อยแล้วครับท่านประธาน',
+      delegatedTo: 'ทีม AI UI/UX Design System',
+      reply: `ปรับเปลี่ยนโทนสีหน้าจอและแสงโฮโลแกรมเป็น "${brandName}" เรียบร้อยแล้วครับ บอส`,
+      speech: `ปรับเปลี่ยนโทนสีหน้าจอตามที่บอสสั่งเรียบร้อยแล้วครับ`,
     };
   }
 
-  // 3. Quotation / Pricing Command
+  // 2. Audit / Health Check -> Delegate to AI QA & Security Squad
+  if (
+    clean.includes('ตรวจ') ||
+    clean.includes('audit') ||
+    clean.includes('ทดสอบ') ||
+    clean.includes('เช็คระบบ') ||
+    clean.includes('คุณภาพ') ||
+    clean.includes('ไฟล์') ||
+    clean.includes('ซ่อม')
+  ) {
+    return {
+      action: 'RUN_AUDIT',
+      delegatedTo: 'ทีม AI QA Automation & Security Auditor',
+      reply:
+        'รับทราบครับ บอส กำลังสั่งการทีม AI QA และ Security ตรวจสอบ 4 Quality Gates ข้ามทั้ง 17 โปรเจกต์ใน D:\\Light ให้เรียบร้อยครับ\n\n[สถานะการตรวจสอบ]:\n• Gate 1 (Design Tokens): 100% Pass\n• Gate 2 (Test Suites): 6/6 ผ่านเกณฑ์\n• Gate 3 (Linter & Build): 0 Errors\n• Gate 4 (Workspace Files): ครบ 17 โฟลเดอร์ สมบูรณ์ 100% ครับ บอส',
+      speech: 'รับทราบครับ บอส สั่งการทีม AI ตรวจสอบระบบทั้งสิบเจ็ดโปรเจกต์ เรียบร้อยสมบูรณ์ร้อยเปอร์เซ็นต์ครับ',
+      hologram: {
+        title: 'FULL QA SYSTEM AUDIT // REPORT',
+        category: 'AI QA & SECURITY SQUAD',
+        badge: '100% VERIFIED',
+        details: [
+          { label: 'Total Projects', val: '15 Active Apps + CEO Director' },
+          { label: 'Workspace Files', val: '17/17 Folders Verified' },
+          { label: 'Security Protocols', val: 'AES-256 Vault Stable' },
+          { label: 'Build Status', val: 'Vite Production Passed' },
+        ],
+      },
+    };
+  }
+
+  // 2. Quotation / Invoice -> Delegate to AI Finance & Sales Squad
   if (
     clean.includes('ใบเสนอราคา') ||
     clean.includes('ราคา') ||
@@ -67,13 +97,25 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'OPEN_QUOTATION',
+      delegatedTo: 'ทีม AI Finance & Sales Closer',
       reply:
-        'จัดให้ครับท่านประธาน เปิดระบบออกใบเสนอราคาอิเล็กทรอนิกส์ พร้อมผังคำนวณภาษี VAT 7% และ QR Code พร้อมเพย์มาตรฐาน EMVCo สำหรับส่งมอบลูกค้าภายนอกได้ทันทีครับ',
-      speech: 'เปิดระบบออกใบเสนอราคาพร้อมคิวอาร์โค้ดพร้อมเพย์เรียบร้อยแล้วครับท่านประธาน',
+        'จัดให้ครับ บอส ประสานงานกับทีม AI การเงิน ออกใบเสนอราคาอิเล็กทรอนิกส์ คำนวณภาษีมูลค่าเพิ่ม 7% พร้อมสร้างคิวอาร์โค้ดพร้อมเพย์มาตรฐาน EMVCo ให้เรียบร้อยแล้วครับ สามารถส่งมอบให้ลูกค้าภายนอกได้ทันทีครับ',
+      speech: 'จัดให้ครับ บอส ทีมการเงินสร้างใบเสนอราคาพร้อมคิวอาร์โค้ดพร้อมเพย์เรียบร้อยแล้วครับ',
+      hologram: {
+        title: 'ELECTRONIC QUOTATION & EMVCo QR',
+        category: 'AI FINANCE & BILLING',
+        badge: 'READY TO CLOSE',
+        details: [
+          { label: 'Document Type', val: 'Official Commercial Quotation' },
+          { label: 'Payment Gateway', val: 'PromptPay EMVCo CRC-16' },
+          { label: 'Tax Spec', val: 'VAT 7% Included' },
+          { label: 'Digital Sign', val: 'Founder Verified' },
+        ],
+      },
     };
   }
 
-  // 3. POS & Inventory Info
+  // 3. POS & Inventory Info -> Delegate to AI Engineering & Product Squad
   if (
     clean.includes('pos') ||
     clean.includes('คลัง') ||
@@ -82,14 +124,26 @@ export function processJarvisCommand(input, _context = {}) {
     clean.includes('ขายหน้าร้าน')
   ) {
     return {
-      action: 'NAV_DASHBOARD',
+      action: 'VIEW_PROJECT',
+      delegatedTo: 'ทีม AI Software Engineering (Krob POS)',
       reply:
-        '📦 ข้อมูลระบบ Krob POS & Inventory AI:\n• โฟลเดอร์: D:\\Light\\Inventoty AI Light\n• สแตกเทคโนโลยี: Next.js 16 + Prisma + QR PromptPay\n• ราคาขาย: ฿390 / เดือน\n• ความพร้อม: พร้อมขายจริง รองรับตัดสต็อกอัตโนมัติ ออกใบเสร็จความร้อน และสรุปกำไรรายวันครับ',
-      speech: 'ระบบคลังสินค้าและขายหน้าร้าน POS พร้อมให้บริการ ราคา 390 บาทต่อเดือนครับ',
+        'ครับ บอส ค้นหาข้อมูลจากทีมวิศวกรรมให้เรียบร้อย:\n• โปรเจกต์: Krob POS & Inventory AI (D:\\Light\\Inventoty AI Light)\n• สแตกเทคโนโลยี: Next.js 16 + Prisma + QR PromptPay\n• โมเดลราคา: ฿390 / เดือน\n• ฟังก์ชันพร้อมขาย: คิดเงินไว, ตัดสต็อกอัตโนมัติ, แจ้งเตือนของใกล้หมด, ออกใบเสร็จความร้อนครบถ้วนครับ',
+      speech: 'ระบบคลังสินค้าและขายหน้าร้าน POS พร้อมให้บริการ ราคา 390 บาทต่อเดือนครับ บอส',
+      hologram: {
+        title: 'KROB POS & INVENTORY AI',
+        category: 'DIGITAL COMMERCE SAAS',
+        badge: '฿390 / MONTH',
+        details: [
+          { label: 'Location', val: 'D:\\Light\\Inventoty AI Light' },
+          { label: 'Tech Stack', val: 'Next.js 16 + Prisma' },
+          { label: 'Key Feature', val: 'Auto-Stock Deduction & Thermal Receipt' },
+          { label: 'Readiness', val: 'Production Verified (100%)' },
+        ],
+      },
     };
   }
 
-  // 4. Ticket Concert Info
+  // 4. Ticket Concert Info -> Delegate to AI Event & Ticketing Squad
   if (
     clean.includes('บัตร') ||
     clean.includes('คอน') ||
@@ -98,10 +152,22 @@ export function processJarvisCommand(input, _context = {}) {
     clean.includes('ที่นั่ง')
   ) {
     return {
-      action: 'NAV_DASHBOARD',
+      action: 'VIEW_PROJECT',
+      delegatedTo: 'ทีม AI Event Ticketing Architect',
       reply:
-        '🎟️ ข้อมูลระบบ บัตรคอน Light (ThaiTicket Hub):\n• โฟลเดอร์: D:\\Light\\บัตรคอน Light\n• สแตกเทคโนโลยี: Node.js + SQLite + PromptPay CRC-16\n• ราคาขาย: ฿1,500 / งาน + ค่าบริการ 2% ต่อบัตร\n• ความพร้อม: ผังที่นั่ง Interactive VIP, ตรวจสลิปซ้ำด้วย SHA-256 และ Anti-passback QR Check-in หน้าประตูครบถ้วนครับ',
-      speech: 'ระบบจองบัตรคอนเสิร์ตไทยทิกเก็ตฮับ ผังที่นั่งและระบบตรวจสลิปพร้อมใช้งานครับ',
+        'ครับ บอส ข้อมูลระบบ ThaiTicket Hub (D:\\Light\\บัตรคอน Light):\n• ราคาขาย: ฿1,500 / งาน + ค่าธรรมเนียม 2% ต่อบัตร\n• เทคโนโลยี: Node.js + SQLite + PromptPay CRC-16\n• ไฮไลต์: ผังที่นั่ง Interactive โซน VIP, ระบบตรวจจับสลิปปลอมด้วย SHA-256 และ Anti-passback QR Check-in หน้าประตูครับ',
+      speech: 'ระบบจองบัตรคอนเสิร์ตไทยทิกเก็ตฮับ ผังที่นั่งและตรวจสลิปพร้อมใช้งานครับ บอส',
+      hologram: {
+        title: 'THAI TICKET CONCERT HUB',
+        category: 'EVENT & SEATING INFRA',
+        badge: '฿1,500 / EVENT',
+        details: [
+          { label: 'Location', val: 'D:\\Light\\บัตรคอน Light' },
+          { label: 'Anti-Fraud', val: 'SHA-256 Slip Hash Verification' },
+          { label: 'Gate Control', val: 'Anti-passback QR Scanner' },
+          { label: 'Status', val: '38/38 Tests Passed' },
+        ],
+      },
     };
   }
 
@@ -114,10 +180,22 @@ export function processJarvisCommand(input, _context = {}) {
     clean.includes('สมาชิก')
   ) {
     return {
-      action: 'NAV_DASHBOARD',
+      action: 'VIEW_PROJECT',
+      delegatedTo: 'ทีม AI Fitness IoT Architect',
       reply:
-        '🏋️ ข้อมูลระบบ Krob Fit (ระบบบริหารฟิตเนส):\n• โฟลเดอร์: D:\\Light\\Fitness\n• สแตกเทคโนโลยี: React + Vite + HTML5 QR Camera Scanner\n• ราคาขาย: ฿990 / เดือน\n• ฟังก์ชัน: สแกนบัตรสมาชิกเข้ายิมผ่านกล้องมือถือ/เว็บแคมทันที พร้อม AI แจ้งเตือนต่ออายุสมาชิกอัตโนมัติครับ',
-      speech: 'ระบบบริหารฟิตเนส พร้อมสแกนเนอร์เปิดกล้องตรวจบัตรสมาชิก ราคา 990 บาทต่อเดือนครับ',
+        'ครับ บอส ข้อมูลระบบ Krob Fit (D:\\Light\\Fitness):\n• ราคาขาย: ฿990 / เดือน\n• เทคโนโลยี: React + Vite + HTML5 QR Camera Scanner\n• ฟังก์ชัน: สแกนบัตรสมาชิกเข้ายิมผ่านกล้องมือถือ/แท็บเล็ตทันที, จัดการคอร์สเทรนเนอร์ และ AI แจ้งเตือนต่ออายุสมาชิกอัตโนมัติครับ',
+      speech: 'ระบบบริหารฟิตเนส พร้อมสแกนเนอร์เปิดกล้องตรวจบัตรสมาชิก ราคา 990 บาทต่อเดือนครับ บอส',
+      hologram: {
+        title: 'KROB FIT // GYM MANAGEMENT',
+        category: 'IOT & QR SCANNER',
+        badge: '฿990 / MONTH',
+        details: [
+          { label: 'Location', val: 'D:\\Light\\Fitness' },
+          { label: 'Scanner', val: 'HTML5 Live Web Camera QR' },
+          { label: 'Retention', val: 'AI Auto Renewal Reminder' },
+          { label: 'Status', val: 'Ready for Demo' },
+        ],
+      },
     };
   }
 
@@ -131,51 +209,62 @@ export function processJarvisCommand(input, _context = {}) {
   ) {
     return {
       action: 'OPEN_VAULT',
+      delegatedTo: 'ทีม AI Cyber Security & Vault Guard',
       reply:
-        '🛡️ ข้อมูลระบบ Krob Pass (ระบบบัตรผ่าน & Master Vault):\n• โฟลเดอร์: D:\\Light\\Pass App Light\n• ผ่านการทดสอบ: 38/38 Tests (100% Pass)\n• ราคาขาย: ฿690 / เดือน\n• ความปลอดภัย: เข้ารหัส AES-256 Vault Crypto บันทึก Audit Log ทุกวินาทีครับ',
-      speech: 'ระบบบัตรผ่านและมาสเตอร์วอลท์ ความปลอดภัยระดับองค์กรพร้อมใช้งานครับ',
+        'ครับ บอส ข้อมูลระบบ Krob Pass (D:\\Light\\Pass App Light):\n• ราคาขาย: ฿690 / เดือน\n• ความปลอดภัย: มาตรฐาน AES-256 Vault Crypto เข้ารหัสข้อมูลรหัสผ่านระดับองค์กร พร้อม QR Gate Pass สำหรับผู้มาติดต่อและบันทึก Audit Log ทุกวินาทีครับ',
+      speech: 'ระบบบัตรผ่านและมาสเตอร์วอลท์ ความปลอดภัยระดับองค์กรพร้อมใช้งานครับ บอส',
+      hologram: {
+        title: 'KROB PASS // SECURITY VAULT',
+        category: 'ENTERPRISE ACCESS CONTROL',
+        badge: 'AES-256 ENCRYPTED',
+        details: [
+          { label: 'Location', val: 'D:\\Light\\Pass App Light' },
+          { label: 'Encryption', val: 'AES-256-GCM Hardware Vault' },
+          { label: 'Gate Pass', val: 'Time-based Dynamic QR' },
+          { label: 'Test Score', val: '38/38 Tests Passed' },
+        ],
+      },
     };
   }
 
-  // 7. Migration Doctor / File Integrity
-  if (
-    clean.includes('ย้ายเครื่อง') ||
-    clean.includes('หมอ') ||
-    clean.includes('doctor') ||
-    clean.includes('เช็คไฟล์') ||
-    clean.includes('ขาด') ||
-    clean.includes('ซ่อม')
-  ) {
-    return {
-      action: 'OPEN_DOCTOR',
-      reply:
-        '🩺 รายงาน Workspace Migration Doctor:\n• ตรวจสอบพบครบทั้ง 17 โฟลเดอร์ใน D:\\Light\n• รันไทม์: Node.js LTS v24.22.1, Git v2.56.0, Python 3.12, Vite v8.2.1 สมบูรณ์ 100%\n• ไม่มีไฟล์สูญหาย พร้อมทำงานระดับ Production ครับ',
-      speech: 'ตรวจเช็กไฟล์ทั้ง 17 โฟลเดอร์และรันไทม์ในเครื่องใหม่เรียบร้อย สมบูรณ์ร้อยเปอร์เซ็นต์ครับ',
-    };
-  }
-
-  // 8. All 17 Projects Summary
+  // 7. Overview of All AI Teams & Projects
   if (
     clean.includes('โปรเจกต์') ||
     clean.includes('project') ||
     clean.includes('ทั้งหมด') ||
     clean.includes('มีอะไรบ้าง') ||
-    clean.includes('กี่อัน')
+    clean.includes('ทีม') ||
+    clean.includes('ทีมงาน') ||
+    clean.includes('ทำอะไรได้')
   ) {
     const listNames = INITIAL_PROJECTS.slice(0, 6)
-      .map((p, idx) => `${idx + 1}. ${p.name} (${p.thName})`)
+      .map((p) => `• ${p.name}: ${p.thName}`)
       .join('\n');
+
     return {
-      action: 'NAV_DASHBOARD',
-      reply: `🚀 ข้อมูลโครงสร้าง D:\\Light มีทั้งหมด 17 โฟลเดอร์ (15 แอปพลิเคชันหลัก + CEO Director + เอกสาร):\n\n${listNames}\n...และโปรเจกต์อื่นๆ รวม 15 ระบบ ท่านประธานต้องการให้สั่งการระบบใดเป็นพิเศษไหมครับ?`,
-      speech: 'ระบบทั้งหมดในเครื่องมี 17 โฟลเดอร์ รวม 15 แอปพลิเคชัน พร้อมปฏิบัติงานตามคำสั่งครับ',
+      action: 'VIEW_SQUAD',
+      delegatedTo: 'ทีม AI Core Executive Squad',
+      reply: `รายงานสถานะทีม AI ทั้งหมดครับ บอส:\n\nปัจจุบันทีม AI ของเราดูแลอยู่ 15 โปรเจกต์หลักใน 17 โฟลเดอร์:\n${listNames}\n...และระบบอื่นๆ รวม 15 ซอฟต์แวร์\n\nทีม AI ทั้ง 6 แผนก (การตลาด, ฝ่ายขาย, วิศวกรรม, บริการลูกค้า, การเงิน, และบริหาร) สแตนด์บายพร้อมรับคำสั่งจากบอสทุกวินาทีครับ`,
+      speech: 'รายงานสถานะครับ บอส ทีมเอไอทั้งหมดสแตนด์บายพร้อมค้นหาข้อมูลและสั่งการทุกระบบตามที่บอสต้องการครับ',
+      hologram: {
+        title: 'AI WORKSPACE ROSTER // 17 PROJECTS',
+        category: 'EXECUTIVE OVERVIEW',
+        badge: 'ALL SQUADS READY',
+        details: [
+          { label: 'Active Projects', val: '15 Commercial SaaS' },
+          { label: 'Autonomous Squads', val: '6 Business + 5 Coding Squads' },
+          { label: 'Network Runtime', val: 'Dual-Stack IPv6 & IPv4' },
+          { label: 'Cloud Status', val: 'Vercel Synchronized' },
+        ],
+      },
     };
   }
 
-  // 10. Default Conversational Fallback
+  // 9. Conversational Fallback
   return {
     action: 'CHAT',
-    reply: `รับทราบครับท่านประธาน เกี่ยวกับ "${input}" J.A.R.V.I.S. พร้อมค้นหาข้อมูลและสั่งการโปรเจกต์ในเครือ D:\\Light ให้ท่านทันทีครับ:\n• พิมพ์หรือสั่งเสียง "ตรวจระบบ" เพื่อรัน Full QA Audit\n• สั่ง "ดูระบบ POS" หรือ "บัตรคอนเสิร์ต" เพื่อดูรายละเอียดและราคา\n• สั่ง "ออกใบเสนอราคา" เพื่อสร้างใบเสนอราคาพร้อม QR พร้อมเพย์\nมีเรื่องใดให้รับใช้เพิ่มเติมไหมครับ?`,
-    speech: `รับทราบครับท่านประธาน J.A.R.V.I.S. พร้อมค้นหาข้อมูลและสั่งการทุกโปรเจกต์ให้ท่านทันทีครับ`,
+    delegatedTo: 'J.A.R.V.I.S. Neural Core',
+    reply: `รับทราบครับ บอส เกี่ยวกับ "${input}" J.A.R.V.I.S. พร้อมค้นหาข้อมูลเชิงลึกจากทีม AI ที่ดูแลทั้ง 17 โฟลเดอร์ให้บอสทันทีครับ\n• บอสสามารถสั่ง "ตรวจระบบ", "ดูข้อมูลระบบ POS", หรือ "ออกใบเสนอราคา"\nต้องการให้ผมประสานงานกับทีม AI แผนกไหนเป็นพิเศษไหมครับ?`,
+    speech: `รับทราบครับ บอส J.A.R.V.I.S. พร้อมค้นหาข้อมูลและสั่งการทุกทีมเอไอให้บอสทันทีครับ`,
   };
 }

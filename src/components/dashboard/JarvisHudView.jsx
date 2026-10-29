@@ -4,24 +4,29 @@ import {
   Send,
   Volume2,
   VolumeX,
-  Shield,
   Cpu,
   HardDrive,
   Wifi,
-  Thermometer,
   Zap,
-  FileText,
-  Stethoscope,
-  Palette,
-  ChevronRight,
+  Activity,
+  Layers,
+  Bot,
+  Radio,
+  Sliders,
+  Fingerprint,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { playClickSound, playSuccessSound } from '../../utils/soundEffects';
-import { processJarvisCommand, SYSTEM_TELEMETRY } from '../../utils/jarvisBrain';
+import { processJarvisCommand } from '../../utils/jarvisBrain';
 
 export function JarvisHudView({
   onRunAudit,
   onOpenQuotation,
-  onOpenDoctor,
+  _onOpenDoctor,
   _onOpenDesignSystem,
   onSelectBrandTheme,
   onShowToast,
@@ -30,33 +35,43 @@ export function JarvisHudView({
     {
       id: 1,
       sender: 'JARVIS',
-      time: '19:00:00',
-      text: 'สวัสดีครับ ท่านประธาน J.A.R.V.I.S. MARK 3 ออนไลน์พร้อมรับคำสั่งเสียงภาษาไทย และค้นหาข้อมูลสั่งการทั้ง 17 โปรเจกต์ใน D:\\Light ให้ท่านทันทีครับ',
+      time: '03:25:18 AM',
+      text: 'สวัสดีครับ, บอส มีอะไรให้ผม ช่วยจัดการ หรือค้นหา ข้อมูล ไหมครับ?',
     },
   ]);
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [hudState, setHudState] = useState('READY'); // 'READY' | 'LISTENING' | 'SPEAKING' | 'PROCESSING'
+  const [hudState, setHudState] = useState('READY'); // 'READY' | 'LISTENING' | 'SEARCHING' | 'SPEAKING'
   const [currentTime, setCurrentTime] = useState('');
-  const [cpuUsage, setCpuUsage] = useState(18);
-  const [netLatency, setNetLatency] = useState(12);
+  const [cpuUsage, setCpuUsage] = useState(58);
+  const [diskUsage] = useState('R 32KB/s // W 2.8MB/s');
+  const [activeHologram, setActiveHologram] = useState(null); // On-demand holographic projection payload
+  const [isSmartControlOpen, setIsSmartControlOpen] = useState(true);
+  const [isMonitorOpen, setIsMonitorOpen] = useState(true);
+  const [activeLeftDock, setActiveLeftDock] = useState('ai');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const recognitionRef = useRef(null);
   const chatScrollRef = useRef(null);
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Live Clock & Telemetry Simulation
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        now.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        })
       );
-      // Gentle realistic telemetry pulse
-      setCpuUsage((prev) => Math.min(65, Math.max(12, prev + (Math.random() * 6 - 3))));
-      setNetLatency((prev) => Math.min(24, Math.max(8, prev + (Math.random() * 2 - 1))));
+      // Gentle realistic telemetry pulse (matching 50-60% range seen in HUD)
+      setCpuUsage((prev) => Math.min(72, Math.max(45, prev + (Math.random() * 4 - 2))));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -68,7 +83,7 @@ export function JarvisHudView({
     }
   }, [messages]);
 
-  // Canvas 3D Hologram Wireframe Orb Renderer
+  // Canvas 3D Holographic Wireframe Orb (Iron Man Mark III Engine)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -80,45 +95,45 @@ export function JarvisHudView({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const radius = 90;
+      const radius = 95;
 
-      // Glow color based on state
-      const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING';
-      const mainColor = isLive ? '#06b6d4' : '#38bdf8';
-      const glowColor = isLive ? 'rgba(6, 182, 212, 0.4)' : 'rgba(56, 189, 248, 0.2)';
+      const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING';
+      const mainColor = isLive ? '#38bdf8' : '#06b6d4';
+      const glowColor = isLive ? 'rgba(56, 189, 248, 0.45)' : 'rgba(6, 182, 212, 0.22)';
 
-      // Outer HUD Concentric Rings
       ctx.save();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+
+      // Outer Concentric Degrees / Tick Ring
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 30, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, radius + 32, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Outer Segmented Rotating Ring
+      // Segmented Rotating Gyro Rings
       ctx.beginPath();
       ctx.strokeStyle = mainColor;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3;
       ctx.lineCap = 'round';
-      ctx.arc(centerX, centerY, radius + 22, angle, angle + Math.PI * 0.7);
+      ctx.arc(centerX, centerY, radius + 24, angle, angle + Math.PI * 0.75);
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 22, angle + Math.PI, angle + Math.PI * 1.7);
+      ctx.arc(centerX, centerY, radius + 24, angle + Math.PI, angle + Math.PI * 1.75);
       ctx.stroke();
 
-      // Inner Counter-Rotating Ring
+      // Inner Counter-Rotating Orbit Ring
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.5)';
       ctx.lineWidth = 1.5;
-      ctx.arc(centerX, centerY, radius + 12, -angle * 1.3, -angle * 1.3 + Math.PI * 0.5);
+      ctx.arc(centerX, centerY, radius + 12, -angle * 1.2, -angle * 1.2 + Math.PI * 0.6);
       ctx.stroke();
 
-      // Sphere Wireframe Latitude/Longitude Grid
-      ctx.shadowBlur = isLive ? 18 : 10;
+      // 3D Spherical Wireframe Lattice
+      ctx.shadowBlur = isLive ? 22 : 12;
       ctx.shadowColor = mainColor;
 
-      const numLat = 7;
+      const numLat = 8;
       for (let i = 1; i < numLat; i++) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
         const latR = radius * Math.cos(latAngle);
@@ -127,34 +142,34 @@ export function JarvisHudView({
         ctx.beginPath();
         ctx.strokeStyle = glowColor;
         ctx.lineWidth = 1;
-        ctx.ellipse(centerX, centerY + yOffset, latR, latR * 0.35, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerX, centerY + yOffset, latR, latR * 0.38, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      const numLong = 8;
+      const numLong = 10;
       for (let i = 0; i < numLong; i++) {
         const longAngle = angle + (i / numLong) * Math.PI;
         ctx.beginPath();
-        ctx.strokeStyle = isLive ? 'rgba(6, 182, 212, 0.45)' : 'rgba(56, 189, 248, 0.25)';
+        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.5)' : 'rgba(6, 182, 212, 0.28)';
         ctx.lineWidth = 1;
         ctx.ellipse(centerX, centerY, radius * Math.sin(longAngle), radius, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Center Core Energy Particle
+      // Center Core Energy Reactor Glow
       ctx.beginPath();
-      const coreR = isLive ? 14 + Math.sin(angle * 8) * 3 : 10;
-      const gradient = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, coreR * 2);
+      const coreR = isLive ? 16 + Math.sin(angle * 7) * 3 : 12;
+      const gradient = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, coreR * 2.2);
       gradient.addColorStop(0, '#ffffff');
-      gradient.addColorStop(0.4, mainColor);
+      gradient.addColorStop(0.35, mainColor);
       gradient.addColorStop(1, 'transparent');
       ctx.fillStyle = gradient;
-      ctx.arc(centerX, centerY, coreR * 2, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, coreR * 2.2, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
 
-      angle += isLive ? 0.04 : 0.012;
+      angle += isLive ? 0.035 : 0.012;
       animationId = requestAnimationFrame(render);
     };
 
@@ -162,83 +177,103 @@ export function JarvisHudView({
     return () => cancelAnimationFrame(animationId);
   }, [hudState]);
 
-  // Web Speech Synthesis (Thai Voice Output)
-  const speakThai = useCallback((text) => {
-    if (!voiceEnabled) return;
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'th-TH';
-      utterance.rate = 1.05;
-      utterance.pitch = 0.95; // Slightly deeper, executive sci-fi tone
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-        setHudState('SPEAKING');
-      };
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setHudState('READY');
-      };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        setHudState('READY');
-      };
-      window.speechSynthesis.speak(utterance);
-    }
-  }, [voiceEnabled]);
-
-  // Core Command Dispatcher
-  const handleDispatchCommand = useCallback((text) => {
-    if (!text.trim()) return;
-
-    playClickSound();
-    const nowTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-    // Add user message to history
-    const userMsg = {
-      id: Date.now(),
-      sender: 'FOUNDER',
-      time: nowTime,
-      text: text,
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputText('');
-    setHudState('PROCESSING');
-
-    // Brain NLP Processing
-    setTimeout(() => {
-      const result = processJarvisCommand(text);
-
-      const jarvisMsg = {
-        id: Date.now() + 1,
-        sender: 'JARVIS',
-        time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        text: result.reply,
-      };
-
-      setMessages((prev) => [...prev, jarvisMsg]);
-      playSuccessSound();
-
-      // Trigger actual system actions
-      if (result.action === 'RUN_AUDIT' && onRunAudit) {
-        onRunAudit();
-      } else if (result.action === 'OPEN_QUOTATION' && onOpenQuotation) {
-        onOpenQuotation();
-      } else if (result.action === 'OPEN_DOCTOR' && onOpenDoctor) {
-        onOpenDoctor();
-      } else if (result.action === 'CHANGE_THEME' && onSelectBrandTheme) {
-        onSelectBrandTheme(result.brandId);
+  // Web Speech Synthesis (Thai Executive Voice Output)
+  const speakThai = useCallback(
+    (text) => {
+      if (!voiceEnabled) return;
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'th-TH';
+        utterance.rate = 1.05;
+        utterance.pitch = 0.95; // Calm executive Jarvis tone
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+          setHudState('SPEAKING');
+        };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          setHudState('READY');
+        };
+        utterance.onerror = () => {
+          setIsSpeaking(false);
+          setHudState('READY');
+        };
+        window.speechSynthesis.speak(utterance);
       }
+    },
+    [voiceEnabled]
+  );
 
-      // Voice response
-      if (result.speech) {
-        speakThai(result.speech);
-      } else {
-        setHudState('READY');
-      }
-    }, 400);
-  }, [onRunAudit, onOpenQuotation, onOpenDoctor, onSelectBrandTheme, speakThai]);
+  // Core Command Dispatcher & AI Squad Query Engine
+  const handleDispatchCommand = useCallback(
+    (text) => {
+      if (!text.trim()) return;
+
+      playClickSound();
+      const nowTime = new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+
+      // User Message to HUD Terminal
+      const userMsg = {
+        id: Date.now(),
+        sender: 'BOSS',
+        time: nowTime,
+        text: text,
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setInputText('');
+      setHudState('SEARCHING');
+
+      // Jarvis Neural Processing & AI Squad Coordination
+      setTimeout(() => {
+        const result = processJarvisCommand(text);
+
+        const jarvisMsg = {
+          id: Date.now() + 1,
+          sender: 'JARVIS',
+          time: new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          }),
+          text: result.reply,
+          delegatedTo: result.delegatedTo,
+        };
+
+        setMessages((prev) => [...prev, jarvisMsg]);
+        playSuccessSound();
+
+        // Project Holographic Card on demand if payload exists
+        if (result.hologram) {
+          setActiveHologram(result.hologram);
+        }
+
+        // Trigger actions
+        if (result.action === 'RUN_AUDIT' && onRunAudit) {
+          onRunAudit();
+        } else if (result.action === 'OPEN_QUOTATION' && onOpenQuotation) {
+          onOpenQuotation();
+        } else if (result.action === 'CHANGE_THEME' && onSelectBrandTheme) {
+          onSelectBrandTheme(result.brandId);
+        }
+
+        // Voice Response
+        if (result.speech) {
+          speakThai(result.speech);
+        } else {
+          setHudState('READY');
+        }
+      }, 450);
+    },
+    [onRunAudit, onOpenQuotation, onSelectBrandTheme, speakThai]
+  );
 
   // Web Speech Recognition (Thai Voice Input)
   useEffect(() => {
@@ -263,17 +298,14 @@ export function JarvisHudView({
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         setIsListening(false);
-        setHudState('PROCESSING');
+        setHudState('SEARCHING');
         handleDispatchCommand(transcript);
       };
 
       recognition.onerror = (event) => {
-        console.warn('Speech recognition error:', event.error);
+        console.warn('Speech error:', event.error);
         setIsListening(false);
         setHudState('READY');
-        if (onShowToast) {
-          onShowToast('error', 'ระบบเสียงไม่พร้อม', 'ไม่สามารถจับเสียงได้ กรุณาใช้การพิมพ์ข้อความแทนครับ');
-        }
       };
 
       recognition.onend = () => {
@@ -300,369 +332,449 @@ export function JarvisHudView({
         }
       } else {
         if (onShowToast) {
-          onShowToast('info', 'Speech Recognition', 'เบราว์เซอร์นี้ไม่รองรับการจับเสียง กรุณาพิมพ์คำสั่งในช่องด้านล่างแทนครับ');
+          onShowToast('info', 'Speech Input', 'เบราว์เซอร์นี้ไม่รองรับการจับเสียง กรุณาพิมพ์คำสั่งในช่องด้านล่างแทนครับ');
         }
       }
     }
   };
 
+  const toggleFullscreen = () => {
+    playClickSound();
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
+    }
+  };
+
   return (
-    <div className="relative min-h-[820px] w-full overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#050811] text-slate-100 shadow-2xl backdrop-blur-2xl">
-      {/* Sci-Fi Background Hexagonal / Grid Overlay */}
+    <div
+      ref={containerRef}
+      className={`relative w-full overflow-hidden bg-[#030712] text-slate-100 font-mono select-none transition-all duration-300 ${
+        isFullscreen
+          ? 'fixed inset-0 z-50 h-screen w-screen'
+          : 'min-h-[860px] rounded-3xl border border-cyan-500/25 shadow-[0_0_80px_rgba(6,182,212,0.15)]'
+      }`}
+    >
+      {/* Sci-Fi Atmospheric Grid Lines & Vignette */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
+        className="pointer-events-none absolute inset-0 opacity-[0.04]"
         style={{
           backgroundImage:
-            'radial-gradient(#06b6d4 1.5px, transparent 1.5px), radial-gradient(#06b6d4 1.5px, #050811 1.5px)',
-          backgroundSize: '36px 36px',
+            'linear-gradient(rgba(6, 182, 212, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.4) 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
         }}
       />
+      <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-[#02050e]/90" />
 
-      {/* Top HUD Telemetry Bar */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between border-b border-cyan-500/20 bg-slate-950/70 px-6 py-3.5 text-xs font-mono">
-        {/* Left Status */}
+      {/* ============================================================ */}
+      {/* TOP HUD BAR (Matching Screenshot 1:1)                        */}
+      {/* ============================================================ */}
+      <div className="relative z-20 flex items-center justify-between border-b border-cyan-500/20 bg-slate-950/80 px-6 py-3 text-xs tracking-wider">
+        {/* Left Brand Badge */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-            </span>
-            <span className="text-sm font-black tracking-widest text-cyan-400">
-              J . A . R . V . I . S .
-            </span>
-            <span className="rounded bg-cyan-950/80 px-2 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/40">
-              MARK 3 [ACTIVE]
-            </span>
+          <span className="text-base font-black tracking-[0.25em] text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
+            J . A . R . V . I . S .
+          </span>
+          <span className="rounded bg-cyan-950/70 px-2 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/40">
+            MK III
+          </span>
+          <div className="hidden sm:flex items-center gap-1.5 rounded bg-slate-900/80 px-2.5 py-0.5 text-[10px] text-emerald-400 border border-emerald-500/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>2 PRINTERS / 15 APPS ONLINE</span>
           </div>
-          <span className="hidden sm:inline text-slate-500">•</span>
-          <span className="hidden sm:inline text-slate-400">FOUNDER AI DIRECT INTERFACE</span>
         </div>
 
-        {/* Center / Right Environment & Live Time */}
-        <div className="flex items-center gap-4 text-[11px] text-slate-400">
-          <div className="hidden md:flex items-center gap-2">
-            <span>ENVIRONMENT:</span>
-            <span className="text-cyan-300 font-bold">{SYSTEM_TELEMETRY.environment}</span>
+        {/* Right Environment & Status */}
+        <div className="flex items-center gap-5 text-[11px] text-slate-400">
+          <div className="hidden md:flex items-center gap-4">
+            <div>
+              <span className="text-slate-500 text-[10px] block">ENVIRONMENT</span>
+              <span className="text-cyan-300 font-bold">BANGKOK 26°C</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">HUMIDITY</span>
+              <span className="text-cyan-300 font-bold">85%</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">NETWORK</span>
+              <span className="text-emerald-400 font-bold">ONLINE</span>
+            </div>
+            <div>
+              <span className="text-slate-500 text-[10px] block">OVERCAST</span>
+              <span className="text-slate-400">UPDATED 03:15</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Wifi className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-emerald-400 font-bold">{SYSTEM_TELEMETRY.network}</span>
-          </div>
-          <div className="rounded-lg bg-slate-900 px-2.5 py-1 text-cyan-400 border border-cyan-500/30 font-bold">
-            {currentTime || '19:04:30'}
+
+          {/* Time & Fullscreen Toggle */}
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-slate-900/90 px-3 py-1 font-bold text-cyan-400 border border-cyan-500/30">
+              {currentTime || '03:25:18 AM'}
+            </div>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 p-1.5 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40 transition-colors"
+              title="สลับโหมดขยายเต็มหน้าจอ (Fullscreen)"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Cockpit HUD Grid: Left (Controls), Center (Orb), Right (Telemetry & Chat) */}
-      <div className="relative z-10 grid grid-cols-1 gap-6 p-6 lg:grid-cols-12">
-        {/* ============================================================ */}
-        {/* LEFT COLUMN: Smart Control Panel (3 cols)                     */}
-        {/* ============================================================ */}
-        <div className="space-y-4 lg:col-span-3">
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4 shadow-lg backdrop-blur-md">
-            <div className="mb-3 flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-xs font-mono font-bold tracking-wider text-cyan-400">
-                ❖ SMART CONTROLS
-              </span>
-              <span className="rounded bg-cyan-950/60 px-1.5 py-0.5 text-[9px] font-mono text-cyan-400 border border-cyan-500/30">
-                DIRECT ACTIONS
-              </span>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <button
-                type="button"
-                onClick={toggleMic}
-                className={`w-full flex items-center justify-between rounded-xl border p-2.5 font-semibold transition-all shadow-sm ${
-                  isListening
-                    ? 'border-red-500/60 bg-red-950/40 text-red-300 animate-pulse'
-                    : 'border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/40'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {isListening ? <Mic className="h-4 w-4 text-red-400" /> : <Mic className="h-4 w-4 text-cyan-400" />}
-                  <span>{isListening ? 'กำลังรับเสียง...' : 'สั่งการด้วยเสียง (Voice)'}</span>
-                </div>
-                <span className="text-[10px] font-mono opacity-60">TH-TH</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDispatchCommand('ตรวจระบบทั้งหมด')}
-                className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-slate-300 hover:border-cyan-500/40 hover:bg-slate-800 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-emerald-400" />
-                  <span>รัน Full QA Audit</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDispatchCommand('ออกใบเสนอราคา')}
-                className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-slate-300 hover:border-cyan-500/40 hover:bg-slate-800 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-cyan-400" />
-                  <span>ออกใบเสนอราคา QR</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDispatchCommand('ตรวจเช็คไฟล์ย้ายเครื่อง')}
-                className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-slate-300 hover:border-cyan-500/40 hover:bg-slate-800 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Stethoscope className="h-4 w-4 text-rose-400" />
-                  <span>Migration Doctor (17 โฟลเดอร์)</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDispatchCommand('สลับเป็นธีมสีแดงคอนเสิร์ต')}
-                className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-2.5 text-slate-300 hover:border-cyan-500/40 hover:bg-slate-800 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-amber-400" />
-                  <span>สลับธีมสีแบรนด์สด</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-              </button>
-            </div>
-
-            {/* Voice Sound Toggle */}
-            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">เสียงพูดตอบกลับ AI:</span>
-              <button
-                type="button"
-                onClick={() => setVoiceEnabled((v) => !v)}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                  voiceEnabled
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'bg-slate-800 text-slate-500'
-                }`}
-              >
-                {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-                <span>{voiceEnabled ? 'เปิดเสียง' : 'ปิดเสียง'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* SaaS Products Quick Knowledge Chips */}
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4 shadow-lg">
-            <span className="text-[11px] font-mono font-bold tracking-wider text-slate-400">
-              ⚡ ถามข้อมูลโปรเจกต์ด่วน:
-            </span>
-            <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px]">
-              {[
-                { label: '📦 ระบบ POS & คลัง', cmd: 'ขอข้อมูลระบบ POS & Inventory' },
-                { label: '🎟️ บัตรคอนเสิร์ต', cmd: 'ขอข้อมูลระบบ บัตรคอน Light' },
-                { label: '🏋️ ฟิตเนส & สแกนเนอร์', cmd: 'ขอข้อมูลระบบ Fitness' },
-                { label: '🛡️ Pass App & Vault', cmd: 'ขอข้อมูลระบบ Pass App' },
-                { label: '🚚 ระบบ Tracking', cmd: 'ขอข้อมูลระบบ Tracking พัสดุ' },
-                { label: '📚 บัญชี & ใบเสร็จ', cmd: 'ขอข้อมูลระบบ บัญชี Light' },
-              ].map((chip) => (
+      {/* ============================================================ */}
+      {/* COCKPIT WORKSPACE (Clean, Minimal, No Static Clutter)        */}
+      {/* ============================================================ */}
+      <div className="relative z-10 flex min-h-[790px] w-full p-4 lg:p-6">
+        {/* ------------------------------------------------------------ */}
+        {/* 1. LEFT VERTICAL TOOL DOCK (8 Icons matching screenshot)     */}
+        {/* ------------------------------------------------------------ */}
+        <div className="hidden md:flex flex-col items-center justify-between rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-2 shadow-xl backdrop-blur-md w-12 shrink-0 mr-4">
+          <div className="space-y-3">
+            {[
+              { id: 'grid', icon: Layers, title: 'AI Teams & Roster' },
+              { id: 'ai', icon: Bot, title: 'J.A.R.V.I.S. Neural Core' },
+              { id: 'wave', icon: Radio, title: 'Audio Stream' },
+              { id: 'scanner', icon: Fingerprint, title: 'Security Vault' },
+              { id: 'chip', icon: Cpu, title: 'Hardware Telemetry' },
+              { id: 'pulse', icon: Activity, title: 'Diagnostics' },
+              { id: 'touch', icon: Sliders, title: 'Manual Overrides' },
+            ].map((btn) => {
+              const Icon = btn.icon;
+              const isActive = activeLeftDock === btn.id;
+              return (
                 <button
-                  key={chip.label}
+                  key={btn.id}
                   type="button"
-                  onClick={() => handleDispatchCommand(chip.cmd)}
-                  className="rounded-lg border border-slate-800 bg-slate-900/80 px-2 py-1 text-slate-300 hover:border-cyan-500/50 hover:bg-cyan-950/30 hover:text-cyan-300 transition-all font-mono"
+                  onClick={() => {
+                    playClickSound();
+                    setActiveLeftDock(btn.id);
+                    if (btn.id === 'grid') handleDispatchCommand('สรุปโปรเจกต์ทั้งหมด');
+                    else if (btn.id === 'scanner') handleDispatchCommand('เช็คความปลอดภัย vault');
+                  }}
+                  className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                    isActive
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 shadow-md shadow-cyan-500/20'
+                      : 'text-slate-500 hover:bg-slate-900 hover:text-slate-300'
+                  }`}
+                  title={btn.title}
                 >
-                  {chip.label}
+                  <Icon className="h-4 w-4" />
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
+
+          {/* Sound Toggle */}
+          <button
+            type="button"
+            onClick={() => setVoiceEnabled((v) => !v)}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all ${
+              voiceEnabled
+                ? 'border-cyan-500/30 text-cyan-400 bg-cyan-950/30'
+                : 'border-slate-800 text-slate-600 bg-slate-900'
+            }`}
+            title={voiceEnabled ? 'เปิดเสียงตอบกลับภาษาไทย' : 'ปิดเสียง'}
+          >
+            {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
         </div>
 
-        {/* ============================================================ */}
-        {/* CENTER COLUMN: 3D Holographic Wireframe Orb (5 cols)         */}
-        {/* ============================================================ */}
-        <div className="flex flex-col items-center justify-center lg:col-span-5">
-          <div className="relative flex flex-col items-center justify-center py-4">
-            <span className="text-[10px] font-mono tracking-widest text-cyan-500/70 mb-1">
-              PROJECT TEMP // QUANTUM CORE
+        {/* ------------------------------------------------------------ */}
+        {/* 2. CENTER AREA: Holographic Orb + Listening Waveform         */}
+        {/* ------------------------------------------------------------ */}
+        <div className="relative flex-1 flex flex-col items-center justify-center">
+          {/* Subtle Top Label */}
+          <div className="text-[11px] font-mono tracking-[0.2em] text-cyan-500/70 mb-2">
+            PROJECT : TEMP
+          </div>
+
+          {/* Hologram 3D Orb */}
+          <div className="relative flex items-center justify-center">
+            <canvas
+              ref={canvasRef}
+              width={340}
+              height={340}
+              onClick={toggleMic}
+              className="cursor-pointer transition-transform hover:scale-105"
+              title="แตะที่ลูกแก้วโฮโลแกรมเพื่อเริ่มพูดคุยสั่งการ"
+            />
+
+            {/* Center Touch Mic Orb */}
+            <button
+              type="button"
+              onClick={toggleMic}
+              className={`absolute flex h-16 w-16 items-center justify-center rounded-full transition-all shadow-2xl backdrop-blur-md ${
+                isListening
+                  ? 'bg-red-500/30 border-2 border-red-400 text-red-200 animate-pulse shadow-red-500/50'
+                  : 'bg-cyan-500/20 border-2 border-cyan-400/50 text-cyan-200 hover:bg-cyan-500/35 hover:scale-110 shadow-cyan-500/30'
+              }`}
+            >
+              <Mic className={`h-7 w-7 ${isListening ? 'text-red-300' : 'text-cyan-300'}`} />
+            </button>
+          </div>
+
+          {/* Dynamic State Status Label */}
+          <div className="mt-3 text-center">
+            <span className="text-xs font-mono font-bold tracking-[0.25em] text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.8)]">
+              {hudState === 'LISTENING' && 'L I S T E N I N G . . .'}
+              {hudState === 'SEARCHING' && 'S E A R C H I N G   A I   T E A M S . . .'}
+              {hudState === 'SPEAKING' && 'S P E A K I N G . . .'}
+              {hudState === 'READY' && 'L I S T E N I N G'}
             </span>
+          </div>
 
-            {/* Central Canvas Orb */}
-            <div className="relative flex items-center justify-center">
-              <canvas
-                ref={canvasRef}
-                width={300}
-                height={300}
-                className="cursor-pointer"
-                onClick={toggleMic}
-                title="คลิกเพื่อเปิด / ปิดไมโครโฟนสั่งการด้วยเสียง"
+          {/* Audio Waveform Visualizer Bars (Matching Screenshot) */}
+          <div className="mt-4 flex items-center justify-center gap-1">
+            {[16, 28, 42, 60, 36, 70, 48, 22, 54, 32, 64, 40, 24, 16].map((h, idx) => (
+              <div
+                key={idx}
+                className={`w-1 rounded-full transition-all duration-150 ${
+                  isListening || isSpeaking
+                    ? 'bg-cyan-400 shadow-[0_0_8px_#38bdf8]'
+                    : 'bg-cyan-900/50'
+                }`}
+                style={{
+                  height:
+                    isListening || isSpeaking
+                      ? `${Math.max(6, Math.sin((idx + Date.now() / 140) % Math.PI) * h)}px`
+                      : '6px',
+                }}
               />
+            ))}
+          </div>
 
-              {/* Center Touch Mic Overlay */}
+          {/* Bottom-Left Collapsible "SMART CONTROL" Widget (Matching Screenshot) */}
+          <div
+            className={`absolute bottom-2 left-0 w-72 rounded-2xl border border-cyan-500/25 bg-slate-950/85 p-3.5 shadow-2xl backdrop-blur-md transition-all duration-300 ${
+              isSmartControlOpen ? 'opacity-100 translate-y-0' : 'opacity-60 translate-y-2'
+            }`}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                <span className="text-[11px] font-bold tracking-wider text-cyan-400">
+                  SMART CONTROL
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={toggleMic}
-                className={`absolute flex h-14 w-14 items-center justify-center rounded-full transition-all shadow-xl backdrop-blur-md ${
-                  isListening
-                    ? 'bg-red-500/30 border border-red-400 text-red-200 animate-pulse'
-                    : 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 hover:bg-cyan-500/30'
-                }`}
+                onClick={() => setIsSmartControlOpen((o) => !o)}
+                className="text-slate-500 hover:text-white"
               >
-                {isListening ? <Mic className="h-6 w-6 text-red-300" /> : <Mic className="h-6 w-6 text-cyan-300" />}
+                {isSmartControlOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
               </button>
             </div>
 
-            {/* Dynamic Status Label */}
-            <div className="mt-3 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-              <span className="text-xs font-mono font-bold tracking-widest text-cyan-400">
-                {hudState === 'LISTENING' && 'LISTENING // สดับฟังคำสั่งเสียง...'}
-                {hudState === 'SPEAKING' && 'SPEAKING // กำลังตอบคำสั่งเสียงภาษาไทย...'}
-                {hudState === 'PROCESSING' && 'PROCESSING // กำลังประมวลผลคำสั่ง...'}
-                {hudState === 'READY' && 'STANDBY // พร้อมรับคำสั่งเสียงภาษาไทย'}
-              </span>
-            </div>
-
-            {/* Sci-Fi Audio Waveform Visualizer Bars */}
-            <div className="mt-4 flex items-center gap-1">
-              {[18, 32, 48, 24, 60, 38, 72, 45, 28, 54, 30, 68, 42, 20].map((height, idx) => (
-                <div
-                  key={idx}
-                  className={`w-1 rounded-full transition-all duration-150 ${
-                    isListening || isSpeaking
-                      ? 'bg-cyan-400'
-                      : 'bg-cyan-900/60'
-                  }`}
-                  style={{
-                    height:
-                      isListening || isSpeaking
-                        ? `${Math.max(6, Math.sin((idx + Date.now() / 150) % Math.PI) * height)}px`
-                        : '6px',
-                  }}
-                />
-              ))}
-            </div>
-
-            <p className="mt-3 text-center text-[11px] text-slate-500">
-              แตะที่ลูกแก้วโฮโลแกรมเพื่อเริ่มคุยสั่งการด้วยเสียงภาษาไทย
-            </p>
+            {isSmartControlOpen && (
+              <div className="space-y-2 text-xs">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  No devices found. Ensure they are on the same network.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDispatchCommand('ตรวจระบบทั้งหมด')}
+                    className="flex-1 rounded-xl border border-cyan-500/30 bg-cyan-950/40 py-2 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-900/40 transition-all text-center"
+                  >
+                    DISCOVER LIGHTS / AUDIT
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* ON-DEMAND HOLOGRAPHIC PROJECTION POPUP (Appears only when Boss requests info) */}
+          {activeHologram && (
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg animate-fade-in">
+              <div className="rounded-2xl border-2 border-cyan-400/60 bg-slate-950/95 p-5 shadow-[0_0_50px_rgba(6,182,212,0.35)] backdrop-blur-xl">
+                <div className="flex items-start justify-between border-b border-cyan-500/30 pb-3">
+                  <div>
+                    <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 font-mono">
+                      {activeHologram.category}
+                    </span>
+                    <h3 className="mt-1 text-sm font-black tracking-wider text-white">
+                      {activeHologram.title}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveHologram(null)}
+                    className="rounded-lg border border-slate-800 bg-slate-900 p-1.5 text-slate-400 hover:text-white hover:border-red-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 my-4">
+                  {activeHologram.details.map((d, i) => (
+                    <div key={i} className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-2.5 text-xs">
+                      <span className="text-[10px] text-slate-500 block">{d.label}</span>
+                      <span className="font-bold text-cyan-300">{d.val}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
+                  <span className="text-emerald-400 font-bold">{activeHologram.badge}</span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveHologram(null)}
+                    className="text-slate-400 hover:text-white underline"
+                  >
+                    DISMISS PROJECTION
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ============================================================ */}
-        {/* RIGHT COLUMN: System Monitor & Chat Terminal (4 cols)        */}
-        {/* ============================================================ */}
-        <div className="space-y-4 lg:col-span-4">
-          {/* Telemetry System Monitor (Top Right) */}
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-4 shadow-lg backdrop-blur-md">
-            <div className="mb-3 flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-xs font-mono font-bold tracking-wider text-cyan-400">
-                ❖ SYSTEM MONITOR
-              </span>
-              <span className="rounded bg-emerald-950/80 px-1.5 py-0.5 text-[9px] font-mono text-emerald-400 border border-emerald-500/30">
-                STABLE
-              </span>
-            </div>
-
-            <div className="space-y-2.5 text-xs font-mono">
-              {/* CPU Usage */}
-              <div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <Cpu className="h-3 w-3 text-cyan-400" />
-                    CPU USAGE
-                  </span>
-                  <span className="text-cyan-300 font-bold">{cpuUsage.toFixed(1)}%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-900 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
-                    style={{ width: `${cpuUsage}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Memory */}
-              <div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span className="flex items-center gap-1.5">
-                    <HardDrive className="h-3 w-3 text-emerald-400" />
-                    MEMORY LOAD
-                  </span>
-                  <span className="text-emerald-300 font-bold">4.2 GB / 16.0 GB (26%)</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-900 overflow-hidden">
-                  <div className="h-full bg-emerald-500" style={{ width: '26%' }} />
-                </div>
-              </div>
-
-              {/* Network Latency & Temp */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-2">
-                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Wifi className="h-3 w-3 text-cyan-400" />
-                    LATENCY
-                  </span>
-                  <p className="mt-0.5 text-xs font-bold text-cyan-300">{netLatency.toFixed(0)} ms</p>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-2">
-                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Thermometer className="h-3 w-3 text-rose-400" />
-                    CORE TEMP
-                  </span>
-                  <p className="mt-0.5 text-xs font-bold text-emerald-400">42°C (OPTIMAL)</p>
-                </div>
-              </div>
-
-              {/* Power Status */}
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-2 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400 flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-emerald-400" />
-                  POWER STATUS
+        {/* ------------------------------------------------------------ */}
+        {/* 3. RIGHT AREA: System Monitor & J.A.R.V.I.S. Chat Terminal   */}
+        {/* ------------------------------------------------------------ */}
+        <div className="w-80 lg:w-96 shrink-0 flex flex-col justify-between space-y-4 ml-4">
+          {/* SYSTEM MONITOR (Matching Screenshot 1:1) */}
+          <div className="rounded-2xl border border-cyan-500/25 bg-slate-950/80 p-4 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="text-xs font-bold tracking-wider text-cyan-400">
+                  SYSTEM MONITOR
                 </span>
-                <span className="font-bold text-emerald-300">{SYSTEM_TELEMETRY.power}</span>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsMonitorOpen((o) => !o)}
+                className="text-slate-500 hover:text-white"
+              >
+                {isMonitorOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              </button>
             </div>
+
+            {isMonitorOpen && (
+              <div className="space-y-3 text-xs">
+                {/* CPU Usage */}
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <Cpu className="h-3 w-3 text-cyan-400" />
+                      CPU USAGE
+                    </span>
+                    <span className="text-cyan-300 font-bold">{cpuUsage.toFixed(0)}%</span>
+                  </div>
+                  {/* Real-time Oscillating Wave Graphic */}
+                  <div className="h-6 w-full rounded-lg bg-slate-900/90 border border-slate-800 flex items-center px-1 overflow-hidden">
+                    <svg className="w-full h-4 stroke-cyan-400 fill-none" viewBox="0 0 100 20">
+                      <path
+                        d={`M 0 10 Q 25 ${cpuUsage > 55 ? 2 : 18}, 50 10 T 100 10`}
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Memory Bar */}
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <HardDrive className="h-3 w-3 text-cyan-400" />
+                      MEMORY
+                    </span>
+                    <span className="text-cyan-300 font-bold">16.0 / 31.9 GB</span>
+                  </div>
+                  <div className="flex gap-1 h-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((block) => (
+                      <div
+                        key={block}
+                        className={`flex-1 rounded-sm ${
+                          block <= 4 ? 'bg-cyan-500' : 'bg-slate-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Disk Activity */}
+                <div className="flex items-center justify-between text-[11px] border-t border-slate-800/80 pt-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <HardDrive className="h-3 w-3 text-cyan-400" />
+                    DISK ACTIVITY
+                  </span>
+                  <span className="text-cyan-300 font-bold">{diskUsage}</span>
+                </div>
+
+                {/* Network */}
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Wifi className="h-3 w-3 text-cyan-400" />
+                    NETWORK
+                  </span>
+                  <span className="text-emerald-400 font-bold">U 181KB/s // D 6KB/s</span>
+                </div>
+
+                {/* System Temp */}
+                <div className="flex items-center justify-between text-[11px] rounded-lg bg-slate-900/60 p-2 border border-slate-800">
+                  <span className="text-slate-400">SYSTEM TEMP</span>
+                  <span className="text-rose-400 font-bold">SENSOR N/A // 42°C</span>
+                </div>
+
+                {/* Power Status */}
+                <div className="flex items-center justify-between text-[11px] rounded-lg bg-emerald-950/30 p-2 border border-emerald-500/30">
+                  <span className="text-emerald-300 flex items-center gap-1.5 font-bold">
+                    <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                    POWER STATUS
+                  </span>
+                  <span className="text-emerald-400 font-bold">POWER ONLINE</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* JARVIS Chat Terminal (Bottom Right) */}
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-4 shadow-lg backdrop-blur-md flex flex-col h-[340px]">
-            <div className="mb-2 flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="text-xs font-mono font-bold tracking-wider text-cyan-400">
-                ❖ JARVIS TERMINAL
+          {/* J.A.R.V.I.S. CHAT TERMINAL (Matching Screenshot 1:1) */}
+          <div className="rounded-2xl border border-cyan-500/25 bg-slate-950/85 p-4 shadow-2xl backdrop-blur-md flex flex-col h-[340px]">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-2">
+              <span className="text-xs font-bold tracking-wider text-cyan-400">
+                J . A . R . V . I . S .
               </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                TH-TH NATURAL COMMAND
-              </span>
+              <span className="text-[10px] text-slate-500">VOICE & COMMAND</span>
             </div>
 
-            {/* Terminal History Log */}
+            {/* Terminal Log */}
             <div
               ref={chatScrollRef}
-              className="flex-1 space-y-3 overflow-y-auto pr-1 text-xs font-mono scrollbar-thin scrollbar-thumb-slate-800"
+              className="flex-1 space-y-2.5 overflow-y-auto pr-1 text-xs scrollbar-thin scrollbar-thumb-slate-800"
             >
               {messages.map((m) => (
                 <div
                   key={m.id}
                   className={`rounded-xl p-2.5 transition-all ${
-                    m.sender === 'FOUNDER'
-                      ? 'border border-cyan-500/40 bg-cyan-950/30 text-cyan-100 ml-4'
-                      : 'border border-slate-800 bg-slate-900/80 text-slate-200 mr-2'
+                    m.sender === 'BOSS'
+                      ? 'border border-cyan-500/50 bg-cyan-950/30 text-cyan-100 ml-3'
+                      : 'border border-slate-800/90 bg-slate-900/80 text-slate-200 mr-1'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-[10px] opacity-60 mb-1">
-                    <span className="font-bold text-cyan-400">{m.sender}</span>
-                    <span>{m.time}</span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                    <span className="font-bold text-cyan-400">
+                      [ {m.time} ] {m.sender}
+                    </span>
+                    {m.delegatedTo && (
+                      <span className="text-[9px] text-emerald-400 font-bold">
+                        {m.delegatedTo}
+                      </span>
+                    )}
                   </div>
-                  <p className="whitespace-pre-wrap leading-relaxed text-[11px]">{m.text}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed text-[11px] font-sans">
+                    {m.text}
+                  </p>
                 </div>
               ))}
             </div>
 
-            {/* Input & Mic Box */}
+            {/* Input Box (Matching `INITIALIZE COMMAND...` in screenshot) */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -674,16 +786,16 @@ export function JarvisHudView({
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="สั่งการด้วยภาษาไทย หรือพิมพ์คำสั่ง..."
-                className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+                placeholder="INITIALIZE COMMAND..."
+                className="flex-1 rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs text-cyan-200 placeholder-slate-600 focus:border-cyan-500 focus:outline-none font-mono"
               />
               <button
                 type="button"
                 onClick={toggleMic}
                 className={`rounded-xl border p-2 transition-all ${
                   isListening
-                    ? 'border-red-500 bg-red-600 text-white'
-                    : 'border-slate-700 bg-slate-800 text-slate-300 hover:text-white'
+                    ? 'border-red-500 bg-red-600 text-white animate-pulse'
+                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
                 }`}
                 title="พูดสั่งการภาษาไทย"
               >
@@ -692,7 +804,7 @@ export function JarvisHudView({
               <button
                 type="submit"
                 disabled={!inputText.trim()}
-                className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors disabled:opacity-40 shadow-sm"
+                className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors disabled:opacity-30"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>

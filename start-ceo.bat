@@ -1,14 +1,14 @@
 @echo off
-title CEO Master Platform - Krob AI Enterprise
+title CEO Master Platform - J.A.R.V.I.S. MARK 3
 color 0b
 cls
 
 echo ======================================================================
-echo    CEO Master Platform - Krob AI Enterprise (D:\Light)
+echo    CEO Master Platform - J.A.R.V.I.S. MARK 3 (D:\Light)
 echo ======================================================================
 echo.
 
-set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
+set "PATH=C:\Program Files\nodejs;C:\Users\Light\AppData\Local\Programs\Git\cmd;%PATH%"
 
 cd /d D:\Light\CEO
 
@@ -19,7 +19,7 @@ if exist "C:\Program Files\nodejs\node.exe" (
     set "NODE_CMD=node"
 )
 
-echo [2/2] Launching CEO Master Platform...
+echo [2/2] Launching J.A.R.V.I.S. MARK 3 Cockpit...
 echo.
 "%NODE_CMD%" scripts\serve-local.js
 
