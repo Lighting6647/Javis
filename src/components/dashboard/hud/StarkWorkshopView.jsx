@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Mic,
   Send,
@@ -12,6 +12,8 @@ import {
   CheckCircle,
   Cpu,
   Activity,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   playClickSound,
@@ -43,12 +45,19 @@ export function StarkWorkshopView({
   const [inputText, setInputText] = useState('');
   const [isHumming, setIsHumming] = useState(false);
   const [selectedMockupProject, setSelectedMockupProject] = useState(null);
+  const [hologramScale, setHologramScale] = useState(1);
 
   const canvasRef = useRef(null);
   const radarCanvasRef = useRef(null);
   const turbineCanvasRef = useRef(null);
 
-  // Stark Workshop Ambient Hum Lifecycle
+  // 3D Interactive Hologram Rotation State (Interactive via Mouse Drag)
+  const rotXRef = useRef(0.18);
+  const rotYRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const lastMousePosRef = useRef({ x: 0, y: 0 });
+
+  // Ambient Hum Lifecycle
   const toggleAmbientHum = () => {
     playClickSound();
     if (isHumming) {
@@ -98,7 +107,7 @@ export function StarkWorkshopView({
   );
 
   // =========================================================================
-  // CANVAS 1: Tactical Sonar Radar Sweep (Left Panel 1:1)
+  // CANVAS 1: Tactical Sonar Radar Sweep (Left Panel)
   // =========================================================================
   useEffect(() => {
     const canvas = radarCanvasRef.current;
@@ -108,22 +117,22 @@ export function StarkWorkshopView({
     let angle = 0;
 
     const targets = [
-      { r: 30, a: 0.9 },
-      { r: 52, a: 1.4 },
-      { r: 40, a: 2.3 },
-      { r: 62, a: 3.1 },
+      { r: 28, a: 0.9 },
+      { r: 50, a: 1.4 },
+      { r: 38, a: 2.3 },
+      { r: 60, a: 3.1 },
     ];
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      const maxR = 68;
+      const maxR = 66;
 
       ctx.save();
 
       // Outer Glow Border
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
@@ -152,7 +161,7 @@ export function StarkWorkshopView({
 
       // Rotating Radar Sweep Cone
       const sweepGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, maxR);
-      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.5)');
       sweepGrad.addColorStop(1, 'rgba(16, 185, 129, 0.2)');
 
       ctx.beginPath();
@@ -168,7 +177,7 @@ export function StarkWorkshopView({
         const ty = cy + t.r * Math.sin(t.a);
         ctx.beginPath();
         ctx.fillStyle = '#ef4444';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 8;
         ctx.shadowColor = '#ef4444';
         ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
         ctx.fill();
@@ -184,27 +193,34 @@ export function StarkWorkshopView({
   }, []);
 
   // =========================================================================
-  // CANVAS 2: 3D Holographic Wireframe Arc Reactor Sphere (Center)
+  // CANVAS 2: TRUE INTERACTIVE 3D HOLOGRAPHIC GEODESIC ARC REACTOR (Center)
+  // Can be spun/rotated with mouse drag in real-time 3D!
   // =========================================================================
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let animationId;
-    let angle = 0;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      const baseR = 124;
+      const baseR = 122 * hologramScale;
 
       const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING';
       const mainColor = isLive ? '#38bdf8' : '#00f0ff';
 
+      if (!isDraggingRef.current) {
+        rotYRef.current += isLive ? 0.025 : 0.012;
+      }
+
+      const rx = rotXRef.current;
+      const ry = rotYRef.current;
+
       ctx.save();
 
-      // Outer Concentric Degrees / Tick Ring
+      // 1. Outer Calibration 360-Degree Ring
       ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -232,51 +248,52 @@ export function StarkWorkshopView({
       ctx.lineCap = 'round';
       ctx.shadowBlur = 18;
       ctx.shadowColor = '#00f0ff';
-      ctx.arc(cx, cy, baseR + 18, angle, angle + Math.PI * 0.7);
+      ctx.arc(cx, cy, baseR + 18, ry, ry + Math.PI * 0.7);
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(cx, cy, baseR + 18, angle + Math.PI, angle + Math.PI * 1.7);
+      ctx.arc(cx, cy, baseR + 18, ry + Math.PI, ry + Math.PI * 1.7);
       ctx.stroke();
 
       // Counter-Rotating Inner Gyro Ring
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
       ctx.lineWidth = 2;
-      ctx.arc(cx, cy, baseR + 4, -angle * 1.4, -angle * 1.4 + Math.PI * 0.85);
+      ctx.arc(cx, cy, baseR + 4, -ry * 1.4, -ry * 1.4 + Math.PI * 0.85);
       ctx.stroke();
 
-      // 3D Spherical Geodesic Wireframe Lattice
+      // 2. 3D Spherical Geodesic Wireframe Lattice (Rotates with rx & ry)
       const numLat = 9;
       for (let i = 1; i < numLat; i++) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
         const latR = baseR * Math.cos(latAngle);
-        const yOffset = baseR * Math.sin(latAngle);
+        const yOffset = baseR * Math.sin(latAngle) * Math.cos(rx);
+        const zSquash = Math.sin(rx) * Math.sin(latAngle) * 0.35 + 0.35;
 
         ctx.beginPath();
-        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.45)' : 'rgba(0, 240, 255, 0.25)';
+        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.5)' : 'rgba(0, 240, 255, 0.28)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy + yOffset, latR, latR * 0.35, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + yOffset, latR, latR * Math.abs(zSquash), 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       const numLong = 12;
       for (let i = 0; i < numLong; i++) {
-        const longAngle = angle + (i / numLong) * Math.PI;
+        const longAngle = ry + (i / numLong) * Math.PI;
         ctx.beginPath();
         ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.55)' : 'rgba(0, 240, 255, 0.3)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy, baseR * Math.sin(longAngle), baseR, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, baseR * Math.sin(longAngle), baseR * Math.cos(rx), 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Glowing Vertices at Geodesic Intersections
+      // 3. Glowing 3D Vertices
       for (let i = 1; i < numLat; i += 2) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
         const latR = baseR * Math.cos(latAngle);
-        const yOffset = baseR * Math.sin(latAngle);
+        const yOffset = baseR * Math.sin(latAngle) * Math.cos(rx);
         for (let j = 0; j < 6; j++) {
-          const ptAngle = angle + (j / 6) * Math.PI * 2;
+          const ptAngle = ry + (j / 6) * Math.PI * 2;
           const px = cx + latR * Math.cos(ptAngle);
           const py = cy + yOffset + latR * 0.35 * Math.sin(ptAngle);
           ctx.beginPath();
@@ -288,8 +305,8 @@ export function StarkWorkshopView({
         }
       }
 
-      // Center High-Energy Reactor Core Pulse
-      const coreR = isLive ? 22 + Math.sin(angle * 8) * 4 : 16;
+      // 4. Center High-Energy Reactor Core Pulse
+      const coreR = isLive ? 22 + Math.sin(ry * 8) * 4 : 16;
       const gradient = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR * 2.5);
       gradient.addColorStop(0, '#ffffff');
       gradient.addColorStop(0.35, mainColor);
@@ -299,7 +316,7 @@ export function StarkWorkshopView({
       ctx.arc(cx, cy, coreR * 2.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Orbiting Multi-Agent Satellite Laser Nodes
+      // 5. Orbiting Multi-Agent Satellite Laser Nodes
       const agents = [
         { id: 'manager', label: 'AI Manager', color: '#00f0ff' },
         { id: 'sales', label: 'AI เลขา', color: '#10b981' },
@@ -308,11 +325,11 @@ export function StarkWorkshopView({
         { id: 'admin', label: 'AI Admin', color: '#3b82f6' },
       ];
 
-      const orbitR = baseR + 58;
+      const orbitR = baseR + 56;
       agents.forEach((ag, idx) => {
-        const agAngle = angle * 0.6 + (idx / agents.length) * Math.PI * 2;
+        const agAngle = ry * 0.6 + (idx / agents.length) * Math.PI * 2;
         const ax = cx + orbitR * Math.cos(agAngle);
-        const ay = cy + orbitR * Math.sin(agAngle) * 0.55;
+        const ay = cy + orbitR * Math.sin(agAngle) * 0.55 * Math.cos(rx);
         const isDelegated = activeSquadId === ag.id || (hudState === 'SEARCHING' && idx % 2 === 0);
 
         if (isDelegated) {
@@ -339,14 +356,31 @@ export function StarkWorkshopView({
       });
 
       ctx.restore();
-
-      angle += isLive ? 0.03 : 0.012;
       animationId = requestAnimationFrame(render);
     };
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [hudState, activeSquadId]);
+  }, [hudState, activeSquadId, hologramScale]);
+
+  // Mouse Drag Handlers for True 3D Interactive Hologram Rotation
+  const handleMouseDown = useCallback((e) => {
+    isDraggingRef.current = true;
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDraggingRef.current) return;
+    const deltaX = e.clientX - lastMousePosRef.current.x;
+    const deltaY = e.clientY - lastMousePosRef.current.y;
+    rotYRef.current += deltaX * 0.012;
+    rotXRef.current = Math.max(-0.6, Math.min(0.6, rotXRef.current + deltaY * 0.008));
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
+  }, []);
 
   // =========================================================================
   // CANVAS 3: 8-Spoke Diagnostic Turbine Gauge (Right Panel)
@@ -449,8 +483,8 @@ export function StarkWorkshopView({
         title: '15 ระบบออนไลน์ (D:\\LIGHT)',
         status: '100% HEALTH',
         statusColor: 'text-emerald-400',
-        borderColor: 'border-cyan-500/30',
-        bgColor: 'bg-cyan-950/25',
+        borderColor: 'border-cyan-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Total Apps', val: '15 Webapps' },
           { label: 'Core Runtimes', val: 'Node 22 / Vite' },
@@ -467,8 +501,8 @@ export function StarkWorkshopView({
         title: 'ยอดขาย & Pipeline SaaS',
         status: '฿148,500 MRR',
         statusColor: 'text-cyan-300',
-        borderColor: 'border-emerald-500/30',
-        bgColor: 'bg-emerald-950/20',
+        borderColor: 'border-emerald-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Active Leads', val: '8 Deals' },
           { label: 'POS Light', val: '฿390 / เดือน' },
@@ -485,8 +519,8 @@ export function StarkWorkshopView({
         title: 'สัญญา & ใบเสนอราคา QU',
         status: 'PROMPTPAY EMVCo',
         statusColor: 'text-amber-400',
-        borderColor: 'border-amber-500/30',
-        bgColor: 'bg-amber-950/20',
+        borderColor: 'border-amber-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Pending QU', val: '4 ฉบับพร้อมส่ง' },
           { label: 'NDA / Contract', val: '2 สัญญาพร้อมเซ็น' },
@@ -509,8 +543,8 @@ export function StarkWorkshopView({
         title: 'กำไรสุทธิ & สภาพคล่อง',
         status: 'MARGIN 84.2%',
         statusColor: 'text-emerald-400',
-        borderColor: 'border-emerald-500/30',
-        bgColor: 'bg-emerald-950/20',
+        borderColor: 'border-emerald-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Net Margin', val: '84.2%' },
           { label: 'Break-even', val: '1.1 เดือน' },
@@ -527,8 +561,8 @@ export function StarkWorkshopView({
         title: 'วิศวกรรม & สถาปัตยกรรม',
         status: '0 LINT ERRORS',
         statusColor: 'text-purple-400',
-        borderColor: 'border-purple-500/30',
-        bgColor: 'bg-purple-950/20',
+        borderColor: 'border-purple-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Framework', val: 'Next.js 16 / Vite' },
           { label: 'ORM & DB', val: 'Prisma / SQLite' },
@@ -545,8 +579,8 @@ export function StarkWorkshopView({
         title: `ผู้บริหาร: ${userTitle}`,
         status: 'DIRECT COMMAND',
         statusColor: 'text-cyan-300',
-        borderColor: 'border-cyan-500/30',
-        bgColor: 'bg-cyan-950/25',
+        borderColor: 'border-cyan-500/35',
+        bgColor: 'bg-[#020d28]/85',
         metrics: [
           { label: 'Authority', val: userTitle },
           { label: 'Hands-free Wake', val: 'จาร์วิส / javis' },
@@ -562,18 +596,21 @@ export function StarkWorkshopView({
   );
 
   return (
-    <div className="relative w-full min-h-screen overflow-hidden bg-[#010614] text-slate-100 font-mono select-none flex flex-col justify-between">
+    <div
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      className="relative w-full min-h-screen overflow-hidden bg-[#010512] text-slate-100 font-mono select-none flex flex-col justify-between"
+    >
       {/* ============================================================ */}
-      {/* 0. STARK WORKSHOP 4K PHOTOREALISTIC HOLOGRAPHIC BACKGROUND   */}
+      {/* 0. PURE 3D HOLOGRAPHIC CYBERSPACE (ZERO STATIC JPG IMAGE)    */}
       {/* ============================================================ */}
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <img
-          src="/assets/jarvis-stark-workshop.jpg"
-          alt="Tony Stark Laboratory Workshop Holographic Environment"
-          className="w-full h-full object-cover object-center opacity-70 mix-blend-screen select-none"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#010614] via-transparent to-[#010614]/85" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#010614]/90 via-transparent to-[#010614]/90" />
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
+        {/* Central High-Intensity Cyan Core Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] h-[760px] rounded-full bg-cyan-500/10 blur-[140px] pointer-events-none" />
+        {/* Holographic Isometric Grid */}
+        <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#00f0ff18_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff18_1px,transparent_1px)] bg-[size:44px_44px]" />
+        {/* Deep Dark Cyberspace Vignette */}
+        <div className="absolute inset-0 bg-radial from-transparent via-[#010512]/60 to-[#010512]" />
       </div>
 
       {/* ============================================================ */}
@@ -649,7 +686,7 @@ export function StarkWorkshopView({
               </span>
             </div>
 
-            {/* 6 Circular Nodes from Image: ◯ ◯ ◯ ◯ ◯ ◯ */}
+            {/* 6 Circular Nodes: ◯ ◯ ◯ ◯ ◯ ◯ */}
             <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/25 bg-cyan-950/40">
               {[1, 2, 3, 4, 5, 6].map((node) => (
                 <div
@@ -816,7 +853,7 @@ export function StarkWorkshopView({
         {/* ------------------------------------------------------------ */}
         <div className="w-full 2xl:w-84 flex flex-col space-y-2.5 shrink-0">
           {/* Tactical Radar Widget */}
-          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/85 p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl">
+          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/90 p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl">
             <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-black tracking-wider text-cyan-300 block">
@@ -892,17 +929,20 @@ export function StarkWorkshopView({
         </div>
 
         {/* ------------------------------------------------------------ */}
-        {/* CENTER POD: 3D HOLOGRAPHIC SPHERE & ARC REACTOR CORE         */}
-        {/* Exactly matching reference photo when idle                   */}
-        {/* Pops up Interactive Hologram in center when active           */}
+        {/* CENTER POD: TRUE INTERACTIVE 3D HOLOGRAPHIC SPHERE           */}
+        {/* Can be clicked & dragged to rotate in 3D                     */}
+        {/* Pops up 3D Holographic Project Interface when in use         */}
         {/* ------------------------------------------------------------ */}
         <div className="relative flex-1 flex flex-col items-center justify-center py-1">
           {/* Header Degree Coordinates */}
           <div className="text-[11px] font-mono font-bold tracking-[0.25em] text-cyan-400 mb-1 text-center drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
             000°-359° // GRID [ALPHA] ACTIVE // BEACON LOCK [4/4]
           </div>
-          <div className="text-[10px] font-mono tracking-wider text-slate-400 mb-2">
-            CORE STATUS: STABLE // ENERGY: 98.4% // J.A.R.V.I.S. AI ACTIVE
+          <div className="text-[10px] font-mono tracking-wider text-slate-400 mb-2 flex items-center gap-2">
+            <span>CORE STATUS: STABLE // ENERGY: 98.4%</span>
+            <span className="text-[9px] text-cyan-400/80 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+              🖱️ ลากเมาส์หมุนโฮโลแกรม 3D
+            </span>
           </div>
 
           {/* 3D Holographic Sphere Canvas & Core Reactor */}
@@ -911,9 +951,9 @@ export function StarkWorkshopView({
               ref={canvasRef}
               width={380}
               height={380}
-              onClick={onToggleMic}
-              className="cursor-pointer transition-transform hover:scale-105"
-              title="แตะลูกแก้วเพื่อเริ่มสั่งการด้วยเสียง"
+              onMouseDown={handleMouseDown}
+              className="cursor-grab active:cursor-grabbing transition-transform hover:scale-105"
+              title="คลิกและลากเมาส์เพื่อหมุนโฮโลแกรม 3D ได้รอบทิศทาง"
             />
 
             {/* Center Touch Mic Orb */}
@@ -936,11 +976,16 @@ export function StarkWorkshopView({
             {/* INTERACTIVE HOLOGRAPHIC POPUP (Pops up when active/in use)   */}
             {/* ============================================================ */}
             {isHologramActive && (
-              <div className="absolute -top-10 z-40 w-[96%] max-w-[560px] animate-fade-in pointer-events-auto">
-                <div className="relative rounded-2xl border-2 border-cyan-400/90 bg-[#020b22]/95 p-4 shadow-[0_0_55px_rgba(0,240,255,0.55)] backdrop-blur-2xl">
+              <div
+                style={{
+                  transform: 'perspective(1000px) rotateX(4deg)',
+                }}
+                className="absolute -top-10 z-40 w-[96%] max-w-[560px] animate-fade-in pointer-events-auto"
+              >
+                <div className="relative rounded-2xl border-2 border-cyan-400/90 bg-[#020b22]/95 p-4 shadow-[0_0_60px_rgba(0,240,255,0.6)] backdrop-blur-2xl">
                   {/* Hologram Corner Brackets */}
                   <div className="absolute top-1 left-2 text-[8px] text-cyan-400/80 font-mono">
-                    ┌ PROJECTION #8841-A // 4K ┐
+                    ┌ INTERACTIVE 3D HOLOGRAM // 4K ┐
                   </div>
                   <div className="absolute top-1 right-2 text-[8px] text-cyan-400/80 font-mono">
                     └ MULTI-AGENT SYNCHRONIZED ┘
@@ -972,17 +1017,27 @@ export function StarkWorkshopView({
                         {!selectedMockupProject && (activeHologram?.title || 'J.A.R.V.I.S. INTELLIGENCE')}
                       </h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickSound();
-                        setSelectedMockupProject(null);
-                        if (onDismissHologram) onDismissHologram();
-                      }}
-                      className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-white hover:border-red-400 cursor-pointer"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setHologramScale((s) => (s === 1 ? 1.25 : 1))}
+                        className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-cyan-300 cursor-pointer"
+                        title="ขยาย/ย่อขนาดโฮโลแกรม"
+                      >
+                        {hologramScale === 1 ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickSound();
+                          setSelectedMockupProject(null);
+                          if (onDismissHologram) onDismissHologram();
+                        }}
+                        className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-white hover:border-red-400 cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Simulated Screen Mockup Content */}
@@ -1076,7 +1131,7 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Audit / Health Report Mockup */}
+                    {/* Audit Report Mockup */}
                     {(selectedMockupProject === 'audit' || (!selectedMockupProject && activeHologram?.details)) && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">

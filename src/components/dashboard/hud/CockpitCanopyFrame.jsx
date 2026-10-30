@@ -16,16 +16,11 @@ export function CockpitCanopyFrame({
   return (
     <div className="relative w-full min-h-screen overflow-hidden bg-[#020713] text-cyan-400 font-mono select-none">
       {/* ------------------------------------------------------------ */}
-      {/* 0. STARK WORKSHOP HOLOGRAPHIC AMBIENCE (Style 1 for sir ไลท์) */}
+      {/* 0. PURE HOLOGRAPHIC AMBIENCE (Zero Static Background Image)   */}
       {/* ------------------------------------------------------------ */}
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-25 select-none">
-        <img
-          src="/assets/jarvis-stark-workshop.jpg"
-          alt="J.A.R.V.I.S. Stark Workshop Holographic Atmosphere"
-          className="w-full h-full object-cover object-center mix-blend-screen"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#020713] via-transparent to-[#020713]/80" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#020713]/90 via-transparent to-[#020713]/90" />
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
+        <div className="absolute inset-0 bg-radial from-cyan-950/20 via-[#010614]/90 to-[#010614]" />
+        <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#00f0ff15_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff15_1px,transparent_1px)] bg-[size:40px_40px]" />
       </div>
 
       {/* ------------------------------------------------------------ */}
