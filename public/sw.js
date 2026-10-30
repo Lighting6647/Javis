@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ceo-master-cache-v5';
+const CACHE_NAME = 'ceo-master-cache-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
