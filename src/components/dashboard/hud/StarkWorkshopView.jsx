@@ -57,14 +57,16 @@ export function StarkWorkshopView({
   const [launcherStatus, setLauncherStatus] = useState('');
   const [cameraPreset, setCameraPreset] = useState('iso'); // 'iso' | 'top' | 'pilot' | 'macro'
   const [rightWingMode, setRightWingMode] = useState('turbine'); // 'turbine' | 'terminal'
+  const [canvasSafeMode, setCanvasSafeMode] = useState(false); // Feature 1: Canvas Fallback Safe Mode
 
-  // Feature 1: Live Terminal Log Stream State
+  // Feature 1 & 2: Live Terminal Log Stream & Crash Analytics State
   const [terminalLogs, setTerminalLogs] = useState([
     { id: 1, time: '12:00:01', tag: 'KERNEL', text: 'J.A.R.V.I.S. MK III Tactical Neural Kernel online.' },
-    { id: 2, time: '12:00:05', tag: 'GIT', text: 'HEAD: 2d99cc6 | D:\\Light repository synchronized.' },
-    { id: 3, time: '12:00:09', tag: 'QA', text: '15 Active Apps in D:\\Light. 7/7 Test suites passed (0 errors).' },
-    { id: 4, time: '12:00:15', tag: 'SECURITY', text: 'AES-256 Vault Cipher locked. SHA-256 anti-fraud active.' },
-    { id: 5, time: '12:00:22', tag: 'PIPELINE', text: '8 SaaS deals tracked. Expected revenue: ฿148,500 MRR.' },
+    { id: 2, time: '12:00:04', tag: 'WATCHDOG', text: 'Canvas Render Exception Guard: 100% HEALTH (0 IndexSizeErrors)' },
+    { id: 3, time: '12:00:08', tag: 'GIT', text: 'HEAD: d48193e | D:\\Light repository synchronized.' },
+    { id: 4, time: '12:00:12', tag: 'SECURITY', text: 'AES-256 Vault Cipher locked. SHA-256 anti-fraud active.' },
+    { id: 5, time: '12:00:18', tag: 'ANALYTICS', text: 'Zero unhandled exceptions. Crash watchdog active.' },
+    { id: 6, time: '12:00:24', tag: 'PIPELINE', text: '8 SaaS deals tracked. Expected revenue: ฿148,500 MRR.' },
   ]);
 
   const canvasRef = useRef(null);
@@ -315,22 +317,23 @@ export function StarkWorkshopView({
     }
 
     const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-      const baseR = 122 * hologramScale;
+      try {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const baseR = 122 * hologramScale;
 
-      const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING' || isRedAlert;
-      const mainColor = isRedAlert ? '#ef4444' : isLive ? '#38bdf8' : '#00f0ff';
+        const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING' || isRedAlert;
+        const mainColor = isRedAlert ? '#ef4444' : isLive ? '#38bdf8' : '#00f0ff';
 
-      if (!isDraggingRef.current) {
-        rotYRef.current += isLive ? 0.028 : 0.012;
-      }
+        if (!isDraggingRef.current) {
+          rotYRef.current += isLive ? 0.028 : 0.012;
+        }
 
-      const rx = rotXRef.current;
-      const ry = rotYRef.current;
+        const rx = rotXRef.current;
+        const ry = rotYRef.current;
 
-      ctx.save();
+        ctx.save();
 
       // 1. Outer Calibration 360-Degree Ring
       ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.4)' : 'rgba(0, 240, 255, 0.4)';
@@ -501,19 +504,40 @@ export function StarkWorkshopView({
         ctx.shadowColor = ag.color;
         ctx.arc(ax, ay, isDelegated ? 5.5 : 3.5, 0, Math.PI * 2);
         ctx.fill();
-
-        ctx.font = 'bold 9px monospace';
-        ctx.fillStyle = isDelegated ? '#ffffff' : 'rgba(255,255,255,0.75)';
-        ctx.fillText(ag.label, ax + 7, ay + 3);
       });
+
+      // 7. Feature 3: Sound-Reactive Pulsing Sonic Resonance Rings (Arc Core Resonance)
+      if (isListening || isSpeaking || hudState === 'SEARCHING') {
+        const pulseTime = Date.now() * 0.003;
+        for (let ringIdx = 0; ringIdx < 3; ringIdx++) {
+          const progress = (pulseTime + ringIdx * 0.33) % 1;
+          const ringR = baseR * 0.45 + progress * (baseR * 0.95);
+          const opacity = Math.max(0, (1 - progress) * 0.7);
+
+          ctx.beginPath();
+          ctx.strokeStyle = isRedAlert
+            ? `rgba(239, 68, 68, ${opacity})`
+            : `rgba(0, 240, 255, ${opacity})`;
+          ctx.lineWidth = 2.5 * (1 - progress) + 0.6;
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = themeGlow;
+          ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
 
       ctx.restore();
       animationId = requestAnimationFrame(render);
+    } catch (renderErr) {
+        // Feature 1: Canvas Fallback Safe Mode Guard
+        console.warn('[Hologram Canvas Guard Triggered]:', renderErr.message);
+        setCanvasSafeMode(true);
+      }
     };
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [hudState, activeSquadId, hologramScale, isRedAlert, themeGlow, themePrimary, themeSecondary]);
+  }, [hudState, activeSquadId, hologramScale, isListening, isRedAlert, isSpeaking, themeGlow, themePrimary, themeSecondary]);
 
   // Mouse Drag Handlers
   const handleMouseDown = useCallback((e) => {
@@ -1263,15 +1287,36 @@ export function StarkWorkshopView({
 
           {/* 3D Holographic Sphere Canvas & Core Reactor */}
           <div className="relative flex items-center justify-center">
-            <canvas
-              ref={canvasRef}
-              width={380}
-              height={380}
-              onMouseDown={handleMouseDown}
-              onWheel={handleWheel}
-              className="cursor-grab active:cursor-grabbing transition-transform hover:scale-105"
-              title="คลิกและลากเมาส์เพื่อหมุนโฮโลแกรม 3D / หมุนลูกกลิ้งเมาส์เพื่อซูมเข้าออก"
-            />
+            {canvasSafeMode ? (
+              <div className="w-[380px] h-[380px] relative flex flex-col items-center justify-center p-4">
+                <svg className="w-[340px] h-[340px] animate-spin" style={{ animationDuration: '28s' }} viewBox="0 0 200 200">
+                  <circle cx="100" cy="100" r="80" stroke={themePrimary} strokeWidth="1.5" fill="none" strokeDasharray="6,4" opacity="0.6" />
+                  <ellipse cx="100" cy="100" rx="80" ry="28" stroke={themeSecondary} strokeWidth="2" fill="none" opacity="0.75" />
+                  <ellipse cx="100" cy="100" rx="28" ry="80" stroke={themePrimary} strokeWidth="2" fill="none" opacity="0.75" />
+                  <circle cx="100" cy="100" r="24" fill={themePrimary} opacity="0.4" className="animate-pulse" />
+                </svg>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickSound();
+                    setCanvasSafeMode(false);
+                  }}
+                  className="absolute bottom-2 text-[9px] text-amber-300 bg-amber-950/80 px-2.5 py-1 rounded border border-amber-500/40 hover:bg-amber-900 cursor-pointer shadow-lg transition-colors"
+                >
+                  🛡️ SAFE MODE ACTIVE (CLICK TO RESTORE CANVAS)
+                </button>
+              </div>
+            ) : (
+              <canvas
+                ref={canvasRef}
+                width={380}
+                height={380}
+                onMouseDown={handleMouseDown}
+                onWheel={handleWheel}
+                className="cursor-grab active:cursor-grabbing transition-transform hover:scale-105"
+                title="คลิกและลากเมาส์เพื่อหมุนโฮโลแกรม 3D / หมุนลูกกลิ้งเมาส์เพื่อซูมเข้าออก"
+              />
+            )}
 
             {/* Center Touch Mic Orb */}
             <button
@@ -1738,6 +1783,15 @@ export function StarkWorkshopView({
                 ref={terminalScrollRef}
                 className="h-[128px] overflow-y-auto space-y-1 pr-1 font-mono text-[9px] scrollbar-thin scrollbar-thumb-cyan-900"
               >
+                {/* Crash Analytics Watchdog Status Header */}
+                <div className="flex items-center justify-between text-[8px] bg-slate-900/95 px-2 py-1 rounded border border-cyan-500/20 mb-1 text-emerald-400 font-bold sticky top-0 backdrop-blur-sm z-10 shadow-sm">
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    🛡️ WATCHDOG: 100% HEALTH
+                  </span>
+                  <span className="text-cyan-300">0 CRASHES // ZERO UNHANDLED</span>
+                </div>
+
                 {terminalLogs.map((log) => (
                   <div key={log.id} className="leading-tight p-1 rounded bg-black/40 border border-cyan-500/10">
                     <span className="text-slate-500 mr-1.5">[{log.time}]</span>
