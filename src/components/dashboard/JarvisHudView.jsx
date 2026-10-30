@@ -9,17 +9,20 @@ import {
   Wifi,
   Zap,
   Activity,
-  Layers,
   Bot,
   Radio,
   Sliders,
-  Fingerprint,
   X,
   ChevronDown,
   ChevronUp,
+  Grid,
+  Box,
+  Scan,
+  Hand,
+  Printer,
 } from 'lucide-react';
 import { playClickSound, playSuccessSound } from '../../utils/soundEffects';
-import { processJarvisCommand } from '../../utils/jarvisBrain';
+import { processJarvisCommand, USER_TITLE, setUserTitle } from '../../utils/jarvisBrain';
 
 export function JarvisHudView({
   onRunAudit,
@@ -31,12 +34,13 @@ export function JarvisHudView({
   onOpenAdmin,
   onOpenCompany,
 }) {
+  const [userTitle, setUserTitleState] = useState(USER_TITLE);
   const [messages, setMessages] = useState([
     {
       id: 1,
       sender: 'JARVIS',
       time: '03:25:18 AM',
-      text: 'สวัสดีครับ, บอส มีอะไรให้ผม ช่วยจัดการ หรือค้นหา ข้อมูล ไหมครับ?',
+      text: `สวัสดีครับ, ${USER_TITLE} มีอะไรให้ผม ช่วยจัดการ หรือค้นหา ข้อมูลไหมครับ?`,
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -45,15 +49,16 @@ export function JarvisHudView({
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [hudState, setHudState] = useState('READY'); // 'READY' | 'LISTENING' | 'SEARCHING' | 'SPEAKING'
   const [currentTime, setCurrentTime] = useState('');
-  const [cpuUsage, setCpuUsage] = useState(58);
-  const [diskUsage] = useState('R 32KB/s // W 2.8MB/s');
+  const [cpuUsage, setCpuUsage] = useState(50);
+  const [diskUsage] = useState('R 32KB/s // W 2.4MB/s');
+  const [networkUsage] = useState('U 181KB/s // D 6KB/s');
   const [activeHologram, setActiveHologram] = useState(null); // On-demand holographic projection payload
   const [activeSquadId, setActiveSquadId] = useState(null); // Currently delegated AI Squad satellite node
-  const [wakeWordActive, setWakeWordActive] = useState(false); // Default to clean Push-To-Talk (No runaway loops)
+  const [wakeWordActive, setWakeWordActive] = useState(true); // Always-on Hands-free Wake Word "javis" / "จาร์วิส"
   const [dragStartX, setDragStartX] = useState(null); // Gesture swipe flick
   const [isSmartControlOpen, setIsSmartControlOpen] = useState(true);
   const [isMonitorOpen, setIsMonitorOpen] = useState(true);
-  const [activeLeftDock, setActiveLeftDock] = useState('ai');
+  const [activeLeftDock, setActiveLeftDock] = useState('power'); // Highlighted golden lightning bolt in Mark III screenshot
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const recognitionRef = useRef(null);
@@ -109,36 +114,50 @@ export function JarvisHudView({
       ctx.save();
 
       // Outer Concentric Degrees / Tick Ring
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius + 32, 0, Math.PI * 2);
       ctx.stroke();
 
+      // Degree Tick Marks around outer ring
+      for (let t = 0; t < 36; t++) {
+        const tickAngle = (t / 36) * Math.PI * 2;
+        const isMajor = t % 3 === 0;
+        const r1 = radius + 32;
+        const r2 = radius + (isMajor ? 38 : 35);
+        ctx.beginPath();
+        ctx.strokeStyle = isMajor ? 'rgba(56, 189, 248, 0.6)' : 'rgba(56, 189, 248, 0.2)';
+        ctx.lineWidth = isMajor ? 1.5 : 1;
+        ctx.moveTo(centerX + r1 * Math.cos(tickAngle), centerY + r1 * Math.sin(tickAngle));
+        ctx.lineTo(centerX + r2 * Math.cos(tickAngle), centerY + r2 * Math.sin(tickAngle));
+        ctx.stroke();
+      }
+
       // Segmented Rotating Gyro Rings
       ctx.beginPath();
       ctx.strokeStyle = mainColor;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2.5;
       ctx.lineCap = 'round';
-      ctx.arc(centerX, centerY, radius + 24, angle, angle + Math.PI * 0.75);
+      ctx.arc(centerX, centerY, radius + 22, angle, angle + Math.PI * 0.7);
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 24, angle + Math.PI, angle + Math.PI * 1.75);
+      ctx.arc(centerX, centerY, radius + 22, angle + Math.PI, angle + Math.PI * 1.7);
       ctx.stroke();
 
       // Inner Counter-Rotating Orbit Ring
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(14, 165, 233, 0.5)';
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.6)';
       ctx.lineWidth = 1.5;
-      ctx.arc(centerX, centerY, radius + 12, -angle * 1.2, -angle * 1.2 + Math.PI * 0.6);
+      ctx.arc(centerX, centerY, radius + 10, -angle * 1.3, -angle * 1.3 + Math.PI * 0.6);
       ctx.stroke();
 
-      // 3D Spherical Wireframe Lattice
+      // 3D Spherical Wireframe Lattice (Geodesic Mark III Mesh)
       ctx.shadowBlur = isLive ? 22 : 12;
       ctx.shadowColor = mainColor;
 
-      const numLat = 8;
+      const numLat = 9;
       for (let i = 1; i < numLat; i++) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
         const latR = radius * Math.cos(latAngle);
@@ -147,18 +166,34 @@ export function JarvisHudView({
         ctx.beginPath();
         ctx.strokeStyle = glowColor;
         ctx.lineWidth = 1;
-        ctx.ellipse(centerX, centerY + yOffset, latR, latR * 0.38, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerX, centerY + yOffset, latR, latR * 0.35, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      const numLong = 10;
+      const numLong = 12;
       for (let i = 0; i < numLong; i++) {
         const longAngle = angle + (i / numLong) * Math.PI;
         ctx.beginPath();
-        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.5)' : 'rgba(6, 182, 212, 0.28)';
+        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.55)' : 'rgba(6, 182, 212, 0.3)';
         ctx.lineWidth = 1;
         ctx.ellipse(centerX, centerY, radius * Math.sin(longAngle), radius, 0, 0, Math.PI * 2);
         ctx.stroke();
+      }
+
+      // Geodesic Faceted Vertices (Glowing cyan nodes at intersections)
+      for (let i = 1; i < numLat; i += 2) {
+        const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
+        const latR = radius * Math.cos(latAngle);
+        const yOffset = radius * Math.sin(latAngle);
+        for (let j = 0; j < 8; j++) {
+          const ptAngle = angle + (j / 8) * Math.PI * 2;
+          const px = centerX + latR * Math.cos(ptAngle);
+          const py = centerY + yOffset + (latR * 0.35) * Math.sin(ptAngle);
+          ctx.beginPath();
+          ctx.fillStyle = isLive ? '#bae6fd' : '#38bdf8';
+          ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // Center Core Energy Reactor Glow
@@ -249,10 +284,21 @@ export function JarvisHudView({
       setIsSpeaking(true);
       setHudState('SPEAKING');
 
-      // Callback when speech completes
+      // Callback when speech completes: auto-resume hands-free Wake Word standby
       const handleSpeechDone = () => {
         setIsSpeaking(false);
         setHudState('READY');
+        if (wakeWordActive) {
+          setTimeout(() => {
+            try {
+              if (wakeWordActive && recognitionRef.current) {
+                recognitionRef.current.start();
+                setIsListening(true);
+                setHudState('LISTENING');
+              }
+            } catch {}
+          }, 350);
+        }
       };
 
       // Strip symbols for speech
@@ -327,7 +373,7 @@ export function JarvisHudView({
         tryDirectGoogleTts();
       }
     },
-    [voiceEnabled]
+    [voiceEnabled, wakeWordActive]
   );
 
   // Core Command Dispatcher & AI Squad Query Engine
@@ -354,7 +400,7 @@ export function JarvisHudView({
       // User Message to HUD Terminal
       const userMsg = {
         id: Date.now(),
-        sender: 'BOSS',
+        sender: userTitle.toUpperCase(),
         time: nowTime,
         text: clean,
       };
@@ -365,7 +411,13 @@ export function JarvisHudView({
 
       // Jarvis Neural Processing & AI Squad Coordination
       setTimeout(() => {
-        const result = processJarvisCommand(text);
+        const result = processJarvisCommand(clean);
+
+        // Update Persona Title dynamically if requested
+        if (result.action === 'SET_TITLE' && result.title) {
+          setUserTitle(result.title);
+          setUserTitleState(result.title);
+        }
 
         const jarvisMsg = {
           id: Date.now() + 1,
@@ -409,62 +461,75 @@ export function JarvisHudView({
         }
       }, 450);
     },
-    [onRunAudit, onOpenQuotation, onSelectBrandTheme, speakThai]
+    [onRunAudit, onOpenQuotation, onSelectBrandTheme, speakThai, userTitle]
   );
 
-  // Web Speech Recognition (Thai Voice Input)
+  // Web Speech Recognition (Always-On Hands-free Wake Word: "javis" / "จาร์วิส")
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = false;
       recognition.lang = 'th-TH';
 
       recognition.onstart = () => {
         setIsListening(true);
         setHudState('LISTENING');
-        playClickSound();
-        if (onShowToast) {
-          onShowToast('info', 'J.A.R.V.I.S. กำลังฟัง...', 'พูดคำสั่งภาษาไทยได้ทันที เช่น "ตรวจระบบ", "ดูระบบ POS", "ออกใบเสนอราคา"');
-        }
       };
 
       recognition.onresult = (event) => {
-        const transcript = (event.results[0][0]?.transcript || '').trim();
+        const lastResultIndex = event.results.length - 1;
+        const transcript = (event.results[lastResultIndex][0]?.transcript || '').trim();
         if (!transcript || transcript.length < 2) return;
 
-        // Stop listening immediately upon capturing command to prevent echo loops
+        const lower = transcript.toLowerCase();
+
+        // 1. Iron Man Wake Word Check: "javis", "jarvis", "จาร์วิส", "จาวิส"
+        const isWakeWord =
+          lower.includes('javis') ||
+          lower.includes('jarvis') ||
+          lower.includes('จาร์วิส') ||
+          lower.includes('จาวิส') ||
+          lower.includes('เฮ้ จาร์วิส') ||
+          lower.includes('เฮ้ จาวิส') ||
+          lower.includes('เฮ้จาร์วิส') ||
+          lower.includes('เฮ้จาวิส') ||
+          lower.includes('hey javis') ||
+          lower.includes('hey jarvis');
+
+        // STRICT FILTER: If speech does NOT call "javis" / "จาร์วิส", IGNORE IT COMPLETELY!
+        if (!isWakeWord) {
+          return;
+        }
+
+        // Stop listening temporarily during command processing to avoid feedback
         try {
           recognitionRef.current?.stop();
         } catch {}
         setIsListening(false);
 
-        const lower = transcript.toLowerCase();
-        const isWakeWord =
-          lower.includes('จาร์วิส') ||
-          lower.includes('เฮ้ จาร์วิส') ||
-          lower.includes('hey jarvis') ||
-          lower.includes('jarvis');
+        playSuccessSound();
 
-        if (isWakeWord) {
-          playSuccessSound();
-          const stripped = transcript
-            .replace(/เฮ้\s*จาร์วิส/gi, '')
-            .replace(/จาร์วิส/gi, '')
-            .replace(/hey\s*jarvis/gi, '')
-            .replace(/jarvis/gi, '')
-            .trim();
+        const stripped = transcript
+          .replace(/เฮ้\s*จาร์วิส/gi, '')
+          .replace(/เฮ้\s*จาวิส/gi, '')
+          .replace(/เฮ้จาร์วิส/gi, '')
+          .replace(/เฮ้จาวิส/gi, '')
+          .replace(/hey\s*javis/gi, '')
+          .replace(/hey\s*jarvis/gi, '')
+          .replace(/จาร์วิส/gi, '')
+          .replace(/จาวิส/gi, '')
+          .replace(/javis/gi, '')
+          .replace(/jarvis/gi, '')
+          .trim();
 
-          if (stripped.length >= 2) {
-            handleDispatchCommand(stripped);
-          } else {
-            speakThai('ครับ บอส มีอะไรให้ผมช่วยจัดการ หรือค้นหาข้อมูลไหมครับ?');
-          }
+        if (stripped.length >= 2) {
+          handleDispatchCommand(stripped);
         } else {
-          handleDispatchCommand(transcript);
+          speakThai(`ครับ${userTitle} มีอะไรให้ผมช่วยจัดการ หรือค้นหาข้อมูลไหมครับ?`);
         }
       };
 
@@ -477,7 +542,7 @@ export function JarvisHudView({
             onShowToast(
               'warning',
               'ไมโครโฟนถูกปิดกั้น (Mic Blocked)',
-              'กรุณากดไอคอนแม่กุญแจ 🔒 หรือรูปกล้องที่ช่อง URL ด้านบน เพื่อเลือก "Allow" ให้ใช้ไมโครโฟน หรือคลิกปุ่มคำสั่งภาษาไทยด้านล่างได้ทันทีครับ'
+              'กรุณากดไอคอนแม่กุญแจ 🔒 ที่แถบ URL เพื่อเลือก "Allow" ให้ใช้ไมโครโฟนเพื่อเปิดระบบจับเสียง "javis" อัตโนมัติครับ'
             );
           }
         }
@@ -485,12 +550,51 @@ export function JarvisHudView({
 
       recognition.onend = () => {
         setIsListening(false);
-        if (!isSpeaking) setHudState('READY');
+        if (!isSpeaking) {
+          setHudState('READY');
+          // Hands-free Standby: Automatically re-arms to wait for next "javis" call
+          if (wakeWordActive) {
+            setTimeout(() => {
+              try {
+                if (wakeWordActive && !isSpeaking && recognitionRef.current) {
+                  recognitionRef.current.start();
+                  setIsListening(true);
+                  setHudState('LISTENING');
+                }
+              } catch {}
+            }, 300);
+          }
+        }
       };
 
       recognitionRef.current = recognition;
     }
-  }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai]);
+  }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai, userTitle, wakeWordActive]);
+
+  // Hands-free Voice Engine: Auto-start Wake Word standby on mount or user gesture
+  useEffect(() => {
+    const startStandby = () => {
+      try {
+        if (recognitionRef.current && !isListening && !isSpeaking) {
+          recognitionRef.current.start();
+          setIsListening(true);
+          setHudState('LISTENING');
+        }
+      } catch {}
+    };
+
+    const timer = setTimeout(startStandby, 800);
+    const handleFirstGesture = () => {
+      startStandby();
+      window.removeEventListener('click', handleFirstGesture);
+    };
+    window.addEventListener('click', handleFirstGesture);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleFirstGesture);
+    };
+  }, [isListening, isSpeaking]);
 
   const toggleMic = useCallback(() => {
     playClickSound();
@@ -586,45 +690,61 @@ export function JarvisHudView({
       <div className="relative z-20 flex items-center justify-between border-b border-cyan-500/20 bg-slate-950/80 px-6 py-3 text-xs tracking-wider">
         {/* Left Brand Badge */}
         <div className="flex items-center gap-3">
-          <span className="text-base font-black tracking-[0.25em] text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
+          <span className="text-base font-black tracking-[0.25em] text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] font-mono">
             J . A . R . V . I . S .
           </span>
-          <span className="rounded bg-cyan-950/70 px-2 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/40">
+          <span className="rounded bg-cyan-950/70 px-2 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 font-mono">
             MK III
           </span>
-          <div className="hidden sm:flex items-center gap-1.5 rounded bg-slate-900/80 px-2.5 py-0.5 text-[10px] text-emerald-400 border border-emerald-500/30">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>2 PRINTERS / 15 APPS ONLINE</span>
+          <div className="hidden sm:flex items-center gap-1.5 rounded bg-slate-900/80 px-2.5 py-0.5 text-[10px] text-slate-300 border border-slate-700/80 font-mono">
+            <Printer className="h-3 w-3 text-emerald-400" />
+            <span>2 Printers</span>
           </div>
         </div>
 
-        {/* Right Environment & Status */}
+        {/* Right Environment & Status (Matching Screenshot 1:1) */}
         <div className="flex items-center gap-5 text-[11px] text-slate-400">
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4 font-mono text-[10px]">
             <div>
-              <span className="text-slate-500 text-[10px] block">ENVIRONMENT</span>
-              <span className="text-cyan-300 font-bold">BANGKOK 26°C</span>
+              <span className="text-slate-500 text-[9px] block">ENVIRONMENT</span>
+              <span className="text-slate-200 font-bold">BANGKOK <span className="text-cyan-400">26°C</span></span>
+              <div className="text-[9px] text-slate-400">HUMIDITY <span className="text-cyan-400">85%</span></div>
+              <div className="text-[9px] text-slate-400">NETWORK <span className="text-emerald-400 font-bold">ONLINE</span></div>
             </div>
-            <div>
-              <span className="text-slate-500 text-[10px] block">HUMIDITY</span>
-              <span className="text-cyan-300 font-bold">85%</span>
-            </div>
-            <div>
-              <span className="text-slate-500 text-[10px] block">NETWORK</span>
-              <span className="text-emerald-400 font-bold">ONLINE</span>
-            </div>
-            <div>
-              <span className="text-slate-500 text-[10px] block">OVERCAST</span>
-              <span className="text-slate-400">UPDATED 03:15</span>
+            <div className="border-l border-slate-800/90 pl-3">
+              <span className="text-slate-300 font-bold block">OVERCAST</span>
+              <span className="text-slate-500 text-[9px]">UPDATED 03:25</span>
             </div>
           </div>
+
+          {/* Executive Honorific Title Switcher */}
+          <button
+            type="button"
+            onClick={() => {
+              playClickSound();
+              const titles = ['คุณผู้ชาย', 'ท่านประธาน', 'ผู้การ', 'คุณไลท์'];
+              const currentIndex = titles.indexOf(userTitle);
+              const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % titles.length;
+              const nextTitle = titles[nextIndex];
+              setUserTitle(nextTitle);
+              setUserTitleState(nextTitle);
+              speakThai(`รับทราบครับ ${nextTitle} ต่อจากนี้ผมจะเรียกท่านว่า ${nextTitle} ครับ`);
+              if (onShowToast) {
+                onShowToast('info', 'เปลี่ยนคำเรียก', `J.A.R.V.I.S. จะเรียกท่านว่า "${nextTitle}"`);
+              }
+            }}
+            className="hidden md:flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-950/40 px-2.5 py-1 text-[10px] font-bold text-sky-300 hover:bg-sky-900/50 hover:border-sky-400 transition-all shadow-sm cursor-pointer"
+            title="คลิกเพื่อสลับคำเรียก: คุณผู้ชาย / ท่านประธาน / ผู้การ / คุณไลท์"
+          >
+            <span>🎖️ เรียก: {userTitle}</span>
+          </button>
 
           {/* Thai Voice Sound Test Button */}
           <button
             type="button"
             onClick={() => {
               playClickSound();
-              speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งานแล้วครับ');
+              speakThai(`สวัสดีครับ ${userTitle} ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งานแล้วครับ`);
               if (onShowToast) {
                 onShowToast('info', 'ทดสอบเสียงภาษาไทย', 'กำลังเล่นเสียงสังเคราะห์ภาษาไทยออกลำโพงครับ');
               }
@@ -647,8 +767,8 @@ export function JarvisHudView({
                   'info',
                   'ระบบ Wake Word',
                   wakeWordActive
-                    ? 'ปิดระบบจับเสียง "เฮ้ จาร์วิส" แล้ว'
-                    : 'เปิดระบบจับเสียง "เฮ้ จาร์วิส" (Standby พร้อมเพรียง)'
+                    ? 'ปิดระบบจับเสียงอัตโนมัติแล้ว'
+                    : 'เปิดระบบจับเสียงอัตโนมัติ (เรียก "javis" หรือ "จาร์วิส" ได้ทันที)'
                 );
               }
             }}
@@ -657,14 +777,14 @@ export function JarvisHudView({
                 ? 'border-cyan-500/50 bg-cyan-950/70 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                 : 'border-slate-800 bg-slate-900 text-slate-500'
             }`}
-            title="คลิกเพื่อเปิด / ปิดการดักฟัง 'เฮ้ จาร์วิส' อัตโนมัติ"
+            title="คลิกเพื่อเปิด / ปิดการดักฟัง 'javis' อัตโนมัติ"
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
                 wakeWordActive ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'
               }`}
             />
-            <span>WAKE WORD: {wakeWordActive ? 'HEY JARVIS [ON]' : 'OFF'}</span>
+            <span>WAKE WORD: {wakeWordActive ? 'JAVIS [ON]' : 'OFF'}</span>
           </button>
 
           {/* Time, View Switchers & Window Controls (Matching Iron Man HUD) */}
@@ -689,10 +809,10 @@ export function JarvisHudView({
                 ADMIN DASHBOARD
               </button>
             )}
-            <div className="rounded-lg bg-slate-900/90 px-3 py-1 font-bold text-cyan-400 border border-cyan-500/30">
+            <div className="rounded-lg bg-slate-900/90 px-3 py-1 font-bold text-cyan-400 border border-cyan-500/30 font-mono">
               {currentTime || '03:25:18 AM'}
             </div>
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-1 text-xs font-mono">
               <button
                 type="button"
                 onClick={() => {
@@ -732,21 +852,24 @@ export function JarvisHudView({
       {/* ============================================================ */}
       <div className="relative z-10 flex min-h-[790px] w-full p-4 lg:p-6">
         {/* ------------------------------------------------------------ */}
-        {/* 1. LEFT VERTICAL TOOL DOCK (8 Icons matching screenshot)     */}
+        {/* 1. LEFT VERTICAL TOOL DOCK (9 Icons matching screenshot 1:1) */}
         {/* ------------------------------------------------------------ */}
         <div className="hidden md:flex flex-col items-center justify-between rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-2 shadow-xl backdrop-blur-md w-12 shrink-0 mr-4">
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {[
-              { id: 'grid', icon: Layers, title: 'AI Teams & Roster' },
-              { id: 'ai', icon: Bot, title: 'J.A.R.V.I.S. Neural Core' },
-              { id: 'wave', icon: Radio, title: 'Audio Stream' },
-              { id: 'scanner', icon: Fingerprint, title: 'Security Vault' },
-              { id: 'chip', icon: Cpu, title: 'Hardware Telemetry' },
-              { id: 'pulse', icon: Activity, title: 'Diagnostics' },
-              { id: 'touch', icon: Sliders, title: 'Manual Overrides' },
+              { id: 'grid', icon: Grid, title: 'App Launcher & 15 Projects Suite', cmd: 'สรุปโปรเจกต์ทั้งหมด' },
+              { id: 'ai', icon: Bot, title: 'J.A.R.V.I.S. Neural Core', cmd: 'สถานะทีม AI' },
+              { id: 'wave', icon: Radio, title: 'Audio Stream & Waveform', cmd: 'ฟังเสียงภาษาไทย' },
+              { id: 'scan', icon: Scan, title: 'Vision & Security Scan', cmd: 'เช็คความปลอดภัย vault' },
+              { id: 'box', icon: Box, title: '3D Hologram & Specs', cmd: 'เปิดโฮโลแกรม' },
+              { id: 'pulse', icon: Activity, title: 'Hardware Telemetry & Pulse', cmd: 'ตรวจระบบทั้งหมด' },
+              { id: 'hand', icon: Hand, title: 'Hand Gesture Controls', cmd: 'เปิดการควบคุมด้วยมือ' },
+              { id: 'power', icon: Zap, title: 'Arc Reactor / Mark III Power Online', cmd: 'พลังงานระบบ' },
+              { id: 'settings', icon: Sliders, title: 'System Configuration', cmd: 'ตั้งค่าระบบ' },
             ].map((btn) => {
               const Icon = btn.icon;
               const isActive = activeLeftDock === btn.id;
+              const isPower = btn.id === 'power';
               return (
                 <button
                   key={btn.id}
@@ -754,11 +877,12 @@ export function JarvisHudView({
                   onClick={() => {
                     playClickSound();
                     setActiveLeftDock(btn.id);
-                    if (btn.id === 'grid') handleDispatchCommand('สรุปโปรเจกต์ทั้งหมด');
-                    else if (btn.id === 'scanner') handleDispatchCommand('เช็คความปลอดภัย vault');
+                    if (btn.cmd) handleDispatchCommand(btn.cmd);
                   }}
                   className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
-                    isActive
+                    isPower && isActive
+                      ? 'border-2 border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_14px_rgba(245,158,11,0.6)]'
+                      : isActive
                       ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 shadow-md shadow-cyan-500/20'
                       : 'text-slate-500 hover:bg-slate-900 hover:text-slate-300'
                   }`}
@@ -829,24 +953,30 @@ export function JarvisHudView({
             </span>
           </div>
 
-          {/* Audio Waveform Visualizer Bars (Matching Screenshot) */}
-          <div className="mt-4 flex items-center justify-center gap-1">
-            {[16, 28, 42, 60, 36, 70, 48, 22, 54, 32, 64, 40, 24, 16].map((h, idx) => (
-              <div
-                key={idx}
-                className={`w-1 rounded-full transition-all duration-150 ${
-                  isListening || isSpeaking
-                    ? 'bg-cyan-400 shadow-[0_0_8px_#38bdf8]'
-                    : 'bg-cyan-900/50'
-                }`}
-                style={{
-                  height:
+          {/* Audio Waveform Visualizer (Undulating Sine Curve matching Screenshot 1:1) */}
+          <div className="mt-2.5 flex items-center justify-center">
+            <div className="relative flex items-center justify-center">
+              <svg
+                className="w-56 h-8 stroke-cyan-400 fill-none drop-shadow-[0_0_10px_rgba(56,189,248,0.85)]"
+                viewBox="0 0 200 28"
+              >
+                <path
+                  d={
                     isListening || isSpeaking
-                      ? `${Math.max(6, Math.sin((idx + Date.now() / 140) % Math.PI) * h)}px`
-                      : '6px',
-                }}
+                      ? "M 10 14 Q 35 2, 60 14 T 100 14 T 140 14 T 180 14"
+                      : "M 10 14 Q 35 8, 60 14 T 100 14 T 140 14 T 180 14"
+                  }
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* Subtle pulsing glow aura */}
+              <div
+                className={`absolute inset-0 rounded-full blur-md transition-opacity ${
+                  isListening || isSpeaking ? 'bg-cyan-500/20 opacity-100' : 'opacity-0'
+                }`}
               />
-            ))}
+            </div>
           </div>
 
           {/* Central Voice Two-Way Status / Tap-to-Talk Button */}
@@ -1067,7 +1197,7 @@ export function JarvisHudView({
                     <Wifi className="h-3 w-3 text-cyan-400" />
                     NETWORK
                   </span>
-                  <span className="text-emerald-400 font-bold">U 181KB/s // D 6KB/s</span>
+                  <span className="text-emerald-400 font-bold">{networkUsage}</span>
                 </div>
 
                 {/* System Temp */}
@@ -1146,7 +1276,7 @@ export function JarvisHudView({
                   onClick={() => {
                     if (chip === '🔊 ฟังเสียงภาษาไทย') {
                       playClickSound();
-                      speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งาน 100% แล้วครับ');
+                      speakThai(`สวัสดีครับ ${userTitle} ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งาน 100% แล้วครับ`);
                     } else {
                       handleDispatchCommand(chip);
                     }
@@ -1163,7 +1293,7 @@ export function JarvisHudView({
               ))}
             </div>
 
-            {/* Input Box (Matching `INITIALIZE COMMAND...` in screenshot) */}
+            {/* Input Box (Matching `INITIALIZE COMMAND...` in screenshot 1:1) */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1171,13 +1301,18 @@ export function JarvisHudView({
               }}
               className="mt-1 flex items-center gap-2 pt-1"
             >
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="พิมพ์คำสั่งภาษาไทย หรือกดไมค์พูดคุย..."
-                className="flex-1 rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-xs text-cyan-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-sans"
-              />
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="INITIALIZE COMMAND ..."
+                  className="w-full rounded-xl border border-cyan-500/40 bg-slate-900/90 px-3 py-2 text-xs text-cyan-200 placeholder-cyan-500/50 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 font-mono tracking-wider"
+                />
+                {!inputText && (
+                  <span className="absolute right-3 top-2.5 h-3.5 w-1.5 bg-cyan-400 animate-pulse" />
+                )}
+              </div>
               <button
                 type="button"
                 onClick={toggleMic}
