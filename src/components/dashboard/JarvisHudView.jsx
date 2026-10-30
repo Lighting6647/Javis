@@ -8,6 +8,7 @@ import {
   attachJarvisVoiceDSP,
 } from '../../utils/soundEffects';
 import { processJarvisCommand, USER_TITLE, setUserTitle } from '../../utils/jarvisBrain';
+import { askGemini } from '../../services/geminiService';
 import { StarkWorkshopView } from './hud/StarkWorkshopView';
 
 export function JarvisHudView({
@@ -214,28 +215,24 @@ export function JarvisHudView({
       setHudState('SEARCHING');
 
       setTimeout(async () => {
-        let result = processJarvisCommand(clean);
-
-        // Google Gemini Real-Time Neural Intelligence & Analysis Pipeline
-        const isAnalysisOrQuestion =
-          result.action === 'NONE' ||
-          clean.includes('วิเคราะห์') ||
-          clean.includes('ช่วยดู') ||
-          clean.includes('คิดว่า') ||
-          clean.includes('แนะนำ') ||
-          clean.includes('แก้ไข') ||
-          clean.includes('แก้โค้ด') ||
-          clean.includes('push') ||
-          clean.includes('github') ||
-          clean.includes('กิต');
+        let result = null;
 
         // Phase 3: Voice-Triggered Autonomous Git Push Handler across 18 Projects
         const isVoiceGitPush =
           (clean.includes('push') || clean.includes('อัพเดท') || clean.includes('อัพขึ้น') || clean.includes('ซิงค์')) &&
           (clean.includes('github') || clean.includes('กิต') || clean.includes('โปรเจกต์') || clean.includes('โค้ด'));
 
+        // Check for specific UI system toggle actions
+        const isExplicitSystemCommand =
+          clean.includes('red alert') ||
+          clean.includes('แจ้งเตือนสีแดง') ||
+          clean.includes('สัญญาณเตือน') ||
+          clean.includes('เปลี่ยนชื่อเรียก') ||
+          clean.includes('เปลี่ยนธีม') ||
+          clean.includes('เปิดใบเสนอราคา') ||
+          clean.includes('ตรวจสุขภาพระบบ');
+
         if (isVoiceGitPush) {
-          // Identify target project from voice command
           let targetProj = 'CEO';
           if (clean.includes('pos') || clean.includes('สต็อก') || clean.includes('inventoty')) targetProj = 'Inventoty AI Light';
           else if (clean.includes('บัตรคอน') || clean.includes('ตั๋ว')) targetProj = 'บัตรคอน Light';
@@ -282,37 +279,34 @@ export function JarvisHudView({
           } catch (err) {
             console.warn('[Voice Git Push Fallback]:', err);
           }
-        } else if (isAnalysisOrQuestion) {
+        } else if (isExplicitSystemCommand) {
+          result = processJarvisCommand(clean);
+        }
+
+        // Natural Conversational AI Engine (Default for all speech and questions)
+        if (!result) {
           try {
-            const res = await fetch('/api/gemini/analyze', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: clean, context: 'D:\\Light Ecosystem with 18 Projects' }),
-            });
-            const geminiData = await res.json();
-            if (geminiData.success && geminiData.reply) {
-              const firstLine = geminiData.reply.split('\n')[0].replace(/[*#_~]/g, '').slice(0, 140);
-              result = {
-                action: 'GEMINI_ANALYSIS',
-                squadId: 'dev',
-                delegatedTo: `Google Gemini Neural Core (${geminiData.model})`,
-                reply: geminiData.reply,
-                speech: firstLine || `รับทราบครับ ${userTitle} ผลการวิเคราะห์เรียบร้อยครับ`,
-                hologram: {
-                  title: 'GOOGLE GEMINI // DEEP ANALYSIS',
-                  category: 'NEURAL COGNITIVE INTELLIGENCE',
-                  badge: 'GEMINI ONLINE',
-                  details: [
-                    { label: 'AI Model', val: geminiData.model },
-                    { label: 'Knowledge Base', val: '18 Projects in D:\\Light' },
-                    { label: 'Git Remote', val: 'GitHub Autonomous Bridge' },
-                    { label: 'Status', val: 'Real-time Connected' },
-                  ],
-                },
-              };
-            }
-          } catch (err) {
-            console.warn('[Gemini Dispatch Fallback]:', err.message);
+            const geminiRes = await askGemini(clean, userTitle);
+            result = {
+              action: 'GEMINI_CONVERSATION',
+              squadId: 'dev',
+              delegatedTo: `Google Gemini Neural Core (${geminiRes.model})`,
+              reply: geminiRes.reply,
+              speech: geminiRes.speech,
+              hologram: {
+                title: 'GOOGLE GEMINI // NATURAL DIALOGUE',
+                category: 'CONVERSATIONAL NEURAL BRAIN',
+                badge: 'ONLINE',
+                details: [
+                  { label: 'AI Model', val: geminiRes.model },
+                  { label: 'Personality', val: 'Paul Bettany (Thai Native)' },
+                  { label: 'Knowledge Base', val: '18 Projects in D:\\Light' },
+                  { label: 'Dialogue Mode', val: 'Dynamic Adaptive' },
+                ],
+              },
+            };
+          } catch {
+            result = processJarvisCommand(clean);
           }
         }
 
