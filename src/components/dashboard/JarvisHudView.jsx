@@ -189,8 +189,55 @@ export function JarvisHudView({
       setMessages((prev) => [...prev, userMsg]);
       setHudState('SEARCHING');
 
-      setTimeout(() => {
-        const result = processJarvisCommand(clean);
+      setTimeout(async () => {
+        let result = processJarvisCommand(clean);
+
+        // Google Gemini Real-Time Neural Intelligence & Analysis Pipeline
+        const isAnalysisOrQuestion =
+          result.action === 'NONE' ||
+          clean.includes('วิเคราะห์') ||
+          clean.includes('ช่วยดู') ||
+          clean.includes('คิดว่า') ||
+          clean.includes('แนะนำ') ||
+          clean.includes('แก้ไข') ||
+          clean.includes('แก้โค้ด') ||
+          clean.includes('push') ||
+          clean.includes('github') ||
+          clean.includes('กิต');
+
+        if (isAnalysisOrQuestion) {
+          try {
+            const res = await fetch('/api/gemini/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: clean, context: 'D:\\Light Ecosystem with 18 Projects' }),
+            });
+            const geminiData = await res.json();
+            if (geminiData.success && geminiData.reply) {
+              const firstLine = geminiData.reply.split('\n')[0].replace(/[*#_~]/g, '').slice(0, 140);
+              result = {
+                action: 'GEMINI_ANALYSIS',
+                squadId: 'dev',
+                delegatedTo: `Google Gemini Neural Core (${geminiData.model})`,
+                reply: geminiData.reply,
+                speech: firstLine || `รับทราบครับ ${userTitle} ผลการวิเคราะห์เรียบร้อยครับ`,
+                hologram: {
+                  title: 'GOOGLE GEMINI // DEEP ANALYSIS',
+                  category: 'NEURAL COGNITIVE INTELLIGENCE',
+                  badge: 'GEMINI ONLINE',
+                  details: [
+                    { label: 'AI Model', val: geminiData.model },
+                    { label: 'Knowledge Base', val: '18 Projects in D:\\Light' },
+                    { label: 'Git Remote', val: 'GitHub Autonomous Bridge' },
+                    { label: 'Status', val: 'Real-time Connected' },
+                  ],
+                },
+              };
+            }
+          } catch (err) {
+            console.warn('[Gemini Dispatch Fallback]:', err.message);
+          }
+        }
 
         if (result.action === 'SET_TITLE' && result.title) {
           setUserTitle(result.title);

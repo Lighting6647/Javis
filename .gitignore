@@ -23,7 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local Netlify folder
+# Environment variables
+.env
+.env.*
+!.env.example
 .netlify
 
 # Internal review/report artifacts

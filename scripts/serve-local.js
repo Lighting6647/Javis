@@ -7,6 +7,81 @@ import { exec } from 'node:child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.resolve(__dirname, '..', 'dist');
+const LIGHT_ROOT = 'D:\\Light';
+
+// Load GEMINI_API_KEY from .env
+let GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const envPath = path.resolve(__dirname, '..', '.env');
+if (!GEMINI_API_KEY && fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const match = envContent.match(/GEMINI_API_KEY=([^\r\n]+)/);
+    if (match) GEMINI_API_KEY = match[1].trim();
+  } catch (err) {
+    console.warn('[ENV Load Warning]:', err.message);
+  }
+}
+
+// Call Google Gemini API (Dual-model fallback)
+async function callGemini(prompt, systemInstruction = '') {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not configured in .env');
+  }
+
+  const models = ['gemini-flash-lite-latest', 'gemini-3.8-flash-lite', 'gemini-3.5-flash-lite'];
+  let lastErr = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+      };
+
+      if (systemInstruction) {
+        payload.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return {
+          model,
+          text: data.candidates[0].content.parts[0].text,
+        };
+      } else {
+        lastErr = new Error(`[${model}]: ${data.error?.message || 'Empty response'}`);
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  throw lastErr || new Error('All Gemini models failed');
+}
+
+// Helper to read JSON request body
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -64,39 +139,187 @@ function startServer(port = 5173) {
       return;
     }
 
-    // 2. One-Click Real Project Launcher for sir ไลท์ (D:\Light Ecosystem)
-    if (reqPath === '/api/launch-project') {
-      const projId = parsedUrl.searchParams.get('id') || 'pos';
-      const PROJECT_PATHS = {
-        pos: 'D:\\Light\\Inventoty AI Light',
-        ticket: 'D:\\Light\\บัตรคอน Light',
-        fit: 'D:\\Light\\Fitness',
-        pass: 'D:\\Light\\Pass App Light',
-        dashboard: 'D:\\Light\\แดชบอร์ด Light',
-        ceo: 'D:\\Light\\CEO',
+    // 3. Google Gemini Neural Analysis Bridge for J.A.R.V.I.S.
+    if (reqPath === '/api/gemini/analyze') {
+      const handleAnalyze = async () => {
+        try {
+          let prompt = parsedUrl.searchParams.get('prompt') || '';
+          let context = parsedUrl.searchParams.get('context') || '';
+
+          if (req.method === 'POST') {
+            const body = await readJsonBody(req);
+            prompt = body.prompt || prompt;
+            context = body.context || context;
+          }
+
+          if (!prompt.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Missing prompt parameter' }));
+            return;
+          }
+
+          const systemInstruction = `คุณคือ J.A.R.V.I.S. MARK III ปัญญาประดิษฐ์ผู้ช่วยส่วนตัวและวิศวกรซอฟต์แวร์ระดับสูงประจำตัวของ 'sir ไลท์' (คุณไลท์)
+- พูดจาสุภาพ นิ่ง เฉียบคม และมีตรรกะสูง
+- ให้เกียรติและเรียกผู้ใช้งานว่า 'sir ไลท์' เสมอ
+- คุณมีความรู้ความเข้าใจใน 18 โปรเจกต์ของ D:\\Light อย่างลึกซึ้ง (Inventoty AI, บัตรคอน, Fitness, Pass App, แดชบอร์ด, CEO, ฯลฯ)
+- เมื่อตอบคำถาม ให้วิเคราะห์อย่างเป็นรูปธรรม ให้ข้อเสนอแนะที่นำไปปฏิบัติได้จริง และกระชับ`;
+
+          const result = await callGemini(
+            `Context: ${context || 'D:\\Light Ecosystem'}\n\nคำถามหรือคำสั่งจาก sir ไลท์: ${prompt}`,
+            systemInstruction
+          );
+
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(
+            JSON.stringify({
+              success: true,
+              model: result.model,
+              reply: result.text,
+            })
+          );
+        } catch (err) {
+          console.error('[Gemini Bridge Error]:', err.message);
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
       };
 
-      const targetPath = PROJECT_PATHS[projId] || 'D:\\Light';
+      handleAnalyze();
+      return;
+    }
 
-      // Open in Windows Explorer safely
-      exec(`explorer.exe "${targetPath}"`, (err) => {
-        if (err) {
-          console.error('[Launch Project Error]:', err.message);
+    // 4. Multi-Project Directory Scanner (D:\Light Ecosystem)
+    if (reqPath === '/api/projects/list') {
+      try {
+        const entries = fs.readdirSync(LIGHT_ROOT, { withFileTypes: true });
+        const projects = entries
+          .filter((d) => d.isDirectory())
+          .map((d) => {
+            const pPath = path.join(LIGHT_ROOT, d.name);
+            const hasGit = fs.existsSync(path.join(pPath, '.git'));
+            const hasPkg = fs.existsSync(path.join(pPath, 'package.json'));
+            return {
+              id: d.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+              name: d.name,
+              path: pPath,
+              hasGit,
+              hasPackageJson: hasPkg,
+            };
+          });
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify({ success: true, count: projects.length, projects }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+      return;
+    }
+
+    // 5. Multi-Project Autonomous Orchestrator (Read, Edit Code, Git Push)
+    if (reqPath === '/api/projects/execute') {
+      const handleExecute = async () => {
+        try {
+          const body = await readJsonBody(req);
+          const { action, projectName, filePath, content, commitMessage, command } = body;
+
+          const targetDir = projectName ? path.join(LIGHT_ROOT, projectName) : LIGHT_ROOT;
+          if (!fs.existsSync(targetDir)) {
+            res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: false, error: `Project not found: ${projectName}` }));
+            return;
+          }
+
+          // A. Read File
+          if (action === 'read_file') {
+            const fullPath = path.resolve(targetDir, filePath || '');
+            if (!fullPath.startsWith(targetDir)) {
+              throw new Error('Access denied outside target directory');
+            }
+            const data = fs.readFileSync(fullPath, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, path: fullPath, content: data }));
+            return;
+          }
+
+          // B. Edit / Write File with Auto-Backup
+          if (action === 'edit_file') {
+            const fullPath = path.resolve(targetDir, filePath || '');
+            if (!fullPath.startsWith(targetDir)) {
+              throw new Error('Access denied outside target directory');
+            }
+            if (fs.existsSync(fullPath)) {
+              fs.copyFileSync(fullPath, `${fullPath}.bak`);
+            }
+            fs.writeFileSync(fullPath, content || '', 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, path: fullPath, backup: `${fullPath}.bak` }));
+            return;
+          }
+
+          // C. Git Status
+          if (action === 'git_status') {
+            exec('git status -s', { cwd: targetDir }, (err, stdout, stderr) => {
+              res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(
+                JSON.stringify({
+                  success: !err,
+                  status: stdout || '(Working tree clean)',
+                  error: err ? stderr : null,
+                })
+              );
+            });
+            return;
+          }
+
+          // D. Autonomous Git Commit & Push
+          if (action === 'git_push') {
+            const msg = commitMessage || `[J.A.R.V.I.S. Autonomous Update] for ${projectName}`;
+            const gitCmd = `git add . && git commit -m "${msg}" && git push`;
+            exec(gitCmd, { cwd: targetDir }, (err, stdout, stderr) => {
+              res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(
+                JSON.stringify({
+                  success: !err,
+                  output: stdout || stderr,
+                  error: err ? err.message : null,
+                })
+              );
+            });
+            return;
+          }
+
+          // E. Run Command in Target Project
+          if (action === 'run_command' && command) {
+            exec(command, { cwd: targetDir }, (err, stdout, stderr) => {
+              res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(
+                JSON.stringify({
+                  success: !err,
+                  output: stdout || stderr,
+                  error: err ? err.message : null,
+                })
+              );
+            });
+            return;
+          }
+
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: `Unknown action: ${action}` }));
+        } catch (err) {
+          console.error('[Project Exec Error]:', err.message);
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
         }
-      });
+      };
 
-      res.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end(
-        JSON.stringify({
-          success: true,
-          projectId: projId,
-          path: targetPath,
-          message: `Opened folder ${targetPath}`,
-        })
-      );
+      handleExecute();
       return;
     }
 
