@@ -4,6 +4,7 @@ import { ProjectOrchestratorModal } from './ProjectOrchestratorModal';
 import { GraphifyEcosystemModal } from './GraphifyEcosystemModal';
 import { ThreeArcReactor } from './ThreeArcReactor';
 import { AudioWaveformRibbon } from './AudioWaveformRibbon';
+import { Mem0MemoryModal } from './Mem0MemoryModal';
 import {
   Mic,
   Send,
@@ -73,6 +74,7 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
   const [projectsList, setProjectsList] = useState([]);
   const [isGraphifyOpen, setIsGraphifyOpen] = useState(false);
   const [useThree3D, setUseThree3D] = useState(false);
+  const [isMem0Open, setIsMem0Open] = useState(false);
 
   // Load 18 projects in D:\Light
   useEffect(() => {
@@ -1829,6 +1831,7 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
               isAlert={isRedAlert}
               continuousVoice={continuousVoice}
               onToggleContinuous={onToggleContinuous}
+              onOpenMem0={() => setIsMem0Open(true)}
             />
           </div>
 
@@ -2164,6 +2167,12 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
       <GraphifyEcosystemModal
         isOpen={isGraphifyOpen}
         onClose={() => setIsGraphifyOpen(false)}
+      />
+
+      {/* Mem0 Persistent Long-Term Memory Modal */}
+      <Mem0MemoryModal
+        isOpen={isMem0Open}
+        onClose={() => setIsMem0Open(false)}
       />
     </div>
   );

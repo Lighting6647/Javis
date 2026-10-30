@@ -1,5 +1,7 @@
 // Google Gemini Real-Time Conversational AI Service
-// Dual-Tier Architecture: Cloud/Serverless Bridge with Direct Browser Fallback & Memory Context
+// Dual-Tier Architecture: Cloud/Serverless Bridge with Direct Browser Fallback & Mem0 Context
+
+import { searchMemories, autoLearnFromConversation } from './mem0Service';
 
 const DEFAULT_API_KEY = '';
 
@@ -59,6 +61,16 @@ export async function askGemini(prompt, userTitle = 'sir ไลท์') {
 4. ในส่วนของเสียงพูด (Speech) ให้อ่านเฉพาะหัวข้อสั้นๆ ครบทุกข้อตามลำดับเพื่อให้ ${userTitle} ฟังและเลือกได้ง่าย`;
   }
 
+  // Retrieve Mem0 Persistent Long-Term Memory Context
+  const relevantMemories = searchMemories(cleanPrompt);
+  const memoryContextBlock = relevantMemories.length > 0
+    ? `\nความจำระยะยาวเกี่ยวกับ ${userTitle} (Mem0 Persistent Memory):\n` +
+      relevantMemories.map((m) => `- [${m.category}] ${m.memory}`).join('\n')
+    : '';
+
+  // Trigger background auto-learning
+  autoLearnFromConversation(cleanPrompt);
+
   const systemInstruction = `คุณคือ J.A.R.V.I.S. (Just A Rather Very Intelligent System) ผู้ช่วย AI อัจฉริยะส่วนตัวของ "${userTitle}"
 บุคลิกภาพและการโต้ตอบ:
 - เรียกผู้ใช้ว่า "${userTitle}" เสมอ ด้วยน้ำเสียงสุภาพ นุ่มลึก มีชั้นเชิง เฉลียวฉลาดแบบ Paul Bettany ในภาพยนตร์ Iron Man
@@ -66,6 +78,7 @@ export async function askGemini(prompt, userTitle = 'sir ไลท์') {
 - จดจำบริบทการพูดคุยก่อนหน้าอย่างแม่นยำ เช่น หาก ${userTitle} เคยถามเรื่องข่าว แล้วบอกว่า "อยากฟังเรื่องที่ 1" หรือ "เล่าเรื่องเศรษฐกิจให้ฟังหน่อย" ให้ดึงรายละเอียดของข่าวนั้นมาอธิบายต่ออย่างละเอียดและน่าสนใจทันที
 - สามารถคุยได้ทุกเรื่อง ทั้งเรื่องงาน โค้ดและระบบใน D:\\Light (18 โปรเจกต์), เรื่องธุรกิจ หรือพูดคุยสนทนาทั่วไป
 - ห้ามตอบเป็นประโยคซ้ำซากจำเจแบบหุ่นยนต์เด็ดขาด ให้ตอบตามเนื้อหาที่ ${userTitle} ถามจริงๆ อย่างมีสาระและน่าฟัง
+${memoryContextBlock}
 ${newsRule}`;
 
   // Build History Payload
