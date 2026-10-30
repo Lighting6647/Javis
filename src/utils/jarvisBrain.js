@@ -223,6 +223,54 @@ export function processJarvisCommand(input, _context = {}) {
     };
   }
 
+  // 1.05 Emergency Red Alert / Combat Mode Voice Commands
+  if (
+    clean.includes('red alert') ||
+    clean.includes('เรดอเลิร์ต') ||
+    clean.includes('เตือนภัย') ||
+    clean.includes('combat mode') ||
+    clean.includes('โหมดรบ') ||
+    clean.includes('สีแดงฉุกเฉิน') ||
+    clean.includes('ฉุกเฉิน')
+  ) {
+    const isCancel =
+      clean.includes('ยกเลิก') ||
+      clean.includes('ปิด') ||
+      clean.includes('ปกติ') ||
+      clean.includes('สภาวะปกติ');
+
+    if (isCancel) {
+      return {
+        action: 'TOGGLE_RED_ALERT',
+        isAlert: false,
+        squadId: 'ops',
+        delegatedTo: 'J.A.R.V.I.S. Tactical Core',
+        reply: `รับทราบครับ ${USER_TITLE} ยกเลิกสัญญาณเตือนภัย กลับสู่สภาวะปกติ DEFCON 5 เรียบร้อยแล้วครับ`,
+        speech: `รับทราบครับ ${USER_TITLE} ยกเลิกสัญญาณเตือนภัย กลับสู่สภาวะปกติแล้วครับ`,
+      };
+    }
+
+    return {
+      action: 'TOGGLE_RED_ALERT',
+      isAlert: true,
+      squadId: 'sec',
+      delegatedTo: 'J.A.R.V.I.S. Tactical Defense',
+      reply: `รับทราบครับ ${USER_TITLE}! เปิดใช้งานระบบ RED ALERT COMBAT PROTOCOL ล็อคระบบความปลอดภัยและระบบป้องกัน 100% แล้วครับ`,
+      speech: `รับทราบครับ ${USER_TITLE} เปิดใช้งานระบบเรดอเลิร์ต ป้องกันระบบทุกจุดเรียบร้อยครับ`,
+      hologram: {
+        title: 'RED ALERT // COMBAT PROTOCOL ACTIVE',
+        category: 'TACTICAL DEFENSE PROTOCOL',
+        badge: 'DEFCON 1 // ENGAGED',
+        details: [
+          { label: 'Security Grid', val: 'AES-256 Maximum Lockdown' },
+          { label: 'Firewall Integrity', val: 'Active Shield 100%' },
+          { label: 'Core Energy Flow', val: 'Emergency Overcharge (140%)' },
+          { label: 'Authority', val: USER_TITLE },
+        ],
+      },
+    };
+  }
+
   // 1.1 Thai Language Capabilities & Greetings (Conversational Thai)
   if (
     clean.includes('คุยภาษาไทย') ||

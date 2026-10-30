@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { playClickSound, playSuccessSound, playSciFiBeep } from '../../utils/soundEffects';
+import { playClickSound, playSuccessSound, playSciFiBeep, playAlertSound } from '../../utils/soundEffects';
 import { processJarvisCommand, USER_TITLE, setUserTitle } from '../../utils/jarvisBrain';
 import { StarkWorkshopView } from './hud/StarkWorkshopView';
 
@@ -30,6 +30,7 @@ export function JarvisHudView({
   const [activeHologram, setActiveHologram] = useState(null);
   const [activeSquadId, setActiveSquadId] = useState(null);
   const [wakeWordActive, setWakeWordActive] = useState(true); // Always-on Hands-free "javis" / "จาร์วิส"
+  const [isRedAlert, setIsRedAlert] = useState(false);
 
   const recognitionRef = useRef(null);
   const audioPlayerRef = useRef(null);
@@ -225,6 +226,13 @@ export function JarvisHudView({
           onOpenQuotation();
         } else if (result.action === 'CHANGE_THEME' && onSelectBrandTheme) {
           onSelectBrandTheme(result.brandId);
+        } else if (result.action === 'TOGGLE_RED_ALERT') {
+          setIsRedAlert(result.isAlert);
+          if (result.isAlert) {
+            playAlertSound();
+          } else {
+            playSuccessSound();
+          }
         }
 
         if (result.speech) {
@@ -386,6 +394,20 @@ export function JarvisHudView({
     }
   };
 
+  const handleToggleRedAlert = () => {
+    setIsRedAlert((prev) => {
+      const next = !prev;
+      if (next) {
+        playAlertSound();
+        speakThai(`เปิดระบบเตือนภัยฉุกเฉิน เรดอเลิร์ต ป้องกันทุกระดับเรียบร้อยครับ ${userTitle}`);
+      } else {
+        playSuccessSound();
+        speakThai(`ยกเลิกเตือนภัย กลับสู่สภาวะปกติเรียบร้อยครับ ${userTitle}`);
+      }
+      return next;
+    });
+  };
+
   return (
     <StarkWorkshopView
       userTitle={userTitle}
@@ -406,6 +428,8 @@ export function JarvisHudView({
       activeSquadId={activeSquadId}
       activeHologram={activeHologram}
       onDismissHologram={() => setActiveHologram(null)}
+      isRedAlert={isRedAlert}
+      onToggleRedAlert={handleToggleRedAlert}
     />
   );
 }

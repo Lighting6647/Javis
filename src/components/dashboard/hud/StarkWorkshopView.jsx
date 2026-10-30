@@ -16,6 +16,10 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  AlertTriangle,
+  Terminal,
+  Gauge,
+  Compass,
 } from 'lucide-react';
 import {
   playClickSound,
@@ -34,7 +38,7 @@ export function StarkWorkshopView({
   onToggleFullscreen,
   onOpenAdmin,
   onOpenCompany,
-  _messages,
+  _messages = [],
   onDispatchCommand,
   isListening,
   isSpeaking,
@@ -43,23 +47,70 @@ export function StarkWorkshopView({
   activeSquadId,
   activeHologram,
   onDismissHologram,
+  isRedAlert = false,
+  onToggleRedAlert,
 }) {
   const [inputText, setInputText] = useState('');
   const [isHumming, setIsHumming] = useState(false);
   const [selectedMockupProject, setSelectedMockupProject] = useState(null);
   const [hologramScale, setHologramScale] = useState(1);
   const [launcherStatus, setLauncherStatus] = useState('');
+  const [cameraPreset, setCameraPreset] = useState('iso'); // 'iso' | 'top' | 'pilot' | 'macro'
+  const [rightWingMode, setRightWingMode] = useState('turbine'); // 'turbine' | 'terminal'
+
+  // Feature 1: Live Terminal Log Stream State
+  const [terminalLogs, setTerminalLogs] = useState([
+    { id: 1, time: '12:00:01', tag: 'KERNEL', text: 'J.A.R.V.I.S. MK III Tactical Neural Kernel online.' },
+    { id: 2, time: '12:00:05', tag: 'GIT', text: 'HEAD: 2d99cc6 | D:\\Light repository synchronized.' },
+    { id: 3, time: '12:00:09', tag: 'QA', text: '15 Active Apps in D:\\Light. 7/7 Test suites passed (0 errors).' },
+    { id: 4, time: '12:00:15', tag: 'SECURITY', text: 'AES-256 Vault Cipher locked. SHA-256 anti-fraud active.' },
+    { id: 5, time: '12:00:22', tag: 'PIPELINE', text: '8 SaaS deals tracked. Expected revenue: ฿148,500 MRR.' },
+  ]);
 
   const canvasRef = useRef(null);
   const radarCanvasRef = useRef(null);
   const turbineCanvasRef = useRef(null);
   const particlesRef = useRef(null);
+  const terminalScrollRef = useRef(null);
 
-  // 3D Interactive Hologram Rotation State (Interactive via Mouse Drag)
+  // 3D Interactive Hologram Rotation State
   const rotXRef = useRef(0.18);
   const rotYRef = useRef(0);
   const isDraggingRef = useRef(false);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+
+  // Feature 1: Terminal Log Auto-Streamer
+  useEffect(() => {
+    const logPool = [
+      { tag: 'AI DEV', text: 'Next.js 16 + Vite Turbo runtime verified. Zero console warnings.' },
+      { tag: 'AI SALES', text: 'Krob POS & Inventory AI deal qualification: 84% close probability.' },
+      { tag: 'AI FINANCE', text: 'Cashflow status optimal. Net Margin 84.2%. Break-even 1.1 mo.' },
+      { tag: 'AI ADMIN', text: 'EMVCo PromptPay CRC-16 checksums verified for electronic billing.' },
+      { tag: 'TICKET HUB', text: 'ThaiTicket Concert Seat Map VIP Zone loaded. Anti-passback ready.' },
+      { tag: 'FITNESS IOT', text: 'HTML5 Web Camera scanner initialized. VIP member pass verified.' },
+      { tag: 'TELEMETRY', text: 'System load: 24% | Memory: 42% | Latency: 12ms stable.' },
+    ];
+
+    let count = 6;
+    const interval = setInterval(() => {
+      const nextLog = logPool[Math.floor(Math.random() * logPool.length)];
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      setTerminalLogs((prev) => [
+        ...prev.slice(-30),
+        { id: count++, time: timeStr, tag: nextLog.tag, text: nextLog.text },
+      ]);
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-scroll terminal
+  useEffect(() => {
+    if (terminalScrollRef.current) {
+      terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
+    }
+  }, [terminalLogs]);
 
   // Ambient Hum Lifecycle
   const toggleAmbientHum = () => {
@@ -102,7 +153,7 @@ export function StarkWorkshopView({
     }
   }, [activeHologram]);
 
-  // Determine if Hologram is currently active ("Interactive Holographic แสดง popขึ้น เมื่อมีการงาน")
+  // Determine if Hologram is currently active
   const isHologramActive = Boolean(
     selectedMockupProject ||
       activeHologram ||
@@ -110,7 +161,7 @@ export function StarkWorkshopView({
       hudState === 'SPEAKING'
   );
 
-  // Feature 3: One-Click Real Project Launcher for sir ไลท์ (Opens D:\Light folder)
+  // One-Click Real Project Launcher for sir ไลท์ (Opens D:\Light folder)
   const handleLaunchRealProject = async (projId) => {
     playSciFiBeep();
     setLauncherStatus(`กำลังเปิด ${projId.toUpperCase()}...`);
@@ -126,6 +177,36 @@ export function StarkWorkshopView({
       setTimeout(() => setLauncherStatus(''), 3000);
     }
   };
+
+  // Feature 2: Camera Presets for 3D Hologram
+  const applyCameraPreset = (preset) => {
+    playClickSound();
+    setCameraPreset(preset);
+    if (preset === 'iso') {
+      rotXRef.current = 0.18;
+      rotYRef.current = 0;
+      setHologramScale(1.0);
+    } else if (preset === 'top') {
+      rotXRef.current = 0.58;
+      rotYRef.current = 0;
+      setHologramScale(1.15);
+    } else if (preset === 'pilot') {
+      rotXRef.current = 0.05;
+      rotYRef.current = 0.35;
+      setHologramScale(1.25);
+    } else if (preset === 'macro') {
+      rotXRef.current = 0.0;
+      rotYRef.current = 0;
+      setHologramScale(1.65);
+    }
+  };
+
+  // Dynamic Theme Palette: Cyan (Normal) vs. Crimson (Emergency Red Alert)
+  const themePrimary = isRedAlert ? '#ef4444' : '#00f0ff';
+  const themeSecondary = isRedAlert ? '#f87171' : '#38bdf8';
+  const themeGlow = isRedAlert ? '#ef4444' : '#00f0ff';
+  const themeText = isRedAlert ? 'text-red-400' : 'text-cyan-300';
+  const themeBorder = isRedAlert ? 'border-red-500/40' : 'border-cyan-500/35';
 
   // =========================================================================
   // CANVAS 1: Tactical Sonar Radar Sweep (Left Panel)
@@ -153,7 +234,7 @@ export function StarkWorkshopView({
       ctx.save();
 
       // Outer Glow Border
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
+      ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.5)' : 'rgba(0, 240, 255, 0.45)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
@@ -162,7 +243,7 @@ export function StarkWorkshopView({
       // Concentric Range Rings
       [18, 36, 52, maxR].forEach((r, idx) => {
         ctx.beginPath();
-        ctx.strokeStyle = idx === 3 ? '#00f0ff' : 'rgba(0, 240, 255, 0.25)';
+        ctx.strokeStyle = idx === 3 ? themePrimary : isRedAlert ? 'rgba(239, 68, 68, 0.25)' : 'rgba(0, 240, 255, 0.25)';
         ctx.lineWidth = 1;
         ctx.setLineDash(idx % 2 === 0 ? [3, 3] : []);
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -171,7 +252,7 @@ export function StarkWorkshopView({
       ctx.setLineDash([]);
 
       // Crosshairs
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+      ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 240, 255, 0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cx - maxR, cy);
@@ -182,8 +263,8 @@ export function StarkWorkshopView({
 
       // Rotating Radar Sweep Cone
       const sweepGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, maxR);
-      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.5)');
-      sweepGrad.addColorStop(1, 'rgba(16, 185, 129, 0.2)');
+      sweepGrad.addColorStop(0, isRedAlert ? 'rgba(239, 68, 68, 0.55)' : 'rgba(0, 240, 255, 0.5)');
+      sweepGrad.addColorStop(1, isRedAlert ? 'rgba(249, 115, 22, 0.25)' : 'rgba(16, 185, 129, 0.2)');
 
       ctx.beginPath();
       ctx.moveTo(cx, cy);
@@ -197,7 +278,7 @@ export function StarkWorkshopView({
         const tx = cx + t.r * Math.cos(t.a);
         const ty = cy + t.r * Math.sin(t.a);
         ctx.beginPath();
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = isRedAlert ? '#ffedd5' : '#ef4444';
         ctx.shadowBlur = 8;
         ctx.shadowColor = '#ef4444';
         ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
@@ -205,18 +286,16 @@ export function StarkWorkshopView({
       });
 
       ctx.restore();
-      angle += 0.035;
+      angle += isRedAlert ? 0.05 : 0.035;
       animId = requestAnimationFrame(render);
     };
 
     render();
     return () => cancelAnimationFrame(animId);
-  }, []);
+  }, [isRedAlert, themePrimary]);
 
   // =========================================================================
   // CANVAS 2: TRUE INTERACTIVE 3D HOLOGRAPHIC GEODESIC ARC REACTOR (Center)
-  // Feature 1: Mouse Drag 3D Rotation + Wheel/Pinch Zoom
-  // Feature 2: Audio-Reactive Particle Dispersion Cloud
   // =========================================================================
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -224,7 +303,6 @@ export function StarkWorkshopView({
     const ctx = canvas.getContext('2d');
     let animationId;
 
-    // Feature 2: Initialize 72 Audio-Reactive Particle Cloud
     if (!particlesRef.current) {
       particlesRef.current = Array.from({ length: 72 }).map(() => ({
         theta: Math.random() * Math.PI * 2,
@@ -232,7 +310,7 @@ export function StarkWorkshopView({
         dist: 120 * (0.75 + Math.random() * 0.75),
         speed: 0.01 + Math.random() * 0.02,
         size: 1 + Math.random() * 2,
-        color: Math.random() > 0.4 ? '#00f0ff' : '#bae6fd',
+        color: Math.random() > 0.4 ? themePrimary : '#ffffff',
       }));
     }
 
@@ -242,11 +320,11 @@ export function StarkWorkshopView({
       const cy = canvas.height / 2;
       const baseR = 122 * hologramScale;
 
-      const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING';
-      const mainColor = isLive ? '#38bdf8' : '#00f0ff';
+      const isLive = hudState === 'LISTENING' || hudState === 'SPEAKING' || hudState === 'SEARCHING' || isRedAlert;
+      const mainColor = isRedAlert ? '#ef4444' : isLive ? '#38bdf8' : '#00f0ff';
 
       if (!isDraggingRef.current) {
-        rotYRef.current += isLive ? 0.025 : 0.012;
+        rotYRef.current += isLive ? 0.028 : 0.012;
       }
 
       const rx = rotXRef.current;
@@ -255,7 +333,7 @@ export function StarkWorkshopView({
       ctx.save();
 
       // 1. Outer Calibration 360-Degree Ring
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.4)' : 'rgba(0, 240, 255, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx, cy, baseR + 32, 0, Math.PI * 2);
@@ -268,7 +346,7 @@ export function StarkWorkshopView({
         const r1 = baseR + 32;
         const r2 = baseR + (isMajor ? 44 : 38);
         ctx.beginPath();
-        ctx.strokeStyle = isMajor ? '#38bdf8' : 'rgba(0, 240, 255, 0.3)';
+        ctx.strokeStyle = isMajor ? themeSecondary : isRedAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 240, 255, 0.3)';
         ctx.lineWidth = isMajor ? 2 : 1;
         ctx.moveTo(cx + r1 * Math.cos(rad), cy + r1 * Math.sin(rad));
         ctx.lineTo(cx + r2 * Math.cos(rad), cy + r2 * Math.sin(rad));
@@ -281,7 +359,7 @@ export function StarkWorkshopView({
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.shadowBlur = 18;
-      ctx.shadowColor = '#00f0ff';
+      ctx.shadowColor = themeGlow;
       ctx.arc(cx, cy, baseR + 18, ry, ry + Math.PI * 0.7);
       ctx.stroke();
 
@@ -291,7 +369,7 @@ export function StarkWorkshopView({
 
       // Counter-Rotating Inner Gyro Ring
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+      ctx.strokeStyle = isRedAlert ? 'rgba(248, 113, 113, 0.7)' : 'rgba(56, 189, 248, 0.7)';
       ctx.lineWidth = 2;
       ctx.arc(cx, cy, baseR + 4, -ry * 1.4, -ry * 1.4 + Math.PI * 0.85);
       ctx.stroke();
@@ -305,7 +383,9 @@ export function StarkWorkshopView({
         const zSquash = Math.sin(rx) * Math.sin(latAngle) * 0.35 + 0.35;
 
         ctx.beginPath();
-        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.5)' : 'rgba(0, 240, 255, 0.28)';
+        ctx.strokeStyle = isLive
+          ? isRedAlert ? 'rgba(248, 113, 113, 0.55)' : 'rgba(56, 189, 248, 0.5)'
+          : isRedAlert ? 'rgba(239, 68, 68, 0.28)' : 'rgba(0, 240, 255, 0.28)';
         ctx.lineWidth = 1;
         ctx.ellipse(cx, cy + yOffset, latR, latR * Math.abs(zSquash), 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -315,7 +395,9 @@ export function StarkWorkshopView({
       for (let i = 0; i < numLong; i++) {
         const longAngle = ry + (i / numLong) * Math.PI;
         ctx.beginPath();
-        ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.55)' : 'rgba(0, 240, 255, 0.3)';
+        ctx.strokeStyle = isLive
+          ? isRedAlert ? 'rgba(248, 113, 113, 0.6)' : 'rgba(56, 189, 248, 0.55)'
+          : isRedAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 240, 255, 0.3)';
         ctx.lineWidth = 1;
         ctx.ellipse(cx, cy, baseR * Math.sin(longAngle), baseR * Math.cos(rx), 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -331,15 +413,15 @@ export function StarkWorkshopView({
           const px = cx + latR * Math.cos(ptAngle);
           const py = cy + yOffset + latR * 0.35 * Math.sin(ptAngle);
           ctx.beginPath();
-          ctx.fillStyle = isLive ? '#bae6fd' : '#38bdf8';
+          ctx.fillStyle = isRedAlert ? '#fecaca' : isLive ? '#bae6fd' : '#38bdf8';
           ctx.shadowBlur = 10;
-          ctx.shadowColor = '#38bdf8';
+          ctx.shadowColor = themeGlow;
           ctx.arc(px, py, 1.8, 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
-      // Feature 2: Audio-Reactive Particle Cloud Rendering & Dispersion
+      // 4. Audio-Reactive Particle Cloud Rendering & Dispersion
       if (particlesRef.current) {
         particlesRef.current.forEach((p) => {
           p.theta += isLive ? p.speed * 2.8 : p.speed;
@@ -354,16 +436,15 @@ export function StarkWorkshopView({
             currentDist * Math.cos(p.phi) * Math.sin(p.theta + ry * 0.5) * Math.sin(rx) * 0.35;
 
           ctx.beginPath();
-          ctx.fillStyle = isLive ? '#ffffff' : p.color;
+          ctx.fillStyle = isRedAlert ? '#ef4444' : isLive ? '#ffffff' : p.color;
           ctx.shadowBlur = isLive ? 12 : 5;
-          ctx.shadowColor = '#00f0ff';
+          ctx.shadowColor = themeGlow;
           ctx.arc(px, py, isLive ? p.size * 1.35 : p.size, 0, Math.PI * 2);
           ctx.fill();
 
-          // Particle light streaks when active
           if (isLive && Math.random() > 0.78) {
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+            ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.45)' : 'rgba(0, 240, 255, 0.4)';
             ctx.lineWidth = 0.8;
             ctx.moveTo(cx, cy);
             ctx.lineTo(px, py);
@@ -372,7 +453,7 @@ export function StarkWorkshopView({
         });
       }
 
-      // 4. Center High-Energy Reactor Core Pulse
+      // 5. Center High-Energy Reactor Core Pulse
       const coreR = isLive ? 22 + Math.sin(ry * 8) * 4 : 16;
       const gradient = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR * 2.5);
       gradient.addColorStop(0, '#ffffff');
@@ -383,9 +464,9 @@ export function StarkWorkshopView({
       ctx.arc(cx, cy, coreR * 2.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // 5. Orbiting Multi-Agent Satellite Laser Nodes
+      // 6. Orbiting Multi-Agent Satellite Laser Nodes
       const agents = [
-        { id: 'manager', label: 'AI Manager', color: '#00f0ff' },
+        { id: 'manager', label: 'AI Manager', color: themePrimary },
         { id: 'sales', label: 'AI เลขา', color: '#10b981' },
         { id: 'dev', label: 'AI Dev', color: '#a855f7' },
         { id: 'accounting', label: 'AI บัญชี', color: '#f59e0b' },
@@ -428,9 +509,9 @@ export function StarkWorkshopView({
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [hudState, activeSquadId, hologramScale]);
+  }, [hudState, activeSquadId, hologramScale, isRedAlert, themeGlow, themePrimary, themeSecondary]);
 
-  // Feature 1: Mouse Drag Handlers for True 3D Interactive Hologram Rotation
+  // Mouse Drag Handlers
   const handleMouseDown = useCallback((e) => {
     isDraggingRef.current = true;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -449,7 +530,7 @@ export function StarkWorkshopView({
     isDraggingRef.current = false;
   }, []);
 
-  // Feature 1: Interactive Wheel-to-Zoom Handler
+  // Wheel-to-Zoom Handler
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     setHologramScale((prev) => {
@@ -477,7 +558,7 @@ export function StarkWorkshopView({
       ctx.save();
 
       // Outer Ticks Ring
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.4)' : 'rgba(0, 240, 255, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx, cy, r + 10, 0, Math.PI * 2);
@@ -489,7 +570,7 @@ export function StarkWorkshopView({
         const r1 = r + 10;
         const r2 = r + (isMajor ? 16 : 13);
         ctx.beginPath();
-        ctx.strokeStyle = isMajor ? '#38bdf8' : 'rgba(0, 240, 255, 0.3)';
+        ctx.strokeStyle = isMajor ? themeSecondary : isRedAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 240, 255, 0.3)';
         ctx.lineWidth = isMajor ? 1.5 : 1;
         ctx.moveTo(cx + r1 * Math.cos(rad), cy + r1 * Math.sin(rad));
         ctx.lineTo(cx + r2 * Math.cos(rad), cy + r2 * Math.sin(rad));
@@ -497,7 +578,7 @@ export function StarkWorkshopView({
       }
 
       // Middle Turbine Rim
-      ctx.strokeStyle = '#00f0ff';
+      ctx.strokeStyle = themePrimary;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -505,9 +586,9 @@ export function StarkWorkshopView({
 
       // 8 Rotating Radial Spokes
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeStyle = themeSecondary;
       ctx.shadowBlur = 8;
-      ctx.shadowColor = '#00f0ff';
+      ctx.shadowColor = themeGlow;
       for (let s = 0; s < 8; s++) {
         const spokeAngle = angle + (s / 8) * Math.PI * 2;
         ctx.beginPath();
@@ -521,18 +602,18 @@ export function StarkWorkshopView({
       ctx.arc(cx, cy, 9, 0, Math.PI * 2);
       ctx.fillStyle = '#020b1e';
       ctx.fill();
-      ctx.strokeStyle = '#67e8f9';
+      ctx.strokeStyle = isRedAlert ? '#fca5a5' : '#67e8f9';
       ctx.lineWidth = 2;
       ctx.stroke();
 
       ctx.restore();
-      angle += 0.04;
+      angle += isRedAlert ? 0.06 : 0.04;
       animId = requestAnimationFrame(render);
     };
 
     render();
     return () => cancelAnimationFrame(animId);
-  }, []);
+  }, [isRedAlert, themeGlow, themePrimary, themeSecondary]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -558,9 +639,9 @@ export function StarkWorkshopView({
         tag: 'OPS-01 // ECOSYSTEM',
         title: '15 ระบบออนไลน์ (D:\\LIGHT)',
         status: '100% HEALTH',
-        statusColor: 'text-emerald-400',
-        borderColor: 'border-cyan-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        statusColor: isRedAlert ? 'text-amber-400' : 'text-emerald-400',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-cyan-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Total Apps', val: '15 Webapps' },
           { label: 'Core Runtimes', val: 'Node 22 / Vite' },
@@ -577,9 +658,9 @@ export function StarkWorkshopView({
         tag: 'SALES-02 // DEAL PIPELINE',
         title: 'ยอดขาย & Pipeline SaaS',
         status: '฿148,500 MRR',
-        statusColor: 'text-cyan-300',
-        borderColor: 'border-emerald-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        statusColor: isRedAlert ? 'text-red-300' : 'text-cyan-300',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-emerald-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Active Leads', val: '8 Deals' },
           { label: 'POS Light', val: '฿390 / เดือน' },
@@ -597,8 +678,8 @@ export function StarkWorkshopView({
         title: 'สัญญา & ใบเสนอราคา QU',
         status: 'PROMPTPAY EMVCo',
         statusColor: 'text-amber-400',
-        borderColor: 'border-amber-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-amber-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Pending QU', val: '4 ฉบับพร้อมส่ง' },
           { label: 'NDA / Contract', val: '2 สัญญาพร้อมเซ็น' },
@@ -611,7 +692,7 @@ export function StarkWorkshopView({
         launchId: 'dashboard',
       },
     ],
-    []
+    [isRedAlert]
   );
 
   const companyCardsRight = useMemo(
@@ -621,9 +702,9 @@ export function StarkWorkshopView({
         tag: 'FIN-01 // CONTROLLER',
         title: 'กำไรสุทธิ & สภาพคล่อง',
         status: 'MARGIN 84.2%',
-        statusColor: 'text-emerald-400',
-        borderColor: 'border-emerald-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        statusColor: isRedAlert ? 'text-amber-400' : 'text-emerald-400',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-emerald-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Net Margin', val: '84.2%' },
           { label: 'Break-even', val: '1.1 เดือน' },
@@ -640,9 +721,9 @@ export function StarkWorkshopView({
         tag: 'TECH-02 // ARCHITECTURE',
         title: 'วิศวกรรม & สถาปัตยกรรม',
         status: '0 LINT ERRORS',
-        statusColor: 'text-purple-400',
-        borderColor: 'border-purple-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        statusColor: isRedAlert ? 'text-red-300' : 'text-purple-400',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-purple-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Framework', val: 'Next.js 16 / Vite' },
           { label: 'ORM & DB', val: 'Prisma / SQLite' },
@@ -658,10 +739,10 @@ export function StarkWorkshopView({
         id: 'governance',
         tag: 'GOV-03 // GOVERNANCE',
         title: `ผู้บริหาร: ${userTitle}`,
-        status: 'DIRECT COMMAND',
-        statusColor: 'text-cyan-300',
-        borderColor: 'border-cyan-500/35',
-        bgColor: 'bg-[#020d28]/85',
+        status: isRedAlert ? 'COMBAT OVERRIDE' : 'DIRECT COMMAND',
+        statusColor: isRedAlert ? 'text-red-400' : 'text-cyan-300',
+        borderColor: isRedAlert ? 'border-red-500/40' : 'border-cyan-500/35',
+        bgColor: isRedAlert ? 'bg-[#1a0808]/85' : 'bg-[#020d28]/85',
         metrics: [
           { label: 'Authority', val: userTitle },
           { label: 'Hands-free Wake', val: 'จาร์วิส / javis' },
@@ -674,35 +755,47 @@ export function StarkWorkshopView({
         launchId: 'ticket',
       },
     ],
-    [userTitle]
+    [isRedAlert, userTitle]
   );
 
   return (
     <div
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="relative w-full min-h-screen overflow-hidden bg-[#010512] text-slate-100 font-mono select-none flex flex-col justify-between"
+      className={`relative w-full min-h-screen overflow-hidden ${
+        isRedAlert ? 'bg-[#0b0205]' : 'bg-[#010512]'
+      } text-slate-100 font-mono select-none flex flex-col justify-between transition-colors duration-700`}
     >
       {/* ============================================================ */}
       {/* 0. PURE 3D HOLOGRAPHIC CYBERSPACE (ZERO STATIC JPG IMAGE)    */}
       {/* ============================================================ */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
-        {/* Central High-Intensity Cyan Core Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] h-[760px] rounded-full bg-cyan-500/10 blur-[140px] pointer-events-none" />
+        {/* Central High-Intensity Radial Glow */}
+        <div
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[780px] h-[780px] rounded-full blur-[140px] pointer-events-none transition-all duration-700 ${
+            isRedAlert ? 'bg-red-600/18 animate-pulse' : 'bg-cyan-500/10'
+          }`}
+        />
         {/* Holographic Isometric Grid */}
-        <div className="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#00f0ff18_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff18_1px,transparent_1px)] bg-[size:44px_44px]" />
+        <div
+          className={`absolute inset-0 opacity-15 bg-[size:44px_44px] ${
+            isRedAlert
+              ? 'bg-[linear-gradient(to_right,#ef444422_1px,transparent_1px),linear-gradient(to_bottom,#ef444422_1px,transparent_1px)]'
+              : 'bg-[linear-gradient(to_right,#00f0ff18_1px,transparent_1px),linear-gradient(to_bottom,#00f0ff18_1px,transparent_1px)]'
+          }`}
+        />
         {/* Deep Dark Cyberspace Vignette */}
-        <div className="absolute inset-0 bg-radial from-transparent via-[#010512]/60 to-[#010512]" />
+        <div className="absolute inset-0 bg-radial from-transparent via-black/60 to-black" />
       </div>
 
       {/* ============================================================ */}
       {/* 1. CURVED HUD LADDERS & SCALES (Left 16.7 & Right 1.4, 0.6)  */}
       {/* ============================================================ */}
       <div className="pointer-events-none fixed left-1.5 top-1/2 -translate-y-1/2 z-30 hidden 2xl:flex items-center gap-1 opacity-75">
-        <span className="text-[11px] font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+        <span className={`text-[11px] font-bold ${themeText} drop-shadow-[0_0_8px_${themeGlow}]`}>
           16.7
         </span>
-        <svg className="w-9 h-[440px] stroke-cyan-400 fill-none" viewBox="0 0 48 520">
+        <svg className={`w-9 h-[440px] stroke-${isRedAlert ? 'red' : 'cyan'}-400 fill-none`} viewBox="0 0 48 520">
           <path d="M 40 10 Q 6 260, 40 510" strokeWidth="2.5" strokeLinecap="round" />
           {Array.from({ length: 24 }).map((_, i) => {
             const y = 20 + i * 20;
@@ -717,7 +810,7 @@ export function StarkWorkshopView({
                 x2={x2}
                 y2={y}
                 strokeWidth={isMajor ? 2 : 1}
-                stroke={isMajor ? '#38bdf8' : 'rgba(56,189,248,0.4)'}
+                stroke={isMajor ? themeSecondary : isRedAlert ? 'rgba(248,113,113,0.4)' : 'rgba(56,189,248,0.4)'}
               />
             );
           })}
@@ -725,7 +818,7 @@ export function StarkWorkshopView({
       </div>
 
       <div className="pointer-events-none fixed right-1.5 top-1/2 -translate-y-1/2 z-30 hidden 2xl:flex items-center gap-1 opacity-75">
-        <svg className="w-9 h-[440px] stroke-cyan-400 fill-none" viewBox="0 0 48 520">
+        <svg className={`w-9 h-[440px] stroke-${isRedAlert ? 'red' : 'cyan'}-400 fill-none`} viewBox="0 0 48 520">
           <path d="M 8 10 Q 42 260, 8 510" strokeWidth="2.5" strokeLinecap="round" />
           {Array.from({ length: 24 }).map((_, i) => {
             const y = 20 + i * 20;
@@ -740,12 +833,12 @@ export function StarkWorkshopView({
                 x2={x2}
                 y2={y}
                 strokeWidth={isMajor ? 2 : 1}
-                stroke={isMajor ? '#38bdf8' : 'rgba(56,189,248,0.4)'}
+                stroke={isMajor ? themeSecondary : isRedAlert ? 'rgba(248,113,113,0.4)' : 'rgba(56,189,248,0.4)'}
               />
             );
           })}
         </svg>
-        <div className="flex flex-col text-[10px] font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+        <div className={`flex flex-col text-[10px] font-bold ${themeText} drop-shadow-[0_0_8px_${themeGlow}]`}>
           <span>1.4</span>
           <span className="mt-8">0.6</span>
           <span className="mt-16">2.17</span>
@@ -753,39 +846,72 @@ export function StarkWorkshopView({
       </div>
 
       {/* ============================================================ */}
-      {/* 2. TOP HUD HEADER BAR (6 Circular Nodes + Identity)          */}
+      {/* 2. TOP HUD HEADER BAR (6 Nodes + Feature 3: Red Alert)       */}
       {/* ============================================================ */}
-      <header className="relative z-20 border-b border-cyan-500/30 bg-[#020b22]/90 backdrop-blur-md px-4 lg:px-8 py-2.5 shadow-2xl">
+      <header
+        className={`relative z-20 border-b ${
+          isRedAlert ? 'border-red-500/50 bg-[#1e0508]/90' : 'border-cyan-500/30 bg-[#020b22]/90'
+        } backdrop-blur-md px-4 lg:px-8 py-2.5 shadow-2xl transition-colors duration-500`}
+      >
         <div className="flex items-center justify-between">
           {/* Identity & 6 Circular Nodes */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-lg font-black tracking-[0.25em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
+              <span className={`text-lg font-black tracking-[0.25em] ${themeText} drop-shadow-[0_0_12px_${themeGlow}]`}>
                 J . A . R . V . I . S .
               </span>
-              <span className="rounded border border-cyan-400/60 bg-cyan-950/80 px-2 py-0.5 text-[11px] font-bold text-cyan-200">
-                TACTICAL HUD
+              <span
+                className={`rounded border px-2 py-0.5 text-[11px] font-bold ${
+                  isRedAlert
+                    ? 'border-red-400 bg-red-950/90 text-red-200 shadow-[0_0_10px_#ef4444]'
+                    : 'border-cyan-400/60 bg-cyan-950/80 text-cyan-200'
+                }`}
+              >
+                {isRedAlert ? 'COMBAT HUD // MARK 85' : 'TACTICAL HUD'}
               </span>
             </div>
 
-            {/* 6 Circular Nodes: ◯ ◯ ◯ ◯ ◯ ◯ */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/25 bg-cyan-950/40">
+            {/* 6 Circular Nodes */}
+            <div
+              className={`hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border ${
+                isRedAlert ? 'border-red-500/30 bg-red-950/40' : 'border-cyan-500/25 bg-cyan-950/40'
+              }`}
+            >
               {[1, 2, 3, 4, 5, 6].map((node) => (
                 <div
                   key={node}
                   className={`h-3 w-3 rounded-full border transition-all ${
                     node <= 4
-                      ? 'border-cyan-400 bg-cyan-400/30 shadow-[0_0_8px_#00f0ff]'
+                      ? isRedAlert
+                        ? 'border-red-400 bg-red-400/50 shadow-[0_0_8px_#ef4444]'
+                        : 'border-cyan-400 bg-cyan-400/30 shadow-[0_0_8px_#00f0ff]'
                       : 'border-slate-700 bg-slate-900/60'
                   }`}
                 />
               ))}
-              <span className="text-[10px] text-cyan-300 font-bold ml-1">GRID [ALPHA] ACTIVE</span>
+              <span className={`text-[10px] ${themeText} font-bold ml-1`}>
+                {isRedAlert ? 'DEFCON 1 // LOCKDOWN' : 'GRID [ALPHA] ACTIVE'}
+              </span>
             </div>
           </div>
 
           {/* Controls for sir ไลท์ */}
           <div className="flex items-center gap-2 sm:gap-3 text-xs">
+            {/* Feature 3: Emergency Red Alert Mode Toggle */}
+            <button
+              type="button"
+              onClick={onToggleRedAlert}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-all cursor-pointer ${
+                isRedAlert
+                  ? 'border-red-400 bg-red-600 text-white animate-pulse shadow-[0_0_16px_rgba(239,68,68,0.8)]'
+                  : 'border-red-500/40 bg-red-950/40 text-red-300 hover:bg-red-900/60'
+              }`}
+              title="สลับโหมดสีแดงฉุกเฉิน / Mark 85 Combat Mode"
+            >
+              <AlertTriangle className={`h-3.5 w-3.5 ${isRedAlert ? 'text-white' : 'text-red-400'}`} />
+              <span>{isRedAlert ? 'RED ALERT: ON' : 'RED ALERT: OFF'}</span>
+            </button>
+
             {/* Launcher Status Banner */}
             {launcherStatus && (
               <span className="hidden md:inline-flex items-center gap-1 rounded bg-cyan-950/80 border border-cyan-400 px-2.5 py-0.5 text-[10px] text-cyan-200 animate-pulse">
@@ -808,7 +934,7 @@ export function StarkWorkshopView({
               {isHumming ? (
                 <>
                   <Activity className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
-                  <span>ARC HUM: ON (55Hz)</span>
+                  <span>ARC HUM: ON</span>
                 </>
               ) : (
                 <>
@@ -822,7 +948,9 @@ export function StarkWorkshopView({
             <button
               type="button"
               onClick={onCycleTitle}
-              className="flex items-center gap-1.5 rounded-full border border-cyan-400/70 bg-cyan-950/90 px-3.5 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-900/70 transition-all shadow-[0_0_12px_rgba(0,240,255,0.4)] cursor-pointer"
+              className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-bold transition-all shadow-[0_0_12px_rgba(0,240,255,0.4)] cursor-pointer ${
+                isRedAlert ? 'border-red-400 bg-red-950/90 text-red-200' : 'border-cyan-400/70 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900/70'
+              }`}
               title="คลิกสลับคำเรียก: sir ไลท์ / ท่านประธาน / ผู้การ / คุณผู้ชาย"
             >
               <span>🎖️ {userTitle}</span>
@@ -848,21 +976,25 @@ export function StarkWorkshopView({
               onClick={onToggleWakeWord}
               className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-all cursor-pointer ${
                 wakeWordActive
-                  ? 'border-cyan-400/80 bg-cyan-950/90 text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.5)]'
+                  ? isRedAlert ? 'border-red-400 bg-red-950/90 text-red-200' : 'border-cyan-400/80 bg-cyan-950/90 text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.5)]'
                   : 'border-slate-800 bg-slate-900 text-slate-500'
               }`}
               title="ระบบจับเสียงอัตโนมัติ 'จาร์วิส' / 'javis'"
             >
               <span
                 className={`h-2 w-2 rounded-full ${
-                  wakeWordActive ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'
+                  wakeWordActive ? (isRedAlert ? 'bg-red-400 animate-ping' : 'bg-cyan-400 animate-ping') : 'bg-slate-600'
                 }`}
               />
               <span>WAKE: JAVIS {wakeWordActive ? '[ON]' : '[OFF]'}</span>
             </button>
 
             {/* Clock */}
-            <div className="bg-slate-900/95 border border-cyan-500/40 px-3 py-1 rounded-lg text-cyan-300 font-bold text-xs">
+            <div
+              className={`border px-3 py-1 rounded-lg font-bold text-xs ${
+                isRedAlert ? 'bg-red-950/80 border-red-500/50 text-red-300' : 'bg-slate-900/95 border-cyan-500/40 text-cyan-300'
+              }`}
+            >
               🕒 {currentTime || '03:25:18 AM'}
             </div>
 
@@ -900,37 +1032,60 @@ export function StarkWorkshopView({
         </div>
       </header>
 
+      {/* Emergency Red Alert Warning Banner */}
+      {isRedAlert && (
+        <div className="relative z-10 bg-red-600/90 border-b border-red-400 text-white py-1 px-4 text-center text-xs font-black tracking-widest flex items-center justify-center gap-2 shadow-[0_0_20px_#ef4444] animate-pulse">
+          <AlertTriangle className="h-4 w-4 text-amber-300 animate-spin" />
+          <span>⚠️ COMBAT PROTOCOL ACTIVE // DEFENSE SHIELDS 100% // ALL 15 SYSTEMS LOCKED FOR SIR ไลท์</span>
+          <button
+            type="button"
+            onClick={onToggleRedAlert}
+            className="ml-3 px-2 py-0.5 bg-black text-red-300 rounded text-[10px] border border-red-400 hover:bg-red-950"
+          >
+            DISENGAGE
+          </button>
+        </div>
+      )}
+
       {/* ============================================================ */}
       {/* 3. MULTI-AGENT SUB-BAR (Pipeline Telemetry)                 */}
       {/* ============================================================ */}
-      <div className="relative z-10 mx-4 lg:mx-8 mt-2 flex items-center justify-between border border-cyan-500/25 bg-[#020d28]/80 px-4 py-1 rounded-xl backdrop-blur-md overflow-x-auto scrollbar-none shadow-md">
+      <div
+        className={`relative z-10 mx-4 lg:mx-8 mt-2 flex items-center justify-between border ${themeBorder} ${
+          isRedAlert ? 'bg-[#1e0508]/80' : 'bg-[#020d28]/80'
+        } px-4 py-1 rounded-xl backdrop-blur-md overflow-x-auto scrollbar-none shadow-md`}
+      >
         <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
-            <Radio className="h-3 w-3 text-cyan-400 animate-pulse" />
+          <span className={`${themeText} font-bold uppercase tracking-wider flex items-center gap-1.5 text-[11px]`}>
+            <Radio className="h-3 w-3 animate-pulse" />
             MULTI-AGENT HUB:
           </span>
-          <span className="rounded-full border border-cyan-400/70 bg-cyan-950/80 px-2.5 py-0.5 text-cyan-200 text-[10px]">
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[10px] ${
+              isRedAlert ? 'border-red-400 bg-red-950 text-red-200' : 'border-cyan-400/70 bg-cyan-950/80 text-cyan-200'
+            }`}
+          >
             AI Manager
           </span>
-          <span className="text-cyan-500 text-xs">➔</span>
+          <span className="text-slate-500 text-xs">➔</span>
           <span className="rounded-full border border-emerald-500/50 bg-emerald-950/50 px-2.5 py-0.5 text-emerald-300 text-[10px]">
             AI เลขา (Sales)
           </span>
-          <span className="text-cyan-500 text-xs">➔</span>
+          <span className="text-slate-500 text-xs">➔</span>
           <span className="rounded-full border border-purple-500/50 bg-purple-950/50 px-2.5 py-0.5 text-purple-300 text-[10px]">
             AI Dev (Tech)
           </span>
-          <span className="text-cyan-500 text-xs">➔</span>
+          <span className="text-slate-500 text-xs">➔</span>
           <span className="rounded-full border border-amber-500/50 bg-amber-950/50 px-2.5 py-0.5 text-amber-300 text-[10px]">
             AI บัญชี (Finance)
           </span>
-          <span className="text-cyan-500 text-xs">➔</span>
+          <span className="text-slate-500 text-xs">➔</span>
           <span className="rounded-full border border-blue-500/50 bg-blue-950/50 px-2.5 py-0.5 text-blue-300 text-[10px]">
             AI Admin (Docs)
           </span>
         </div>
-        <span className="text-cyan-300/80 text-[10px] hidden lg:inline">
-          BEARING: 284° // DEPTH: -450m // BEACON LOCK: 4/4
+        <span className={`${themeText} text-[10px] hidden lg:inline`}>
+          {isRedAlert ? 'COMBAT STATUS: 100% SHIELD // 15 ENGINES READY' : 'BEARING: 284° // DEPTH: -450m // BEACON LOCK: 4/4'}
         </span>
       </div>
 
@@ -943,15 +1098,21 @@ export function StarkWorkshopView({
         {/* ------------------------------------------------------------ */}
         <div className="w-full 2xl:w-84 flex flex-col space-y-2.5 shrink-0">
           {/* Tactical Radar Widget */}
-          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/90 p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl">
+          <div
+            className={`rounded-2xl border ${themeBorder} ${
+              isRedAlert ? 'bg-[#180508]/90' : 'bg-[#020d28]/90'
+            } p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl`}
+          >
             <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-black tracking-wider text-cyan-300 block">
+                <span className={`text-[11px] font-black tracking-wider ${themeText} block`}>
                   TACTICAL RADAR/SONAR ARRAY
                 </span>
                 <span className="text-[9px] text-slate-400">BEARING: 284° | DEPTH: -450m</span>
               </div>
-              <span className="text-[10px] text-emerald-400 font-bold">12 CONTACTS</span>
+              <span className={`text-[10px] font-bold ${isRedAlert ? 'text-red-400' : 'text-emerald-400'}`}>
+                12 CONTACTS
+              </span>
             </div>
 
             <div className="flex items-center justify-between">
@@ -964,7 +1125,7 @@ export function StarkWorkshopView({
               <div className="flex-1 ml-3 text-[10px] space-y-1 bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
                 <div className="flex justify-between">
                   <span className="text-slate-400">RANGE:</span>
-                  <span className="text-cyan-300 font-bold">4.8 KM</span>
+                  <span className={`font-bold ${themeText}`}>4.8 KM</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">ETA:</span>
@@ -976,7 +1137,7 @@ export function StarkWorkshopView({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">HUD:</span>
-                  <span className="text-cyan-400 font-bold">83% OPTIMAL</span>
+                  <span className={`font-bold ${themeText}`}>83% OPTIMAL</span>
                 </div>
               </div>
             </div>
@@ -984,7 +1145,7 @@ export function StarkWorkshopView({
 
           {/* 3 Company Operation Cards (Left Side) */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-[10px] text-cyan-400 px-1 font-bold">
+            <div className={`flex items-center justify-between text-[10px] ${themeText} px-1 font-bold`}>
               <span>COMPANY TELEMETRY // LEFT WING</span>
               <span className="text-slate-400">3 CARDS ONLINE</span>
             </div>
@@ -1001,7 +1162,7 @@ export function StarkWorkshopView({
                 </div>
                 <div className="text-xs font-bold text-cyan-200 group-hover:text-cyan-300 mb-1.5 flex items-center justify-between">
                   <span>{card.title}</span>
-                  <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className={`text-[10px] ${themeText} font-mono flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
                     <Sparkles className="h-2.5 w-2.5" /> ฉายโฮโลแกรม →
                   </span>
                 </div>
@@ -1013,7 +1174,6 @@ export function StarkWorkshopView({
                     </div>
                   ))}
                 </div>
-                {/* Feature 3: Quick Open Folder Button */}
                 <div className="mt-1.5 pt-1 border-t border-cyan-500/15 flex items-center justify-between text-[9px]">
                   <span className="text-slate-500">คลิกการ์ดเพื่อขยาย 3D</span>
                   <button
@@ -1022,7 +1182,7 @@ export function StarkWorkshopView({
                       e.stopPropagation();
                       handleLaunchRealProject(card.launchId);
                     }}
-                    className="flex items-center gap-1 text-cyan-400 hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30"
+                    className={`flex items-center gap-1 ${themeText} hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30`}
                   >
                     <FolderOpen className="h-2.5 w-2.5" />
                     <span>เปิดโฟลเดอร์</span>
@@ -1035,20 +1195,39 @@ export function StarkWorkshopView({
 
         {/* ------------------------------------------------------------ */}
         {/* CENTER POD: TRUE INTERACTIVE 3D HOLOGRAPHIC SPHERE           */}
-        {/* Feature 1: Mouse Drag 3D Rotation + Wheel Zoom               */}
-        {/* Feature 2: Audio-Reactive Particle Spark Dispersion          */}
-        {/* Feature 3: One-Click Real Project Launcher                   */}
+        {/* Feature 2: Camera Presets (ISO, TOP, PILOT, MACRO)           */}
         {/* ------------------------------------------------------------ */}
         <div className="relative flex-1 flex flex-col items-center justify-center py-1">
           {/* Header Degree Coordinates */}
-          <div className="text-[11px] font-mono font-bold tracking-[0.25em] text-cyan-400 mb-1 text-center drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+          <div className={`text-[11px] font-mono font-bold tracking-[0.25em] ${themeText} mb-1 text-center drop-shadow-[0_0_8px_${themeGlow}]`}>
             000°-359° // GRID [ALPHA] ACTIVE // BEACON LOCK [4/4]
           </div>
           <div className="text-[10px] font-mono tracking-wider text-slate-400 mb-2 flex items-center gap-2">
-            <span>CORE STATUS: STABLE // ENERGY: 98.4%</span>
-            {/* Feature 1: Interactive Zoom & Drag Controller */}
+            <span>CORE: {isRedAlert ? 'OVERCHARGED (140%)' : 'STABLE (98.4%)'}</span>
+            <span className="text-slate-600">|</span>
+
+            {/* Feature 2: Camera Presets HUD Bar */}
             <div className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-950/80 px-2 py-0.5 text-[9px] text-cyan-200 shadow-sm backdrop-blur-md">
-              <span className="text-slate-400">🖱️ หมุน 3D</span>
+              <Compass className="h-3 w-3 text-cyan-400" />
+              {[
+                { id: 'iso', label: 'ISO 3D' },
+                { id: 'top', label: 'TOP-DOWN' },
+                { id: 'pilot', label: 'PILOT' },
+                { id: 'macro', label: 'CORE' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyCameraPreset(p.id)}
+                  className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                    cameraPreset === p.id
+                      ? isRedAlert ? 'bg-red-500 text-white font-bold' : 'bg-cyan-500 text-slate-950 font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
               <span className="text-slate-600">|</span>
               <button
                 type="button"
@@ -1058,7 +1237,7 @@ export function StarkWorkshopView({
               >
                 <ZoomOut className="h-2.5 w-2.5" />
               </button>
-              <span className="font-bold text-cyan-300 font-mono">{(hologramScale * 100).toFixed(0)}%</span>
+              <span className={`font-bold ${themeText} font-mono`}>{(hologramScale * 100).toFixed(0)}%</span>
               <button
                 type="button"
                 onClick={() => setHologramScale((s) => Math.min(1.85, Number((s + 0.15).toFixed(2))))}
@@ -1069,9 +1248,9 @@ export function StarkWorkshopView({
               </button>
               <button
                 type="button"
-                onClick={() => setHologramScale(1)}
+                onClick={() => applyCameraPreset('iso')}
                 className="hover:text-white px-1 ml-0.5"
-                title="รีเซ็ตขนาด 1.0x"
+                title="รีเซ็ตมุมมองและขนาด"
               >
                 <RotateCcw className="h-2.5 w-2.5" />
               </button>
@@ -1100,10 +1279,12 @@ export function StarkWorkshopView({
               className={`absolute flex h-16 w-16 items-center justify-center rounded-full transition-all shadow-2xl backdrop-blur-md cursor-pointer ${
                 isListening
                   ? 'bg-red-500/35 border-2 border-red-400 text-red-200 animate-pulse shadow-red-500/60'
+                  : isRedAlert
+                  ? 'bg-red-600/30 border-2 border-red-400 text-red-200 hover:bg-red-600/50 hover:scale-110 shadow-red-500/70'
                   : 'bg-cyan-500/25 border-2 border-cyan-400/80 text-cyan-200 hover:bg-cyan-500/40 hover:scale-110 shadow-cyan-500/50'
               }`}
             >
-              <Mic className={`h-7 w-7 ${isListening ? 'text-red-300' : 'text-cyan-200'}`} />
+              <Mic className={`h-7 w-7 ${isListening || isRedAlert ? 'text-red-300' : 'text-cyan-200'}`} />
             </button>
 
             {/* ============================================================ */}
@@ -1116,13 +1297,16 @@ export function StarkWorkshopView({
                 }}
                 className="absolute -top-10 z-40 w-[96%] max-w-[560px] animate-fade-in pointer-events-auto"
               >
-                <div className="relative rounded-2xl border-2 border-cyan-400/90 bg-[#020b22]/95 p-4 shadow-[0_0_60px_rgba(0,240,255,0.6)] backdrop-blur-2xl">
-                  {/* Hologram Corner Brackets */}
-                  <div className="absolute top-1 left-2 text-[8px] text-cyan-400/80 font-mono">
+                <div
+                  className={`relative rounded-2xl border-2 ${
+                    isRedAlert ? 'border-red-500/90 bg-[#160406]/95 shadow-[0_0_60px_rgba(239,68,68,0.6)]' : 'border-cyan-400/90 bg-[#020b22]/95 shadow-[0_0_60px_rgba(0,240,255,0.6)]'
+                  } p-4 backdrop-blur-2xl`}
+                >
+                  <div className={`absolute top-1 left-2 text-[8px] ${themeText} font-mono`}>
                     ┌ INTERACTIVE 3D HOLOGRAM // 4K ┐
                   </div>
-                  <div className="absolute top-1 right-2 text-[8px] text-cyan-400/80 font-mono">
-                    └ AUDIO-REACTIVE PARTICLES: ON ┘
+                  <div className={`absolute top-1 right-2 text-[8px] ${themeText} font-mono`}>
+                    └ {isRedAlert ? 'RED ALERT COMBAT SHIELD' : 'MULTI-AGENT SYNCHRONIZED'} ┘
                   </div>
 
                   {/* Header */}
@@ -1138,7 +1322,9 @@ export function StarkWorkshopView({
                           {selectedMockupProject === 'quote' && 'FINANCE & BILLING // EMVCo'}
                           {!selectedMockupProject && 'AI MANAGER DISPATCH // LIVE'}
                         </span>
-                        <span className="text-[10px] text-emerald-400 font-bold">● LIVE INTERACTION</span>
+                        <span className={`text-[10px] font-bold ${isRedAlert ? 'text-red-400' : 'text-emerald-400'}`}>
+                          ● LIVE INTERACTION
+                        </span>
                       </div>
                       <h3 className="mt-1 text-sm font-black tracking-wider text-cyan-100 flex items-center gap-1.5">
                         <Sparkles className="h-4 w-4 text-cyan-300 animate-spin" />
@@ -1151,24 +1337,21 @@ export function StarkWorkshopView({
                         {!selectedMockupProject && (activeHologram?.title || 'J.A.R.V.I.S. INTELLIGENCE')}
                       </h3>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playClickSound();
-                          setSelectedMockupProject(null);
-                          if (onDismissHologram) onDismissHologram();
-                        }}
-                        className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-white hover:border-red-400 cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        setSelectedMockupProject(null);
+                        if (onDismissHologram) onDismissHologram();
+                      }}
+                      className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-white hover:border-red-400 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
 
-                  {/* Simulated Screen Mockup Content */}
+                  {/* Mockup Display */}
                   <div className="rounded-xl border border-cyan-500/40 bg-slate-950/90 p-3 mb-2.5 shadow-inner">
-                    {/* POS Mockup */}
                     {selectedMockupProject === 'pos' && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1196,7 +1379,6 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Ticket Mockup */}
                     {selectedMockupProject === 'ticket' && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1218,7 +1400,6 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Fit Mockup */}
                     {selectedMockupProject === 'fit' && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1237,7 +1418,6 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Pass Vault Mockup */}
                     {selectedMockupProject === 'pass' && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1257,7 +1437,6 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Audit Report Mockup */}
                     {(selectedMockupProject === 'audit' || (!selectedMockupProject && activeHologram?.details)) && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1280,7 +1459,6 @@ export function StarkWorkshopView({
                       </div>
                     )}
 
-                    {/* Quotation Mockup */}
                     {selectedMockupProject === 'quote' && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1">
@@ -1337,10 +1515,9 @@ export function StarkWorkshopView({
                     </div>
                   </div>
 
-                  {/* Hologram Action Buttons (Including Feature 3: One-Click Real Project Launcher) */}
+                  {/* Action Buttons */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-cyan-500/30 text-xs">
                     <div className="flex items-center gap-2">
-                      {/* Feature 3: Launch Project Folder in D:\Light */}
                       <button
                         type="button"
                         onClick={() => handleLaunchRealProject(selectedMockupProject || 'pos')}
@@ -1357,7 +1534,9 @@ export function StarkWorkshopView({
                           playSciFiBeep();
                           onDispatchCommand('ออกใบเสนอราคา');
                         }}
-                        className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-cyan-400 cursor-pointer shadow-md"
+                        className={`flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11px] font-bold text-slate-950 cursor-pointer shadow-md ${
+                          isRedAlert ? 'bg-red-500 hover:bg-red-400' : 'bg-cyan-500 hover:bg-cyan-400'
+                        }`}
                       >
                         <FileText className="h-3.5 w-3.5" />
                         <span>ออกใบเสนอราคา</span>
@@ -1396,23 +1575,23 @@ export function StarkWorkshopView({
 
           {/* Status Label */}
           <div className="mt-2 text-center">
-            <span className="text-xs font-black tracking-[0.3em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
+            <span className={`text-xs font-black tracking-[0.3em] ${themeText} drop-shadow-[0_0_12px_${themeGlow}]`}>
               {hudState === 'LISTENING' && 'L I S T E N I N G . . .'}
               {hudState === 'SEARCHING' && 'M U L T I - A G E N T   S Y N C . . .'}
               {hudState === 'SPEAKING' && 'S P E A K I N G . . .'}
-              {hudState === 'READY' && 'L I S T E N I N G'}
+              {hudState === 'READY' && (isRedAlert ? 'C O M B A T   S H I E L D   A C T I V E' : 'L I S T E N I N G')}
             </span>
           </div>
 
           {/* Undulating Sine Waveform */}
           <div className="mt-1 flex items-center justify-center">
             <svg
-              className="w-56 h-7 stroke-cyan-400 fill-none drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]"
+              className={`w-56 h-7 stroke-${isRedAlert ? 'red' : 'cyan'}-400 fill-none drop-shadow-[0_0_12px_${themeGlow}]`}
               viewBox="0 0 200 24"
             >
               <path
                 d={
-                  isListening || isSpeaking
+                  isListening || isSpeaking || isRedAlert
                     ? 'M 10 12 Q 35 2, 60 12 T 100 12 T 140 12 T 180 12'
                     : 'M 10 12 Q 35 8, 60 12 T 100 12 T 140 12 T 180 12'
                 }
@@ -1435,6 +1614,8 @@ export function StarkWorkshopView({
                   ? 'border border-red-500/80 bg-red-950/70 text-red-200 animate-pulse'
                   : isSpeaking
                   ? 'border border-sky-400 bg-sky-950/70 text-sky-200 animate-pulse'
+                  : isRedAlert
+                  ? 'border border-red-400/80 bg-red-950/80 text-red-200 hover:bg-red-900/90 hover:scale-105'
                   : 'border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900/90 hover:scale-105'
               }`}
             >
@@ -1451,68 +1632,134 @@ export function StarkWorkshopView({
         </div>
 
         {/* ------------------------------------------------------------ */}
-        {/* RIGHT POD: TURBINE GAUGES + 3 TECH & FINANCE CARDS           */}
+        {/* RIGHT POD: TURBINE / LIVE TERMINAL STREAM + 3 CARDS          */}
+        {/* Feature 1: Live Interactive Terminal Log Stream              */}
         {/* ------------------------------------------------------------ */}
         <div className="w-full 2xl:w-84 flex flex-col space-y-2.5 shrink-0">
-          {/* Circular Diagnostic Turbine Gauges */}
-          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/90 p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl">
+          {/* Diagnostic Widget with Mode Switcher (Turbine vs Terminal Stream) */}
+          <div
+            className={`rounded-2xl border ${themeBorder} ${
+              isRedAlert ? 'bg-[#180508]/90' : 'bg-[#020d28]/90'
+            } p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl`}
+          >
             <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between">
-              <span className="text-[11px] font-black text-cyan-300">
-                CIRCULAR DIAGNOSTIC TURBINE GAUGES
+              <span className={`text-[11px] font-black ${themeText}`}>
+                {rightWingMode === 'turbine' ? 'CIRCULAR DIAGNOSTIC GAUGES' : '⚡ LIVE TERMINAL STREAM'}
               </span>
-              <span className="text-emerald-400 text-[10px]">HUD: 83%</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <canvas
-                ref={turbineCanvasRef}
-                width={88}
-                height={88}
-                className="rounded-full border border-cyan-500/30"
-              />
-              <div className="flex-1 ml-3 text-[10px] space-y-1 bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">POWER CORE:</span>
-                  <span className="text-cyan-300 font-bold">94% OPTIMAL</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">REACTOR TEMP:</span>
-                  <span className="text-emerald-400 font-bold">28°C</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">CPU LOAD:</span>
-                  <span className="text-cyan-300 font-bold">81%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">BEACON LOCK:</span>
-                  <span className="text-emerald-400 font-bold">4/4 ACTIVE</span>
-                </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setRightWingMode('turbine')}
+                  className={`p-1 rounded ${
+                    rightWingMode === 'turbine'
+                      ? isRedAlert ? 'bg-red-500 text-white' : 'bg-cyan-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="โหมดมาตรวัดกังหัน 8 แฉก"
+                >
+                  <Gauge className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightWingMode('terminal')}
+                  className={`p-1 rounded ${
+                    rightWingMode === 'terminal'
+                      ? isRedAlert ? 'bg-red-500 text-white' : 'bg-cyan-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="โหมดพิมพ์ Terminal Stream สด"
+                >
+                  <Terminal className="h-3 w-3" />
+                </button>
               </div>
             </div>
 
-            {/* Audio Waveform Equalizer */}
-            <div className="mt-2 pt-1 border-t border-cyan-500/20">
-              <div className="flex items-center justify-between text-[9px] text-cyan-400 mb-1">
-                <span>AUDIO FREQ // ANALYSIS // VOLUME</span>
-                <span className="text-emerald-400">48.0 kHz</span>
-              </div>
-              <div className="flex items-end justify-between h-4 px-1 gap-1">
-                {[25, 60, 90, 45, 80, 30, 70, 50, 85, 40, 95, 65, 35, 75].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-cyan-400 rounded-t shadow-[0_0_8px_#00f0ff] transition-all"
-                    style={{
-                      height: isListening || isSpeaking ? `${h}%` : '25%',
-                    }}
+            {/* Mode 1: Turbine Gauges */}
+            {rightWingMode === 'turbine' && (
+              <>
+                <div className="flex items-center justify-between">
+                  <canvas
+                    ref={turbineCanvasRef}
+                    width={88}
+                    height={88}
+                    className="rounded-full border border-cyan-500/30"
                   />
+                  <div className="flex-1 ml-3 text-[10px] space-y-1 bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">POWER CORE:</span>
+                      <span className={`font-bold ${themeText}`}>{isRedAlert ? '140% OVERLOAD' : '94% OPTIMAL'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">REACTOR TEMP:</span>
+                      <span className={`font-bold ${isRedAlert ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {isRedAlert ? '46°C' : '28°C'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">CPU LOAD:</span>
+                      <span className={`font-bold ${themeText}`}>{isRedAlert ? '92%' : '81%'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">BEACON LOCK:</span>
+                      <span className="text-emerald-400 font-bold">4/4 ACTIVE</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-1 border-t border-cyan-500/20">
+                  <div className="flex items-center justify-between text-[9px] text-cyan-400 mb-1">
+                    <span>AUDIO FREQ // ANALYSIS // VOLUME</span>
+                    <span className="text-emerald-400">48.0 kHz</span>
+                  </div>
+                  <div className="flex items-end justify-between h-4 px-1 gap-1">
+                    {[25, 60, 90, 45, 80, 30, 70, 50, 85, 40, 95, 65, 35, 75].map((h, i) => (
+                      <div
+                        key={i}
+                        className={`flex-1 rounded-t shadow-[0_0_8px_${themeGlow}] transition-all ${
+                          isRedAlert ? 'bg-red-500' : 'bg-cyan-400'
+                        }`}
+                        style={{
+                          height: isListening || isSpeaking || isRedAlert ? `${h}%` : '25%',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Mode 2: Feature 1 Live Terminal Stream */}
+            {rightWingMode === 'terminal' && (
+              <div
+                ref={terminalScrollRef}
+                className="h-[128px] overflow-y-auto space-y-1 pr-1 font-mono text-[9px] scrollbar-thin scrollbar-thumb-cyan-900"
+              >
+                {terminalLogs.map((log) => (
+                  <div key={log.id} className="leading-tight p-1 rounded bg-black/40 border border-cyan-500/10">
+                    <span className="text-slate-500 mr-1.5">[{log.time}]</span>
+                    <span
+                      className={`font-bold px-1 py-0.2 rounded text-[8px] mr-1 ${
+                        log.tag === 'GIT'
+                          ? 'bg-purple-950 text-purple-300 border border-purple-500/30'
+                          : log.tag === 'SECURITY'
+                          ? 'bg-red-950 text-red-300 border border-red-500/30'
+                          : log.tag === 'QA'
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-cyan-950 text-cyan-300 border border-cyan-500/30'
+                      }`}
+                    >
+                      {log.tag}
+                    </span>
+                    <span className="text-slate-300">{log.text}</span>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
           </div>
 
           {/* 3 Company Operation Cards (Right Side) */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-[10px] text-cyan-400 px-1 font-bold">
+            <div className={`flex items-center justify-between text-[10px] ${themeText} px-1 font-bold`}>
               <span>FINANCE & GOVERNANCE // RIGHT WING</span>
               <span className="text-slate-400">3 CARDS ONLINE</span>
             </div>
@@ -1529,7 +1776,7 @@ export function StarkWorkshopView({
                 </div>
                 <div className="text-xs font-bold text-cyan-200 group-hover:text-cyan-300 mb-1.5 flex items-center justify-between">
                   <span>{card.title}</span>
-                  <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className={`text-[10px] ${themeText} font-mono flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
                     <Sparkles className="h-2.5 w-2.5" /> ฉายโฮโลแกรม →
                   </span>
                 </div>
@@ -1541,7 +1788,6 @@ export function StarkWorkshopView({
                     </div>
                   ))}
                 </div>
-                {/* Feature 3: Quick Open Folder Button */}
                 <div className="mt-1.5 pt-1 border-t border-cyan-500/15 flex items-center justify-between text-[9px]">
                   <span className="text-slate-500">คลิกการ์ดเพื่อขยาย 3D</span>
                   <button
@@ -1550,7 +1796,7 @@ export function StarkWorkshopView({
                       e.stopPropagation();
                       handleLaunchRealProject(card.launchId);
                     }}
-                    className="flex items-center gap-1 text-cyan-400 hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30"
+                    className={`flex items-center gap-1 ${themeText} hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30`}
                   >
                     <FolderOpen className="h-2.5 w-2.5" />
                     <span>เปิดโฟลเดอร์</span>
@@ -1565,13 +1811,18 @@ export function StarkWorkshopView({
       {/* ============================================================ */}
       {/* 5. BOTTOM HUD COMMAND BAR (Terminal Input & Fast Actions)     */}
       {/* ============================================================ */}
-      <footer className="relative z-20 border-t border-cyan-500/30 bg-[#020b22]/95 backdrop-blur-md px-4 lg:px-8 py-2 shadow-2xl">
+      <footer
+        className={`relative z-20 border-t ${
+          isRedAlert ? 'border-red-500/40 bg-[#160406]/95' : 'border-cyan-500/30 bg-[#020b22]/95'
+        } backdrop-blur-md px-4 lg:px-8 py-2 shadow-2xl transition-colors duration-500`}
+      >
         <div className="max-w-[1920px] mx-auto flex flex-col md:flex-row items-center justify-between gap-2.5">
           {/* Quick Action Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto text-[10px] scrollbar-none">
             <span className="text-slate-500 shrink-0 font-bold">สั่งการเร็ว:</span>
             {[
               '🔊 ฟังเสียงไทย',
+              '🚨 โหมดฉุกเฉิน',
               'ดูระบบ POS',
               'ดูระบบบัตรคอน',
               'ดูระบบฟิตเนส',
@@ -1585,17 +1836,21 @@ export function StarkWorkshopView({
                   playSciFiBeep();
                   if (chip === '🔊 ฟังเสียงไทย') {
                     onTestThaiVoice();
+                  } else if (chip === '🚨 โหมดฉุกเฉิน') {
+                    if (onToggleRedAlert) onToggleRedAlert();
                   } else {
                     onDispatchCommand(chip);
                   }
                 }}
                 className={`shrink-0 rounded-lg px-2.5 py-1 transition-all font-sans cursor-pointer ${
-                  chip.startsWith('🔊')
+                  chip === '🚨 โหมดฉุกเฉิน'
+                    ? isRedAlert ? 'border border-red-400 bg-red-600 text-white font-bold' : 'border border-red-500/40 bg-red-950/40 text-red-300'
+                    : chip.startsWith('🔊')
                     ? 'border border-emerald-500/50 bg-emerald-950/70 text-emerald-300 font-bold shadow-sm'
                     : 'border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60'
                 }`}
               >
-                {chip.startsWith('🔊') ? chip : `"${chip}"`}
+                {chip.startsWith('🔊') || chip.startsWith('🚨') ? chip : `"${chip}"`}
               </button>
             ))}
           </div>
@@ -1608,10 +1863,18 @@ export function StarkWorkshopView({
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="INITIALIZE COMMAND ..."
-                className="w-full rounded-xl border border-cyan-400/50 bg-slate-900/90 px-3 py-1.5 text-xs text-cyan-200 placeholder-cyan-500/50 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300/50 font-mono tracking-wider shadow-inner"
+                className={`w-full rounded-xl border ${
+                  isRedAlert
+                    ? 'border-red-400/50 bg-red-950/50 text-red-200 placeholder-red-500/50 focus:border-red-300'
+                    : 'border-cyan-400/50 bg-slate-900/90 text-cyan-200 placeholder-cyan-500/50 focus:border-cyan-300'
+                } px-3 py-1.5 text-xs focus:outline-none focus:ring-1 font-mono tracking-wider shadow-inner`}
               />
               {!inputText && (
-                <span className="absolute right-3 top-2 h-3.5 w-1.5 bg-cyan-400 animate-pulse" />
+                <span
+                  className={`absolute right-3 top-2 h-3.5 w-1.5 ${
+                    isRedAlert ? 'bg-red-400' : 'bg-cyan-400'
+                  } animate-pulse`}
+                />
               )}
             </div>
             <button
@@ -1623,6 +1886,8 @@ export function StarkWorkshopView({
               className={`rounded-xl border p-1.5 transition-all cursor-pointer ${
                 isListening
                   ? 'border-red-500 bg-red-600 text-white animate-pulse'
+                  : isRedAlert
+                  ? 'border-red-500/50 bg-red-950 text-red-300 hover:bg-red-900/60'
                   : 'border-cyan-500/40 bg-slate-900 text-cyan-400 hover:bg-cyan-950/60'
               }`}
               title="เปิด/ปิดไมโครโฟน"
@@ -1632,7 +1897,9 @@ export function StarkWorkshopView({
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-400 transition-colors disabled:opacity-30 cursor-pointer shadow-md"
+              className={`flex items-center gap-1 rounded-xl px-3.5 py-1.5 text-xs font-bold text-slate-950 transition-colors disabled:opacity-30 cursor-pointer shadow-md ${
+                isRedAlert ? 'bg-red-500 hover:bg-red-400' : 'bg-cyan-500 hover:bg-cyan-400'
+              }`}
             >
               <Send className="h-3.5 w-3.5" />
             </button>
