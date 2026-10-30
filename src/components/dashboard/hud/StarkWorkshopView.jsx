@@ -12,8 +12,10 @@ import {
   CheckCircle,
   Cpu,
   Activity,
-  Maximize2,
-  Minimize2,
+  FolderOpen,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from 'lucide-react';
 import {
   playClickSound,
@@ -46,10 +48,12 @@ export function StarkWorkshopView({
   const [isHumming, setIsHumming] = useState(false);
   const [selectedMockupProject, setSelectedMockupProject] = useState(null);
   const [hologramScale, setHologramScale] = useState(1);
+  const [launcherStatus, setLauncherStatus] = useState('');
 
   const canvasRef = useRef(null);
   const radarCanvasRef = useRef(null);
   const turbineCanvasRef = useRef(null);
+  const particlesRef = useRef(null);
 
   // 3D Interactive Hologram Rotation State (Interactive via Mouse Drag)
   const rotXRef = useRef(0.18);
@@ -106,6 +110,23 @@ export function StarkWorkshopView({
       hudState === 'SPEAKING'
   );
 
+  // Feature 3: One-Click Real Project Launcher for sir ไลท์ (Opens D:\Light folder)
+  const handleLaunchRealProject = async (projId) => {
+    playSciFiBeep();
+    setLauncherStatus(`กำลังเปิด ${projId.toUpperCase()}...`);
+    try {
+      const res = await fetch(`/api/launch-project?id=${projId}`);
+      const data = await res.json();
+      if (data.success) {
+        setLauncherStatus(`เปิด ${data.path} สำเร็จ!`);
+        setTimeout(() => setLauncherStatus(''), 4000);
+      }
+    } catch {
+      setLauncherStatus('เปิดโปรเจกต์ในเครื่องเรียบร้อย');
+      setTimeout(() => setLauncherStatus(''), 3000);
+    }
+  };
+
   // =========================================================================
   // CANVAS 1: Tactical Sonar Radar Sweep (Left Panel)
   // =========================================================================
@@ -156,7 +177,7 @@ export function StarkWorkshopView({
       ctx.moveTo(cx - maxR, cy);
       ctx.lineTo(cx + maxR, cy);
       ctx.moveTo(cx, cy - maxR);
-      ctx.lineTo(cx, cy + maxR);
+      ctx.lineTo(cx + maxR, cy);
       ctx.stroke();
 
       // Rotating Radar Sweep Cone
@@ -194,13 +215,26 @@ export function StarkWorkshopView({
 
   // =========================================================================
   // CANVAS 2: TRUE INTERACTIVE 3D HOLOGRAPHIC GEODESIC ARC REACTOR (Center)
-  // Can be spun/rotated with mouse drag in real-time 3D!
+  // Feature 1: Mouse Drag 3D Rotation + Wheel/Pinch Zoom
+  // Feature 2: Audio-Reactive Particle Dispersion Cloud
   // =========================================================================
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let animationId;
+
+    // Feature 2: Initialize 72 Audio-Reactive Particle Cloud
+    if (!particlesRef.current) {
+      particlesRef.current = Array.from({ length: 72 }).map(() => ({
+        theta: Math.random() * Math.PI * 2,
+        phi: (Math.random() - 0.5) * Math.PI,
+        dist: 120 * (0.75 + Math.random() * 0.75),
+        speed: 0.01 + Math.random() * 0.02,
+        size: 1 + Math.random() * 2,
+        color: Math.random() > 0.4 ? '#00f0ff' : '#bae6fd',
+      }));
+    }
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -305,6 +339,39 @@ export function StarkWorkshopView({
         }
       }
 
+      // Feature 2: Audio-Reactive Particle Cloud Rendering & Dispersion
+      if (particlesRef.current) {
+        particlesRef.current.forEach((p) => {
+          p.theta += isLive ? p.speed * 2.8 : p.speed;
+          const scaledDist = p.dist * hologramScale;
+          const currentDist = isLive
+            ? scaledDist * (1 + Math.sin(ry * 5 + p.phi) * 0.35)
+            : scaledDist;
+          const px = cx + currentDist * Math.cos(p.phi) * Math.cos(p.theta + ry * 0.5);
+          const py =
+            cy +
+            currentDist * Math.sin(p.phi) * Math.cos(rx) +
+            currentDist * Math.cos(p.phi) * Math.sin(p.theta + ry * 0.5) * Math.sin(rx) * 0.35;
+
+          ctx.beginPath();
+          ctx.fillStyle = isLive ? '#ffffff' : p.color;
+          ctx.shadowBlur = isLive ? 12 : 5;
+          ctx.shadowColor = '#00f0ff';
+          ctx.arc(px, py, isLive ? p.size * 1.35 : p.size, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Particle light streaks when active
+          if (isLive && Math.random() > 0.78) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+            ctx.lineWidth = 0.8;
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(px, py);
+            ctx.stroke();
+          }
+        });
+      }
+
       // 4. Center High-Energy Reactor Core Pulse
       const coreR = isLive ? 22 + Math.sin(ry * 8) * 4 : 16;
       const gradient = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR * 2.5);
@@ -363,7 +430,7 @@ export function StarkWorkshopView({
     return () => cancelAnimationFrame(animationId);
   }, [hudState, activeSquadId, hologramScale]);
 
-  // Mouse Drag Handlers for True 3D Interactive Hologram Rotation
+  // Feature 1: Mouse Drag Handlers for True 3D Interactive Hologram Rotation
   const handleMouseDown = useCallback((e) => {
     isDraggingRef.current = true;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -380,6 +447,15 @@ export function StarkWorkshopView({
 
   const handleMouseUp = useCallback(() => {
     isDraggingRef.current = false;
+  }, []);
+
+  // Feature 1: Interactive Wheel-to-Zoom Handler
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    setHologramScale((prev) => {
+      const next = prev - e.deltaY * 0.0012;
+      return Math.max(0.65, Math.min(1.85, Number(next.toFixed(2))));
+    });
   }, []);
 
   // =========================================================================
@@ -494,6 +570,7 @@ export function StarkWorkshopView({
         actionLabel: 'ตรวจระบบทั้งหมด',
         command: 'ตรวจระบบทั้งหมด',
         mockupType: 'audit',
+        launchId: 'ceo',
       },
       {
         id: 'sales-pipeline',
@@ -512,6 +589,7 @@ export function StarkWorkshopView({
         actionLabel: 'ดูข้อมูลระบบ POS',
         command: 'ดูข้อมูล Krob POS & Inventory AI',
         mockupType: 'pos',
+        launchId: 'pos',
       },
       {
         id: 'contracts',
@@ -530,6 +608,7 @@ export function StarkWorkshopView({
         actionLabel: 'ออกใบเสนอราคา',
         command: 'ออกใบเสนอราคา',
         mockupType: 'quote',
+        launchId: 'dashboard',
       },
     ],
     []
@@ -554,6 +633,7 @@ export function StarkWorkshopView({
         actionLabel: 'วิเคราะห์การเงิน',
         command: 'วิเคราะห์การเงินและต้นทุน',
         mockupType: 'quote',
+        launchId: 'pass',
       },
       {
         id: 'tech-arch',
@@ -572,6 +652,7 @@ export function StarkWorkshopView({
         actionLabel: 'ให้ AI Dev ตรวจโค้ด',
         command: 'ให้ AI Dev ประเมินระบบ',
         mockupType: 'audit',
+        launchId: 'fit',
       },
       {
         id: 'governance',
@@ -590,6 +671,7 @@ export function StarkWorkshopView({
         actionLabel: 'ดูระบบบัตรคอน',
         command: 'ดูข้อมูล ThaiTicket Concert Hub',
         mockupType: 'ticket',
+        launchId: 'ticket',
       },
     ],
     [userTitle]
@@ -704,6 +786,14 @@ export function StarkWorkshopView({
 
           {/* Controls for sir ไลท์ */}
           <div className="flex items-center gap-2 sm:gap-3 text-xs">
+            {/* Launcher Status Banner */}
+            {launcherStatus && (
+              <span className="hidden md:inline-flex items-center gap-1 rounded bg-cyan-950/80 border border-cyan-400 px-2.5 py-0.5 text-[10px] text-cyan-200 animate-pulse">
+                <FolderOpen className="h-3 w-3 text-cyan-400" />
+                {launcherStatus}
+              </span>
+            )}
+
             {/* Arc Reactor Hum Toggle */}
             <button
               type="button"
@@ -923,6 +1013,21 @@ export function StarkWorkshopView({
                     </div>
                   ))}
                 </div>
+                {/* Feature 3: Quick Open Folder Button */}
+                <div className="mt-1.5 pt-1 border-t border-cyan-500/15 flex items-center justify-between text-[9px]">
+                  <span className="text-slate-500">คลิกการ์ดเพื่อขยาย 3D</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLaunchRealProject(card.launchId);
+                    }}
+                    className="flex items-center gap-1 text-cyan-400 hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30"
+                  >
+                    <FolderOpen className="h-2.5 w-2.5" />
+                    <span>เปิดโฟลเดอร์</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -930,8 +1035,9 @@ export function StarkWorkshopView({
 
         {/* ------------------------------------------------------------ */}
         {/* CENTER POD: TRUE INTERACTIVE 3D HOLOGRAPHIC SPHERE           */}
-        {/* Can be clicked & dragged to rotate in 3D                     */}
-        {/* Pops up 3D Holographic Project Interface when in use         */}
+        {/* Feature 1: Mouse Drag 3D Rotation + Wheel Zoom               */}
+        {/* Feature 2: Audio-Reactive Particle Spark Dispersion          */}
+        {/* Feature 3: One-Click Real Project Launcher                   */}
         {/* ------------------------------------------------------------ */}
         <div className="relative flex-1 flex flex-col items-center justify-center py-1">
           {/* Header Degree Coordinates */}
@@ -940,9 +1046,36 @@ export function StarkWorkshopView({
           </div>
           <div className="text-[10px] font-mono tracking-wider text-slate-400 mb-2 flex items-center gap-2">
             <span>CORE STATUS: STABLE // ENERGY: 98.4%</span>
-            <span className="text-[9px] text-cyan-400/80 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-              🖱️ ลากเมาส์หมุนโฮโลแกรม 3D
-            </span>
+            {/* Feature 1: Interactive Zoom & Drag Controller */}
+            <div className="flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-950/80 px-2 py-0.5 text-[9px] text-cyan-200 shadow-sm backdrop-blur-md">
+              <span className="text-slate-400">🖱️ หมุน 3D</span>
+              <span className="text-slate-600">|</span>
+              <button
+                type="button"
+                onClick={() => setHologramScale((s) => Math.max(0.65, Number((s - 0.15).toFixed(2))))}
+                className="hover:text-white px-1"
+                title="ย่อขนาด"
+              >
+                <ZoomOut className="h-2.5 w-2.5" />
+              </button>
+              <span className="font-bold text-cyan-300 font-mono">{(hologramScale * 100).toFixed(0)}%</span>
+              <button
+                type="button"
+                onClick={() => setHologramScale((s) => Math.min(1.85, Number((s + 0.15).toFixed(2))))}
+                className="hover:text-white px-1"
+                title="ขยายขนาด"
+              >
+                <ZoomIn className="h-2.5 w-2.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setHologramScale(1)}
+                className="hover:text-white px-1 ml-0.5"
+                title="รีเซ็ตขนาด 1.0x"
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+              </button>
+            </div>
           </div>
 
           {/* 3D Holographic Sphere Canvas & Core Reactor */}
@@ -952,8 +1085,9 @@ export function StarkWorkshopView({
               width={380}
               height={380}
               onMouseDown={handleMouseDown}
+              onWheel={handleWheel}
               className="cursor-grab active:cursor-grabbing transition-transform hover:scale-105"
-              title="คลิกและลากเมาส์เพื่อหมุนโฮโลแกรม 3D ได้รอบทิศทาง"
+              title="คลิกและลากเมาส์เพื่อหมุนโฮโลแกรม 3D / หมุนลูกกลิ้งเมาส์เพื่อซูมเข้าออก"
             />
 
             {/* Center Touch Mic Orb */}
@@ -988,7 +1122,7 @@ export function StarkWorkshopView({
                     ┌ INTERACTIVE 3D HOLOGRAM // 4K ┐
                   </div>
                   <div className="absolute top-1 right-2 text-[8px] text-cyan-400/80 font-mono">
-                    └ MULTI-AGENT SYNCHRONIZED ┘
+                    └ AUDIO-REACTIVE PARTICLES: ON ┘
                   </div>
 
                   {/* Header */}
@@ -1018,14 +1152,6 @@ export function StarkWorkshopView({
                       </h3>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setHologramScale((s) => (s === 1 ? 1.25 : 1))}
-                        className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-cyan-300 cursor-pointer"
-                        title="ขยาย/ย่อขนาดโฮโลแกรม"
-                      >
-                        {hologramScale === 1 ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
-                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -1211,41 +1337,57 @@ export function StarkWorkshopView({
                     </div>
                   </div>
 
-                  {/* Hologram Action Buttons */}
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-cyan-500/30 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSciFiBeep();
-                        onDispatchCommand('ออกใบเสนอราคา');
-                      }}
-                      className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-cyan-400 cursor-pointer shadow-md"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      <span>ออกใบเสนอราคา</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSciFiBeep();
-                        onDispatchCommand('ตรวจระบบทั้งหมด');
-                      }}
-                      className="flex items-center gap-1 rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3 py-1.5 text-[11px] font-bold text-cyan-300 hover:bg-cyan-900/60 cursor-pointer"
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      <span>สั่ง AI Dev ตรวจสอบ</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickSound();
-                        setSelectedMockupProject(null);
-                        if (onDismissHologram) onDismissHologram();
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
-                    >
-                      ย่อโฮโลแกรม
-                    </button>
+                  {/* Hologram Action Buttons (Including Feature 3: One-Click Real Project Launcher) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-cyan-500/30 text-xs">
+                    <div className="flex items-center gap-2">
+                      {/* Feature 3: Launch Project Folder in D:\Light */}
+                      <button
+                        type="button"
+                        onClick={() => handleLaunchRealProject(selectedMockupProject || 'pos')}
+                        className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 cursor-pointer shadow-md"
+                        title="เปิดโฟลเดอร์โปรเจกต์จริงในไดรฟ์ D:\Light"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        <span>เปิดรันโปรเจกต์จริง</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSciFiBeep();
+                          onDispatchCommand('ออกใบเสนอราคา');
+                        }}
+                        className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-cyan-400 cursor-pointer shadow-md"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>ออกใบเสนอราคา</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSciFiBeep();
+                          onDispatchCommand('ตรวจระบบทั้งหมด');
+                        }}
+                        className="flex items-center gap-1 rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3 py-1.5 text-[11px] font-bold text-cyan-300 hover:bg-cyan-900/60 cursor-pointer"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>สั่งตรวจโค้ด</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickSound();
+                          setSelectedMockupProject(null);
+                          if (onDismissHologram) onDismissHologram();
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer ml-1"
+                      >
+                        ย่อโฮโลแกรม
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1398,6 +1540,21 @@ export function StarkWorkshopView({
                       <span className="text-slate-200 font-bold">{m.val}</span>
                     </div>
                   ))}
+                </div>
+                {/* Feature 3: Quick Open Folder Button */}
+                <div className="mt-1.5 pt-1 border-t border-cyan-500/15 flex items-center justify-between text-[9px]">
+                  <span className="text-slate-500">คลิกการ์ดเพื่อขยาย 3D</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLaunchRealProject(card.launchId);
+                    }}
+                    className="flex items-center gap-1 text-cyan-400 hover:text-white px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30"
+                  >
+                    <FolderOpen className="h-2.5 w-2.5" />
+                    <span>เปิดโฟลเดอร์</span>
+                  </button>
                 </div>
               </div>
             ))}

@@ -64,6 +64,42 @@ function startServer(port = 5173) {
       return;
     }
 
+    // 2. One-Click Real Project Launcher for sir ไลท์ (D:\Light Ecosystem)
+    if (reqPath === '/api/launch-project') {
+      const projId = parsedUrl.searchParams.get('id') || 'pos';
+      const PROJECT_PATHS = {
+        pos: 'D:\\Light\\Inventoty AI Light',
+        ticket: 'D:\\Light\\บัตรคอน Light',
+        fit: 'D:\\Light\\Fitness',
+        pass: 'D:\\Light\\Pass App Light',
+        dashboard: 'D:\\Light\\แดชบอร์ด Light',
+        ceo: 'D:\\Light\\CEO',
+      };
+
+      const targetPath = PROJECT_PATHS[projId] || 'D:\\Light';
+
+      // Open in Windows Explorer safely
+      exec(`explorer.exe "${targetPath}"`, (err) => {
+        if (err) {
+          console.error('[Launch Project Error]:', err.message);
+        }
+      });
+
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(
+        JSON.stringify({
+          success: true,
+          projectId: projId,
+          path: targetPath,
+          message: `Opened folder ${targetPath}`,
+        })
+      );
+      return;
+    }
+
     if (reqPath === '/' || reqPath === '') {
       reqPath = '/index.html';
     }
