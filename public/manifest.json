@@ -1,10 +1,12 @@
 {
-  "short_name": "CEO Master",
-  "name": "Antigravity CEO Master Platform",
-  "description": "Executive Quality Director & Multi-Project Operations Hub for Krob AI Enterprise",
+  "short_name": "J.A.R.V.I.S.",
+  "name": "J.A.R.V.I.S. HUD // Stark AI Operating System",
+  "description": "Executive Quality Director & Stark Holographic HUD for sir ไลท์",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
-  "background_color": "#0b0f19",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "background_color": "#030712",
   "theme_color": "#06b6d4",
   "orientation": "any",
   "icons": [
