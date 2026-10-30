@@ -49,7 +49,7 @@ export function JarvisHudView({
   const [diskUsage] = useState('R 32KB/s // W 2.8MB/s');
   const [activeHologram, setActiveHologram] = useState(null); // On-demand holographic projection payload
   const [activeSquadId, setActiveSquadId] = useState(null); // Currently delegated AI Squad satellite node
-  const [wakeWordActive, setWakeWordActive] = useState(true); // "เฮ้ จาร์วิส" / "Hey Jarvis" Wake Word
+  const [wakeWordActive, setWakeWordActive] = useState(false); // Default to clean Push-To-Talk (No runaway loops)
   const [dragStartX, setDragStartX] = useState(null); // Gesture swipe flick
   const [isSmartControlOpen, setIsSmartControlOpen] = useState(true);
   const [isMonitorOpen, setIsMonitorOpen] = useState(true);
@@ -58,6 +58,7 @@ export function JarvisHudView({
 
   const recognitionRef = useRef(null);
   const audioPlayerRef = useRef(null);
+  const lastDispatchedRef = useRef({ text: '', time: 0 });
   const chatScrollRef = useRef(null);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -248,21 +249,10 @@ export function JarvisHudView({
       setIsSpeaking(true);
       setHudState('SPEAKING');
 
-      // Callback when speech completes: re-arm microphone for two-way continuous Thai conversation
+      // Callback when speech completes
       const handleSpeechDone = () => {
         setIsSpeaking(false);
         setHudState('READY');
-        if (wakeWordActive) {
-          setTimeout(() => {
-            try {
-              if (recognitionRef.current) {
-                recognitionRef.current.start();
-                setIsListening(true);
-                setHudState('LISTENING');
-              }
-            } catch {}
-          }, 350);
-        }
       };
 
       // Strip symbols for speech
@@ -271,9 +261,9 @@ export function JarvisHudView({
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Primary Engine: Neural Thai Audio Stream (Works 100% on Windows without Thai voice pack)
-      const encoded = encodeURIComponent(cleanSpeech.slice(0, 180));
-      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encoded}`;
+      // Primary Engine: High-Fidelity Local / Vercel Proxy Endpoint (100% Thai audio, zero CORS errors)
+      const encoded = encodeURIComponent(cleanSpeech.slice(0, 200));
+      const audioUrl = `/api/tts?text=${encoded}`;
 
       const audio = new Audio(audioUrl);
       audioPlayerRef.current = audio;
@@ -314,7 +304,7 @@ export function JarvisHudView({
       };
 
       audio.play().catch(() => {
-        // If audio autoplay blocked, fallback to Web Speech
+        // Fallback if browser audio autoplay is blocked
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel();
@@ -331,13 +321,21 @@ export function JarvisHudView({
         }
       });
     },
-    [voiceEnabled, wakeWordActive]
+    [voiceEnabled]
   );
 
   // Core Command Dispatcher & AI Squad Query Engine
   const handleDispatchCommand = useCallback(
     (text) => {
-      if (!text.trim()) return;
+      const clean = (text || '').trim();
+      if (!clean || clean.length < 2) return;
+
+      const now = Date.now();
+      // Deduplicate rapid identical commands within 3.5 seconds
+      if (clean === lastDispatchedRef.current.text && now - lastDispatchedRef.current.time < 3500) {
+        return;
+      }
+      lastDispatchedRef.current = { text: clean, time: now };
 
       playClickSound();
       const nowTime = new Date().toLocaleTimeString('en-US', {
@@ -352,7 +350,7 @@ export function JarvisHudView({
         id: Date.now(),
         sender: 'BOSS',
         time: nowTime,
-        text: text,
+        text: clean,
       };
 
       setMessages((prev) => [...prev, userMsg]);
@@ -429,17 +427,23 @@ export function JarvisHudView({
       };
 
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.trim();
-        const lower = transcript.toLowerCase();
+        const transcript = (event.results[0][0]?.transcript || '').trim();
+        if (!transcript || transcript.length < 2) return;
 
-        // Iron Man Wake Word Detection ("เฮ้ จาร์วิส" / "จาร์วิส" / "hey jarvis")
+        // Stop listening immediately upon capturing command to prevent echo loops
+        try {
+          recognitionRef.current?.stop();
+        } catch {}
+        setIsListening(false);
+
+        const lower = transcript.toLowerCase();
         const isWakeWord =
           lower.includes('จาร์วิส') ||
           lower.includes('เฮ้ จาร์วิส') ||
           lower.includes('hey jarvis') ||
           lower.includes('jarvis');
 
-        if (wakeWordActive && isWakeWord) {
+        if (isWakeWord) {
           playSuccessSound();
           const stripped = transcript
             .replace(/เฮ้\s*จาร์วิส/gi, '')
@@ -448,12 +452,10 @@ export function JarvisHudView({
             .replace(/jarvis/gi, '')
             .trim();
 
-          if (stripped.length > 2) {
+          if (stripped.length >= 2) {
             handleDispatchCommand(stripped);
           } else {
-            speakThai('ครับ บอส กำลังฟังอยู่ครับ');
-            setIsListening(true);
-            setHudState('LISTENING');
+            speakThai('ครับ บอส มีอะไรให้ผมช่วยจัดการ หรือค้นหาข้อมูลไหมครับ?');
           }
         } else {
           handleDispatchCommand(transcript);
@@ -478,24 +480,11 @@ export function JarvisHudView({
       recognition.onend = () => {
         setIsListening(false);
         if (!isSpeaking) setHudState('READY');
-
-        // Continuous Wake Word standby: restart listening loop
-        if (wakeWordActive && !isSpeaking) {
-          setTimeout(() => {
-            try {
-              if (wakeWordActive && recognitionRef.current) {
-                recognitionRef.current.start();
-              }
-            } catch {
-              // Ignore if already active
-            }
-          }, 600);
-        }
       };
 
       recognitionRef.current = recognition;
     }
-  }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai, wakeWordActive]);
+  }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai]);
 
   const toggleMic = useCallback(() => {
     playClickSound();
@@ -511,20 +500,25 @@ export function JarvisHudView({
         } catch {}
       }
       if (onShowToast) {
-        onShowToast('info', 'พักไมโครโฟน', 'ปิดระบบดักฟังเสียงเรียบร้อยครับ กดที่ลูกแก้วเพื่อเปิดใหม่ได้ทุกเมื่อ');
+        onShowToast('info', 'ปิดไมโครโฟน', 'หยุดการรับฟังเสียงเรียบร้อยครับ กดที่ปุ่มไมค์เพื่อพูดคุยใหม่ได้ทุกเมื่อ');
       }
     } else {
       if (recognitionRef.current) {
         try {
+          // Pause any ongoing audio output before listening
+          if (audioPlayerRef.current) {
+            try {
+              audioPlayerRef.current.pause();
+            } catch {}
+          }
           recognitionRef.current.start();
           setIsListening(true);
           setHudState('LISTENING');
-          speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี พร้อมรับคำสั่งเสียงภาษาไทยแล้วครับ');
           if (onShowToast) {
             onShowToast(
-              'success',
-              'เปิดระบบพูดคุยภาษาไทยแล้ว',
-              'พูดคำสั่งภาษาไทย เช่น "ตรวจระบบ", "ดูข้อมูล POS", หรือคุยกับจาร์วิสได้ทันทีครับ'
+              'info',
+              '🎙️ กำลังรับฟังเสียงภาษาไทย',
+              'พูดคำสั่งได้ทันที เช่น "สวัสดี", "ตรวจระบบ", "ดูข้อมูล POS", หรือ "ออกใบเสนอราคา"'
             );
           }
         } catch {
@@ -534,8 +528,7 @@ export function JarvisHudView({
               recognitionRef.current?.start();
               setIsListening(true);
               setHudState('LISTENING');
-              speakThai('สวัสดีครับ บอส กำลังรับฟังอยู่ครับ');
-            }, 300);
+            }, 250);
           } catch {}
         }
       } else {
@@ -548,7 +541,7 @@ export function JarvisHudView({
         }
       }
     }
-  }, [isListening, onShowToast, speakThai]);
+  }, [isListening, onShowToast]);
 
   const toggleFullscreen = () => {
     playClickSound();

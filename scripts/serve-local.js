@@ -24,6 +24,46 @@ function startServer(port = 5173) {
   const server = http.createServer((req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     let reqPath = decodeURIComponent(parsedUrl.pathname);
+
+    // 1. High-Performance Thai Neural TTS Audio Proxy
+    if (reqPath === '/api/tts') {
+      const text = parsedUrl.searchParams.get('text') || '';
+      if (!text.trim()) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Missing text parameter');
+        return;
+      }
+
+      const encoded = encodeURIComponent(text.slice(0, 200));
+      const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encoded}`;
+
+      fetch(googleUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      })
+        .then(async (ttsRes) => {
+          if (!ttsRes.ok) {
+            throw new Error(`Google TTS status: ${ttsRes.status}`);
+          }
+          const buffer = await ttsRes.arrayBuffer();
+          res.writeHead(200, {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.byteLength,
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',
+          });
+          res.end(Buffer.from(buffer));
+        })
+        .catch((err) => {
+          console.error('[TTS Proxy Error]:', err.message);
+          res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('TTS Error: ' + err.message);
+        });
+      return;
+    }
+
     if (reqPath === '/' || reqPath === '') {
       reqPath = '/index.html';
     }
