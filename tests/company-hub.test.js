@@ -163,3 +163,30 @@ test('J.A.R.V.I.S. MARK 3 Neural Brain processes Thai voice commands and dispatc
   assert.equal(themeRes.action, 'CHANGE_THEME');
   assert.equal(themeRes.brandId, 'concert-ticket');
 });
+
+test('Multi-Agent Hub for Webapp Sales & Development coordinates all 5 specialized agents for sir ไลท์', async () => {
+  const { processJarvisCommand, USER_TITLE, MULTI_AGENT_HUB } = await import('../src/utils/jarvisBrain.js');
+
+  // Verify Default User Title is "sir ไลท์"
+  assert.equal(USER_TITLE, 'sir ไลท์');
+
+  // Verify all 5 agents are registered
+  assert.ok(MULTI_AGENT_HUB.manager, 'Missing AI Manager');
+  assert.ok(MULTI_AGENT_HUB.sales, 'Missing AI เลขา');
+  assert.ok(MULTI_AGENT_HUB.dev, 'Missing AI Dev');
+  assert.ok(MULTI_AGENT_HUB.accounting, 'Missing AI บัญชี');
+  assert.ok(MULTI_AGENT_HUB.admin, 'Missing AI Admin');
+
+  // Multi-Agent Analysis Command
+  const multiRes = processJarvisCommand('ให้ทีม AI ช่วยกันวิเคราะห์เว็บแอพ');
+  assert.equal(multiRes.action, 'MULTI_AGENT_ANALYSIS');
+  assert.ok(multiRes.reply.includes('AI เลขา'));
+  assert.ok(multiRes.reply.includes('AI Dev'));
+  assert.ok(multiRes.reply.includes('AI บัญชี'));
+  assert.ok(multiRes.reply.includes('AI Admin'));
+  assert.ok(multiRes.reply.includes('sir ไลท์'));
+  assert.ok(multiRes.speech.includes('sir ไลท์'));
+  // Ensure Speech output follows rule: no markdown symbols and spoken naturally
+  assert.ok(!multiRes.speech.includes('*'));
+  assert.ok(!multiRes.speech.includes('#'));
+});

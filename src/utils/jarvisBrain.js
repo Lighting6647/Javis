@@ -1,18 +1,18 @@
 /**
  * J.A.R.V.I.S. MARK III Neural AI Orchestrator
- * Persona: Tony Stark's J.A.R.V.I.S. - Executive, polite, addresses user as USER_TITLE (Default: "คุณผู้ชาย" / Sir).
- * Role: Central Brain orchestrating all AI teams behind the scenes:
- *  - 1. AI Marketing (Lead Gen & Content)
- *  - 2. AI Sales & Closing (Pricing & Quotations)
- *  - 3. AI Engineering & Architecture (Tech Lead, DB Schema, APIs)
- *  - 4. AI DevOps & Cloud (CI/CD, Vercel, Server Uptime)
- *  - 5. AI QA & Security (4 Quality Gates, Vuln Scanner, Audit Logs)
- *  - 6. AI Finance & Billing (PromptPay QR, VAT, Cashflow)
+ * Persona: Tony Stark's J.A.R.V.I.S. / AI Manager (Project Director)
+ * Addresses user as USER_TITLE (Default: "sir ไลท์").
+ * Architecture: Multi-Agent Hub for Webapp Sales & Development
+ *  - 1. AI Manager: ศูนย์กลางการสั่งการและวิเคราะห์ภาพรวม (Voice Interface)
+ *  - 2. AI เลขา: วิเคราะห์งานขายและ Pipeline Webapp (Lead, Proposal, Demo, Close Deal)
+ *  - 3. AI Dev: วิศวกรซอฟต์แวร์ผู้ชำนาญการ (Architecture, Feasibility, Stack, Estimation, Security)
+ *  - 4. AI บัญชี: ผู้ดูแลการเงินและต้นทุนทั้งหมด (Costing, Margin, Break-even, Milestones)
+ *  - 5. AI Admin: ผู้จัดการงานเอกสารและขั้นตอนระบบ (QU, NDA, Contract, TOR, Workflow)
  */
 
 import { INITIAL_PROJECTS } from '../data/projectsData.js';
 
-export let USER_TITLE = 'คุณผู้ชาย'; // "คุณผู้ชาย" (Sir - Authentic Iron Man Thai Dub), "ท่านประธาน", "ผู้การ", "คุณไลท์"
+export let USER_TITLE = 'sir ไลท์'; // "sir ไลท์" (Default), "คุณผู้ชาย", "ท่านประธาน", "ผู้การ"
 
 export function setUserTitle(title) {
   if (title && title.trim()) USER_TITLE = title.trim();
@@ -21,6 +21,40 @@ export function setUserTitle(title) {
 export function getUserTitle() {
   return USER_TITLE;
 }
+
+export const MULTI_AGENT_HUB = {
+  manager: {
+    id: 'ai-manager',
+    name: 'AI Manager',
+    title: 'Project Director',
+    role: 'ศูนย์กลางการสั่งการและวิเคราะห์ภาพรวม',
+    tone: 'กึ่งทางการ นิ่ง สุภาพ เฉียบคม และมีตรรกะสูง',
+  },
+  sales: {
+    id: 'ai-sales',
+    name: 'AI เลขา',
+    title: 'Sales & Account Executive',
+    role: 'วิเคราะห์งานขายและ Pipeline Webapp (Lead, Proposal, Demo, Close Deal)',
+  },
+  dev: {
+    id: 'ai-dev',
+    name: 'AI Dev',
+    title: 'Tech Lead / Software Architect',
+    role: 'ประเมินความเป็นไปได้เชิงเทคนิค (Feasibility, Architecture, Stack, Estimation, Security)',
+  },
+  accounting: {
+    id: 'ai-accounting',
+    name: 'AI บัญชี',
+    title: 'Financial Controller',
+    role: 'ผู้ดูแลการเงินและต้นทุนทั้งหมด (Costing, Margin, Break-even, Invoicing, Milestones)',
+  },
+  admin: {
+    id: 'ai-admin',
+    name: 'AI Admin',
+    title: 'Operations Officer',
+    role: 'ผู้จัดการงานเอกสารและขั้นตอนระบบ (QU, NDA, Contract, TOR, Workflow)',
+  },
+};
 
 export const SYSTEM_TELEMETRY = {
   codename: 'J.A.R.V.I.S. MK III',
@@ -46,16 +80,16 @@ export function processJarvisCommand(input, _context = {}) {
     clean.includes('เรียกผมว่า') ||
     clean.includes('เปลี่ยนคำนำหน้า')
   ) {
-    let newTitle = 'คุณผู้ชาย';
-    if (clean.includes('ท่านประธาน') || clean.includes('ประธาน')) {
+    let newTitle = 'sir ไลท์';
+    if (clean.includes('sir ไลท์') || clean.includes('sir light') || clean.includes('เซอร์ไลท์') || clean.includes('sir') || clean.includes('เซอร์')) {
+      newTitle = 'sir ไลท์';
+    } else if (clean.includes('ท่านประธาน') || clean.includes('ประธาน')) {
       newTitle = 'ท่านประธาน';
     } else if (clean.includes('ผู้การ') || clean.includes('กัปตัน')) {
       newTitle = 'ผู้การ';
     } else if (clean.includes('คุณไลท์') || clean.includes('ไลท์') || clean.includes('light')) {
       newTitle = 'คุณไลท์';
-    } else if (clean.includes('หัวหน้า') || clean.includes('ผู้นำ')) {
-      newTitle = 'หัวหน้า';
-    } else if (clean.includes('คุณผู้ชาย') || clean.includes('sir')) {
+    } else if (clean.includes('คุณผู้ชาย')) {
       newTitle = 'คุณผู้ชาย';
     } else {
       // Extract custom title
@@ -73,18 +107,87 @@ export function processJarvisCommand(input, _context = {}) {
       action: 'SET_TITLE',
       title: newTitle,
       squadId: 'ops',
-      delegatedTo: 'J.A.R.V.I.S. Persona Core',
+      delegatedTo: 'AI Manager (Persona Core)',
       reply: `รับทราบครับ ${newTitle} ต่อจากนี้ผมจะเรียกท่านว่า "${newTitle}" อย่างเป็นทางการครับ`,
       speech: `รับทราบครับ ${newTitle} ต่อจากนี้ผมจะเรียกท่านว่า ${newTitle} ครับ`,
       hologram: {
         title: 'USER HONORIFIC // UPDATED',
-        category: 'J.A.R.V.I.S. PERSONA PROTOCOL',
+        category: 'AI MANAGER PERSONA PROTOCOL',
         badge: newTitle.toUpperCase(),
         details: [
           { label: 'Active Title', val: newTitle },
           { label: 'Tone Protocol', val: 'Executive Formal' },
           { label: 'Inspiration', val: 'Iron Man Mark III OS' },
           { label: 'Status', val: 'Applied System-wide' },
+        ],
+      },
+    };
+  }
+
+  // 0.5 Multi-Agent Hub for Webapp Sales & Development (Specialized Intent)
+  if (
+    clean.includes('วิเคราะห์เว็บแอพ') ||
+    clean.includes('พัฒนา webapp') ||
+    clean.includes('พัฒนาเว็บ') ||
+    clean.includes('ขาย webapp') ||
+    clean.includes('ดีลลูกค้า') ||
+    clean.includes('ประเมินโปรเจกต์') ||
+    clean.includes('ทีม ai ช่วยกัน') ||
+    clean.includes('ทีม ai วิเคราะห์') ||
+    clean.includes('ai เลขา') ||
+    clean.includes('ai dev') ||
+    clean.includes('ai บัญชี') ||
+    clean.includes('ai admin') ||
+    clean.includes('multi-agent') ||
+    clean.includes('multi agent')
+  ) {
+    const projectContext = clean.includes('pos')
+      ? 'โครงการ POS & Inventory AI Management'
+      : clean.includes('คอน') || clean.includes('ticket')
+      ? 'โครงการ ThaiTicket Concert Booking'
+      : clean.includes('fit') || clean.includes('ยิม')
+      ? 'โครงการ Krob Fit Member Scanner'
+      : 'โครงการ Enterprise Webapp Suite';
+
+    const delegationSales = `[Context: ${projectContext}] + [เป้าหมาย: วิเคราะห์ Lead & Pain Points ลูกค้า พร้อมปิดการขาย] + [Format: Pipeline Stage & Next Action]`;
+    const delegationDev = `[Context: ${projectContext}] + [เป้าหมาย: ประเมิน Technical Feasibility, Tech Stack, Timeline] + [Format: Architecture & Security Review]`;
+    const delegationFinance = `[Context: ${projectContext}] + [เป้าหมาย: คำนวณ Costing, Margin กำไร และ Milestones การชำระเงิน] + [Format: Pricing Breakdown]`;
+    const delegationAdmin = `[Context: ${projectContext}] + [เป้าหมาย: ตรวจสอบและเตรียมเอกสาร QU, NDA, TOR] + [Format: Document Status Checklist]`;
+
+    return {
+      action: 'MULTI_AGENT_ANALYSIS',
+      squadId: 'ops',
+      delegatedTo: 'AI Manager (Project Director)',
+      reply:
+        `ผมได้ส่งคำสั่งและรวบรวมผลลัพธ์จากทีม AI ทั้ง 4 ตัวเรียบร้อยแล้วครับ ${USER_TITLE}:\n\n` +
+        `💼 1. AI เลขา (วิเคราะห์งานขาย & Pipeline):\n` +
+        `• สถานะดีล: Proposal Sent พร้อมนัดหมายเดโมระบบ\n` +
+        `• Pain Point: ลูกค้าต้องการลดเวลาทำงานหน้าร้านและเชื่อมต่อระบบสมาชิก\n` +
+        `• Delegation: ${delegationSales}\n\n` +
+        `⚙️ 2. AI Dev (วิศวกรซอฟต์แวร์ผู้ชำนาญการ):\n` +
+        `• สถาปัตยกรรม: Next.js + Tailwind + PostgreSQL + Redis Caching\n` +
+        `• ประเมินเวลา: 3 สัปดาห์ (Feasibility 98%, Security AES-256 Passed)\n` +
+        `• Delegation: ${delegationDev}\n\n` +
+        `💰 3. AI บัญชี (ที่ปรึกษาทางการเงิน & ต้นทุน):\n` +
+        `• ต้นทุนประเมิน: ฿14,500 | เสนอราคา: ฿32,400 (อัตรากำไรขั้นต้น 55%)\n` +
+        `• การจ่ายเงิน: 3 งวด (มัดจำ 40% / ส่งมอบ 40% / UAT 20%)\n` +
+        `• Delegation: ${delegationFinance}\n\n` +
+        `📄 4. AI Admin (ผู้จัดการงานเอกสารและขั้นตอนระบบ):\n` +
+        `• เอกสาร QU พร้อมเพย์ EMVCo รหัส QT-202610 เรียบร้อย\n` +
+        `• สัญญาจ้างและเอกสาร NDA พร้อมส่งให้ลูกค้าลงนามดิจิทัล\n` +
+        `• Delegation: ${delegationAdmin}\n\n` +
+        `ภาพรวมทุกฝ่ายพร้อมเริ่มงานได้ทันทีครับ ${USER_TITLE}!`,
+      speech:
+        `ผมได้ให้ AI Dev ประเมินระบบ และ AI บัญชี คำนวณราคาเรียบร้อยแล้วครับ ${USER_TITLE} ในส่วนของงานขาย ลูกค้าพร้อมเข้าสู่ขั้นตอนเดโม ถัดมาด้านเทคนิค ระบบสามารถพัฒนาเสร็จได้ในสามสัปดาห์ด้วยมาตรฐานความปลอดภัยสูง และด้านการเงิน อัตรากำไรอยู่ที่ห้าสิบห้าเปอร์เซ็นต์ พร้อมเอกสารใบเสนอราคาครบถ้วนแล้วครับ`,
+      hologram: {
+        title: 'MULTI-AGENT PIPELINE // WEBAPP SUITE',
+        category: 'AI MANAGER DIRECTORIAL MATRIX',
+        badge: '4 AGENTS SYNCED',
+        details: [
+          { label: 'AI Manager', val: 'Directing Project' },
+          { label: 'AI เลขา (Sales)', val: 'Deal Pipeline: Demo Ready' },
+          { label: 'AI Dev (Tech)', val: 'Feasibility: 98% High' },
+          { label: 'AI บัญชี (Finance)', val: 'Margin: 55% | 3 Milestones' },
         ],
       },
     };

@@ -673,16 +673,28 @@ export function JarvisHudView({
           : 'flex flex-col'
       }`}
     >
+      {/* ============================================================ */}
+      {/* AUTHENTIC COCKPIT HUD BACKDROP (User Attached Image 1:1)    */}
+      {/* ============================================================ */}
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <img
+          src="/assets/jarvis-cockpit-hud.png"
+          alt="Iron Man Cockpit HUD Interface"
+          className="w-full h-full object-cover object-center opacity-75 select-none mix-blend-screen"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#02050e] via-transparent to-[#02050e]/70" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#02050e]/85 via-transparent to-[#02050e]/85" />
+      </div>
+
       {/* Sci-Fi Atmospheric Grid Lines & Vignette */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        className="pointer-events-none absolute inset-0 z-[1] opacity-[0.03]"
         style={{
           backgroundImage:
             'linear-gradient(rgba(6, 182, 212, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.4) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-radial-gradient from-transparent via-transparent to-[#02050e]/90" />
 
       {/* ============================================================ */}
       {/* TOP HUD BAR (Matching Screenshot 1:1)                        */}
@@ -722,7 +734,7 @@ export function JarvisHudView({
             type="button"
             onClick={() => {
               playClickSound();
-              const titles = ['คุณผู้ชาย', 'ท่านประธาน', 'ผู้การ', 'คุณไลท์'];
+              const titles = ['sir ไลท์', 'ท่านประธาน', 'ผู้การ', 'คุณผู้ชาย'];
               const currentIndex = titles.indexOf(userTitle);
               const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % titles.length;
               const nextTitle = titles[nextIndex];
@@ -734,7 +746,7 @@ export function JarvisHudView({
               }
             }}
             className="hidden md:flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-950/40 px-2.5 py-1 text-[10px] font-bold text-sky-300 hover:bg-sky-900/50 hover:border-sky-400 transition-all shadow-sm cursor-pointer"
-            title="คลิกเพื่อสลับคำเรียก: คุณผู้ชาย / ท่านประธาน / ผู้การ / คุณไลท์"
+            title="คลิกเพื่อสลับคำเรียก: sir ไลท์ / ท่านประธาน / ผู้การ / คุณผู้ชาย"
           >
             <span>🎖️ เรียก: {userTitle}</span>
           </button>
@@ -844,6 +856,36 @@ export function JarvisHudView({
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* MULTI-AGENT HUB STATUS BAR (5 Specialized Agents)           */}
+      {/* ============================================================ */}
+      <div className="relative z-20 flex items-center justify-between border-b border-cyan-500/20 bg-slate-950/70 px-6 py-1.5 text-[10px] backdrop-blur-md overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 font-mono">
+          <span className="text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+            MULTI-AGENT HUB:
+          </span>
+          {[
+            { id: 'manager', label: 'AI Manager (Direct)', color: 'border-cyan-400/60 bg-cyan-950/70 text-cyan-200' },
+            { id: 'sales', label: 'AI เลขา (Sales)', color: 'border-emerald-500/50 bg-emerald-950/50 text-emerald-300' },
+            { id: 'dev', label: 'AI Dev (Tech Lead)', color: 'border-purple-500/50 bg-purple-950/50 text-purple-300' },
+            { id: 'accounting', label: 'AI บัญชี (Finance)', color: 'border-amber-500/50 bg-amber-950/50 text-amber-300' },
+            { id: 'admin', label: 'AI Admin (Docs)', color: 'border-blue-500/50 bg-blue-950/50 text-blue-300' },
+          ].map((agent) => (
+            <div
+              key={agent.id}
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 border text-[10px] font-sans ${agent.color}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              <span>{agent.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="hidden lg:flex items-center gap-2 text-slate-400 text-[10px]">
+          <span className="text-cyan-400/80 font-mono">🎯 Webapp Sales & Dev Orchestrator</span>
         </div>
       </div>
 
@@ -1263,8 +1305,8 @@ export function JarvisHudView({
               <span className="text-slate-500 shrink-0 font-bold">ลองคลิก/พูด:</span>
               {[
                 '🔊 ฟังเสียงภาษาไทย',
+                'วิเคราะห์เว็บแอพ',
                 'สวัสดี จาร์วิส',
-                'คุยภาษาไทยได้ไหม',
                 'ตรวจระบบทั้งหมด',
                 'ดูข้อมูลระบบ POS',
                 'ออกใบเสนอราคา',
