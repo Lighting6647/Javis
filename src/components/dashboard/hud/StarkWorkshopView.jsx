@@ -382,24 +382,28 @@ export function StarkWorkshopView({
         const yOffset = baseR * Math.sin(latAngle) * Math.cos(rx);
         const zSquash = Math.sin(rx) * Math.sin(latAngle) * 0.35 + 0.35;
 
+        const rX = Math.max(0.1, Math.abs(latR));
+        const rY = Math.max(0.1, Math.abs(latR * Math.abs(zSquash)));
         ctx.beginPath();
         ctx.strokeStyle = isLive
           ? isRedAlert ? 'rgba(248, 113, 113, 0.55)' : 'rgba(56, 189, 248, 0.5)'
           : isRedAlert ? 'rgba(239, 68, 68, 0.28)' : 'rgba(0, 240, 255, 0.28)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy + yOffset, latR, latR * Math.abs(zSquash), 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + yOffset, rX, rY, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       const numLong = 12;
       for (let i = 0; i < numLong; i++) {
         const longAngle = ry + (i / numLong) * Math.PI;
+        const rXLong = Math.max(0.1, Math.abs(baseR * Math.sin(longAngle)));
+        const rYLong = Math.max(0.1, Math.abs(baseR * Math.cos(rx)));
         ctx.beginPath();
         ctx.strokeStyle = isLive
           ? isRedAlert ? 'rgba(248, 113, 113, 0.6)' : 'rgba(56, 189, 248, 0.55)'
           : isRedAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 240, 255, 0.3)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy, baseR * Math.sin(longAngle), baseR * Math.cos(rx), 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, rXLong, rYLong, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 

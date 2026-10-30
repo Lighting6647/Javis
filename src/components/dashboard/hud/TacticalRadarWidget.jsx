@@ -125,7 +125,7 @@ export function TacticalRadarWidget({ onDispatchCommand }) {
 
       // Latitude lines
       for (let i = -2; i <= 2; i++) {
-        const yr = Math.sqrt(Math.max(0, r * r - (i * 12) * (i * 12)));
+        const yr = Math.max(0.1, Math.sqrt(Math.max(0, r * r - (i * 12) * (i * 12))));
         ctx.beginPath();
         ctx.ellipse(cx, cy + i * 11, yr, yr * 0.35, 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -134,8 +134,9 @@ export function TacticalRadarWidget({ onDispatchCommand }) {
       // Rotating Longitude lines
       for (let j = 0; j < 6; j++) {
         const lonAngle = angle + (j / 6) * Math.PI;
+        const rXLon = Math.max(0.1, Math.abs(r * Math.sin(lonAngle)));
         ctx.beginPath();
-        ctx.ellipse(cx, cy, r * Math.sin(lonAngle), r, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, rXLon, r, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 

@@ -80,20 +80,23 @@ export function CenterTargetingReactor({
         const latR = baseR * Math.cos(latAngle);
         const yOffset = baseR * Math.sin(latAngle);
 
+        const rX = Math.max(0.1, Math.abs(latR));
+        const rY = Math.max(0.1, Math.abs(latR * 0.35));
         ctx.beginPath();
         ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.35)' : 'rgba(6, 182, 212, 0.2)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy + yOffset, latR, latR * 0.35, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + yOffset, rX, rY, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       const numLong = 10;
       for (let i = 0; i < numLong; i++) {
         const longAngle = angle + (i / numLong) * Math.PI;
+        const rXLong = Math.max(0.1, Math.abs(baseR * Math.sin(longAngle)));
         ctx.beginPath();
         ctx.strokeStyle = isLive ? 'rgba(56, 189, 248, 0.45)' : 'rgba(6, 182, 212, 0.25)';
         ctx.lineWidth = 1;
-        ctx.ellipse(cx, cy, baseR * Math.sin(longAngle), baseR, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, rXLong, baseR, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
 
