@@ -230,9 +230,39 @@ function startServer(port = 5173) {
           const { action, projectName, filePath, content, commitMessage, command } = body;
 
           const targetDir = projectName ? path.join(LIGHT_ROOT, projectName) : LIGHT_ROOT;
-          if (!fs.existsSync(targetDir)) {
+          if (!fs.existsSync(targetDir) && action !== 'set_gemini_key') {
             res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ success: false, error: `Project not found: ${projectName}` }));
+            return;
+          }
+
+          // A0. Update Gemini API Key in .env
+          if (action === 'set_gemini_key' && body.apiKey) {
+            GEMINI_API_KEY = body.apiKey.trim();
+            const newEnv = `GEMINI_API_KEY=${GEMINI_API_KEY}\nVITE_GEMINI_API_KEY=${GEMINI_API_KEY}\n`;
+            fs.writeFileSync(envPath, newEnv, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, message: 'Gemini API Key updated successfully' }));
+            return;
+          }
+
+          // A1. List files in project directory
+          if (action === 'list_files') {
+            const subDir = filePath ? path.resolve(targetDir, filePath) : targetDir;
+            if (!subDir.startsWith(targetDir)) {
+              throw new Error('Access denied outside target directory');
+            }
+            const entries = fs.readdirSync(subDir, { withFileTypes: true });
+            const files = entries
+              .filter((e) => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist' && e.name !== '.git')
+              .slice(0, 60)
+              .map((e) => ({
+                name: e.name,
+                isDirectory: e.isDirectory(),
+                relPath: path.relative(targetDir, path.join(subDir, e.name)),
+              }));
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, files }));
             return;
           }
 

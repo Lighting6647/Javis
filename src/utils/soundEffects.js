@@ -217,3 +217,111 @@ export function stopArcReactorHum() {
     reactorHumNodes = null;
   }
 }
+
+/**
+ * J.A.R.V.I.S. Iconic Startup Sound Sequence (From KN4rI9siayg)
+ * Arc Reactor Charge Sweep + Dual Electronic Diagnostic Beeps
+ */
+export function playJarvisStartupSound() {
+  if (!isSoundEnabled()) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const now = ctx.currentTime;
+
+  // 1. Arc Reactor Spin-up Sub-Bass Sweep (45Hz -> 220Hz)
+  const subOsc = ctx.createOscillator();
+  const subGain = ctx.createGain();
+  subOsc.type = 'sine';
+  subOsc.frequency.setValueAtTime(45, now);
+  subOsc.frequency.exponentialRampToValueAtTime(220, now + 0.85);
+
+  subGain.gain.setValueAtTime(0.001, now);
+  subGain.gain.exponentialRampToValueAtTime(0.09, now + 0.45);
+  subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
+
+  subOsc.connect(subGain);
+  subGain.connect(ctx.destination);
+  subOsc.start(now);
+  subOsc.stop(now + 0.96);
+
+  // 2. High-Tech Multi-tone Boot Sequence (E6 -> G#6 -> B6 -> E7)
+  const tones = [
+    { freq: 1318.51, delay: 0.18, dur: 0.08 },
+    { freq: 1661.22, delay: 0.32, dur: 0.08 },
+    { freq: 1975.53, delay: 0.48, dur: 0.10 },
+    { freq: 2637.02, delay: 0.65, dur: 0.28 },
+  ];
+
+  tones.forEach((t) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(t.freq, now + t.delay);
+
+    gain.gain.setValueAtTime(0.001, now + t.delay);
+    gain.gain.exponentialRampToValueAtTime(0.05, now + t.delay + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + t.delay + t.dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now + t.delay);
+    osc.stop(now + t.delay + t.dur + 0.02);
+  });
+}
+
+/**
+ * J.A.R.V.I.S. Audio DSP Filter Chain
+ * Transforms voice audio into deep, resonant, baritone British-butler timbre
+ * (Deep Low-Shelf Warmth + Intercom Presence + Studio Broadcast Compression)
+ */
+const connectedAudioElements = new WeakSet();
+
+export function attachJarvisVoiceDSP(audioElement) {
+  if (!audioElement || connectedAudioElements.has(audioElement)) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const source = ctx.createMediaElementSource(audioElement);
+
+    // 1. Deep Baritone Low-Shelf Filter (+5.5dB at 200Hz)
+    const lowShelf = ctx.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.setValueAtTime(200, ctx.currentTime);
+    lowShelf.gain.setValueAtTime(5.5, ctx.currentTime);
+
+    // 2. Intercom / Helmet Radio Presence (+2.8dB at 1.9kHz)
+    const midPresence = ctx.createBiquadFilter();
+    midPresence.type = 'peaking';
+    midPresence.frequency.setValueAtTime(1900, ctx.currentTime);
+    midPresence.Q.setValueAtTime(1.2, ctx.currentTime);
+    midPresence.gain.setValueAtTime(2.8, ctx.currentTime);
+
+    // 3. Smooth Air Roll-off (Gentle high shelf)
+    const highShelf = ctx.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.setValueAtTime(5500, ctx.currentTime);
+    highShelf.gain.setValueAtTime(1.2, ctx.currentTime);
+
+    // 4. Broadcast Dynamics Compressor
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18, ctx.currentTime);
+    compressor.knee.setValueAtTime(10, ctx.currentTime);
+    compressor.ratio.setValueAtTime(3.8, ctx.currentTime);
+    compressor.attack.setValueAtTime(0.004, ctx.currentTime);
+    compressor.release.setValueAtTime(0.09, ctx.currentTime);
+
+    // Connect DSP chain
+    source.connect(lowShelf);
+    lowShelf.connect(midPresence);
+    midPresence.connect(highShelf);
+    highShelf.connect(compressor);
+    compressor.connect(ctx.destination);
+
+    connectedAudioElements.add(audioElement);
+  } catch (err) {
+    // MediaElementSource may only be connected once per element
+    console.debug('[Jarvis Voice DSP]:', err.message);
+  }
+}

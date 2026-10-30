@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { playClickSound, playSuccessSound, playSciFiBeep, playAlertSound } from '../../utils/soundEffects';
+import {
+  playClickSound,
+  playSuccessSound,
+  playSciFiBeep,
+  playAlertSound,
+  playJarvisStartupSound,
+  attachJarvisVoiceDSP,
+} from '../../utils/soundEffects';
 import { processJarvisCommand, USER_TITLE, setUserTitle } from '../../utils/jarvisBrain';
 import { StarkWorkshopView } from './hud/StarkWorkshopView';
 
@@ -101,21 +108,30 @@ export function JarvisHudView({
           try {
             window.speechSynthesis.cancel();
             const availVoices = window.speechSynthesis.getVoices() || [];
-            const thaiVoice = availVoices.find(
-              (v) =>
-                v.lang === 'th-TH' ||
-                v.lang.toLowerCase().startsWith('th') ||
-                v.name.toLowerCase().includes('thai') ||
-                v.name.includes('ภาษาไทย') ||
-                v.name.includes('Premwadee') ||
-                v.name.includes('Niwat')
-            );
+            // Prefer deep male Thai voice, or standard Thai
+            const thaiVoice =
+              availVoices.find(
+                (v) =>
+                  (v.lang === 'th-TH' || v.lang.toLowerCase().startsWith('th')) &&
+                  (v.name.toLowerCase().includes('niwat') ||
+                    v.name.toLowerCase().includes('male') ||
+                    v.name.includes('ผู้ชาย'))
+              ) ||
+              availVoices.find(
+                (v) =>
+                  v.lang === 'th-TH' ||
+                  v.lang.toLowerCase().startsWith('th') ||
+                  v.name.toLowerCase().includes('thai') ||
+                  v.name.includes('ภาษาไทย')
+              );
 
             if (thaiVoice) {
               const utterance = new SpeechSynthesisUtterance(cleanSpeech);
               utterance.voice = thaiVoice;
               utterance.lang = 'th-TH';
-              utterance.rate = 1.0;
+              // Paul Bettany J.A.R.V.I.S. Tuning: Deep baritone pitch & measured British-butler pacing
+              utterance.pitch = 0.82;
+              utterance.rate = 0.90;
               utterance.onend = handleSpeechDone;
               utterance.onerror = handleSpeechDone;
               if (window.speechSynthesis.paused) window.speechSynthesis.resume();
@@ -135,9 +151,12 @@ export function JarvisHudView({
         try {
           const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encoded}`;
           const directAudio = new Audio(directUrl);
+          directAudio.crossOrigin = 'anonymous';
+          directAudio.playbackRate = 0.90;
           audioPlayerRef.current = directAudio;
           directAudio.onended = handleSpeechDone;
           directAudio.onerror = tryWebSpeech;
+          attachJarvisVoiceDSP(directAudio);
           directAudio.play().catch(tryWebSpeech);
         } catch {
           tryWebSpeech();
@@ -147,9 +166,14 @@ export function JarvisHudView({
       try {
         const proxyUrl = `/api/tts?text=${encoded}`;
         const proxyAudio = new Audio(proxyUrl);
+        proxyAudio.crossOrigin = 'anonymous';
+        // Paul Bettany J.A.R.V.I.S. Audio Tuning: Calm, deep, measured pacing
+        proxyAudio.playbackRate = 0.90;
         audioPlayerRef.current = proxyAudio;
         proxyAudio.onended = handleSpeechDone;
         proxyAudio.onerror = tryDirectGoogleTts;
+        // Attach Web Audio API DSP Filter Chain (Bass Warmth + Intercom Clarity + Studio Compression)
+        attachJarvisVoiceDSP(proxyAudio);
         proxyAudio.play().catch(tryDirectGoogleTts);
       } catch {
         tryDirectGoogleTts();
@@ -205,7 +229,60 @@ export function JarvisHudView({
           clean.includes('github') ||
           clean.includes('กิต');
 
-        if (isAnalysisOrQuestion) {
+        // Phase 3: Voice-Triggered Autonomous Git Push Handler across 18 Projects
+        const isVoiceGitPush =
+          (clean.includes('push') || clean.includes('อัพเดท') || clean.includes('อัพขึ้น') || clean.includes('ซิงค์')) &&
+          (clean.includes('github') || clean.includes('กิต') || clean.includes('โปรเจกต์') || clean.includes('โค้ด'));
+
+        if (isVoiceGitPush) {
+          // Identify target project from voice command
+          let targetProj = 'CEO';
+          if (clean.includes('pos') || clean.includes('สต็อก') || clean.includes('inventoty')) targetProj = 'Inventoty AI Light';
+          else if (clean.includes('บัตรคอน') || clean.includes('ตั๋ว')) targetProj = 'บัตรคอน Light';
+          else if (clean.includes('fitness') || clean.includes('ฟิตเนส')) targetProj = 'Fitness';
+          else if (clean.includes('pass') || clean.includes('วอลท์')) targetProj = 'Pass App Light';
+          else if (clean.includes('แดชบอร์ด') || clean.includes('dashboard')) targetProj = 'แดชบอร์ด Light';
+          else if (clean.includes('บัญชี')) targetProj = 'บัญชี Light';
+          else if (clean.includes('เทรด')) targetProj = 'เทรด Light';
+          else if (clean.includes('javis') || clean.includes('จาร์วิส')) targetProj = 'Javis';
+
+          try {
+            const gitRes = await fetch('/api/projects/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'git_push',
+                projectName: targetProj,
+                commitMessage: `[J.A.R.V.I.S. Voice Auto-Push] by ${userTitle}`,
+              }),
+            });
+            const gitData = await gitRes.json();
+            result = {
+              action: 'GIT_PUSH_RESULT',
+              squadId: 'dev',
+              delegatedTo: 'Autonomous Git Pipeline',
+              reply: gitData.success
+                ? `ดำเนินการ Push โปรเจกต์ ${targetProj} ขึ้น GitHub สำเร็จเรียบร้อยครับ ${userTitle}!\n\nOutput Log:\n${gitData.output || '(Clean commit & push)'}`
+                : `พยายาม Push โปรเจกต์ ${targetProj} แล้ว แต่พบข้อความแจ้งเตือน:\n${gitData.error || gitData.output}`,
+              speech: gitData.success
+                ? `บันทึกและพุชโค้ดโปรเจกต์ ${targetProj} ขึ้นกิตฮับเรียบร้อยครับ ${userTitle}`
+                : `ระบบพยายามพุชแล้ว กรุณาตรวจสอบการล็อกอินกิตครับ ${userTitle}`,
+              hologram: {
+                title: `GIT PIPELINE // ${targetProj.toUpperCase()}`,
+                category: 'AUTONOMOUS REPOSITORY SYNC',
+                badge: gitData.success ? 'PUSH SUCCESS' : 'AUTH REQUIRED',
+                details: [
+                  { label: 'Project', val: targetProj },
+                  { label: 'Branch', val: 'main' },
+                  { label: 'Status', val: gitData.success ? 'Synchronized' : 'Pending Auth' },
+                  { label: 'Trigger', val: 'Voice Command' },
+                ],
+              },
+            };
+          } catch (err) {
+            console.warn('[Voice Git Push Fallback]:', err);
+          }
+        } else if (isAnalysisOrQuestion) {
           try {
             const res = await fetch('/api/gemini/analyze', {
               method: 'POST',
@@ -421,9 +498,12 @@ export function JarvisHudView({
 
   const handleTestThaiVoice = () => {
     playClickSound();
-    speakThai(`สวัสดีครับ ${userTitle} ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งานแล้วครับ`);
+    playJarvisStartupSound();
+    setTimeout(() => {
+      speakThai(`สวัสดีครับ ${userTitle} ผม จาร์วิส มาร์คทรี ระบบเสียงโทนสุขุมลุ่มลึกพร้อมใช้งานแล้วครับ`);
+    }, 650);
     if (onShowToast) {
-      onShowToast('info', 'ทดสอบเสียงภาษาไทย', 'กำลังเล่นเสียงสังเคราะห์ภาษาไทยออกลำโพงครับ');
+      onShowToast('info', 'J.A.R.V.I.S. Startup Voice', 'กำลังเล่นเสียง Startup Sound และเสียงพากย์ภาษาไทยออกลำโพงครับ');
     }
   };
 

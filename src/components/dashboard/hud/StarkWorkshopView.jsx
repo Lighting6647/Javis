@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
+import { GeminiSettingsModal } from './GeminiSettingsModal';
+import { ProjectOrchestratorModal } from './ProjectOrchestratorModal';
 import {
   Mic,
   Send,
@@ -58,6 +60,21 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
   const [cameraPreset, setCameraPreset] = useState('iso'); // 'iso' | 'top' | 'pilot' | 'macro'
   const [rightWingMode, setRightWingMode] = useState('turbine'); // 'turbine' | 'terminal'
   const [canvasSafeMode, setCanvasSafeMode] = useState(false); // Feature 1: Canvas Fallback Safe Mode
+  const [leftWingMode, setLeftWingMode] = useState('radar'); // 'radar' | 'projects'
+  const [isGeminiSettingsOpen, setIsGeminiSettingsOpen] = useState(false);
+  const [isProjectOrchestratorOpen, setIsProjectOrchestratorOpen] = useState(false);
+  const [targetProjectName, setTargetProjectName] = useState('CEO');
+  const [projectsList, setProjectsList] = useState([]);
+
+  // Load 18 projects in D:\Light
+  useEffect(() => {
+    fetch('/api/projects/list')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.projects) setProjectsList(d.projects);
+      })
+      .catch(() => {});
+  }, []);
 
   // Feature 1 & 2: Live Terminal Log Stream & Crash Analytics State
   const [terminalLogs, setTerminalLogs] = useState([
@@ -1028,6 +1045,34 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
               🕒 {currentTime || '03:25:18 AM'}
             </div>
 
+            {/* Phase 1: Gemini AI Settings Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playClickSound();
+                setIsGeminiSettingsOpen(true);
+              }}
+              className="hidden lg:inline-flex items-center gap-1.5 rounded-lg border border-purple-500/60 bg-purple-950/70 px-2.5 py-1 text-xs font-bold text-purple-200 hover:bg-purple-900/80 hover:border-purple-400 cursor-pointer shadow-sm transition-all"
+              title="ตั้งค่า Google Gemini API Core"
+            >
+              <Cpu className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
+              <span>GEMINI CORE</span>
+            </button>
+
+            {/* Phase 2 & 3: 18 Projects Orchestrator Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playClickSound();
+                setIsProjectOrchestratorOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/60 bg-cyan-950/70 px-2.5 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-900/80 hover:border-cyan-400 cursor-pointer shadow-sm transition-all"
+              title="จัดการโค้ดและ Git Push 18 โปรเจกต์ใน D:\Light"
+            >
+              <FolderOpen className="h-3.5 w-3.5 text-cyan-400" />
+              <span>18 PROJECTS</span>
+            </button>
+
             {/* Company Hub Navigation */}
             {onOpenCompany && (
               <button
@@ -1124,54 +1169,128 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
       {/* ============================================================ */}
       <main className="relative z-10 flex-1 flex flex-col 2xl:flex-row items-center justify-between gap-3 p-3 lg:p-6 max-w-[1920px] mx-auto w-full">
         {/* ------------------------------------------------------------ */}
-        {/* LEFT POD: TACTICAL RADAR + 3 COMPANY OPERATION CARDS         */}
+        {/* LEFT POD: TACTICAL RADAR + 18 PROJECTS ORCHESTRATOR          */}
         {/* ------------------------------------------------------------ */}
         <div className="w-full 2xl:w-84 flex flex-col space-y-2.5 shrink-0">
-          {/* Tactical Radar Widget */}
-          <div
-            className={`rounded-2xl border ${themeBorder} ${
-              isRedAlert ? 'bg-[#180508]/90' : 'bg-[#020d28]/90'
-            } p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl`}
-          >
-            <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between">
-              <div>
-                <span className={`text-[11px] font-black tracking-wider ${themeText} block`}>
-                  TACTICAL RADAR/SONAR ARRAY
-                </span>
-                <span className="text-[9px] text-slate-400">BEARING: 284° | DEPTH: -450m</span>
-              </div>
-              <span className={`text-[10px] font-bold ${isRedAlert ? 'text-red-400' : 'text-emerald-400'}`}>
-                12 CONTACTS
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <canvas
-                ref={radarCanvasRef}
-                width={140}
-                height={140}
-                className="rounded-full border border-cyan-500/30"
-              />
-              <div className="flex-1 ml-3 text-[10px] space-y-1 bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">RANGE:</span>
-                  <span className={`font-bold ${themeText}`}>4.8 KM</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">ETA:</span>
-                  <span className="text-emerald-400 font-bold">03:14:18</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">STATUS:</span>
-                  <span className="text-amber-400 font-bold">VERIFIED</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">HUD:</span>
-                  <span className={`font-bold ${themeText}`}>83% OPTIMAL</span>
-                </div>
-              </div>
+          {/* Left Wing Mode Switcher */}
+          <div className="flex items-center justify-between px-1 text-[10px] font-bold">
+            <span className={themeText}>LEFT WING TELEMETRY</span>
+            <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-lg border border-cyan-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setLeftWingMode('radar');
+                }}
+                className={`px-2 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
+                  leftWingMode === 'radar'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                RADAR
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setLeftWingMode('projects');
+                }}
+                className={`px-2 py-0.5 rounded text-[9px] transition-all cursor-pointer ${
+                  leftWingMode === 'projects'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                18 PROJECTS
+              </button>
             </div>
           </div>
+
+          {/* Mode 1: Tactical Radar Widget */}
+          {leftWingMode === 'radar' && (
+            <div
+              className={`rounded-2xl border ${themeBorder} ${
+                isRedAlert ? 'bg-[#180508]/90' : 'bg-[#020d28]/90'
+              } p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl`}
+            >
+              <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between">
+                <div>
+                  <span className={`text-[11px] font-black tracking-wider ${themeText} block`}>
+                    TACTICAL RADAR/SONAR ARRAY
+                  </span>
+                  <span className="text-[9px] text-slate-400">BEARING: 284° | DEPTH: -450m</span>
+                </div>
+                <span className={`text-[10px] font-bold ${isRedAlert ? 'text-red-400' : 'text-emerald-400'}`}>
+                  12 CONTACTS
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <canvas
+                  ref={radarCanvasRef}
+                  width={140}
+                  height={140}
+                  className="rounded-full border border-cyan-500/30"
+                />
+                <div className="flex-1 ml-3 text-[10px] space-y-1 bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">RANGE:</span>
+                    <span className={`font-bold ${themeText}`}>4.8 KM</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ETA:</span>
+                    <span className="text-emerald-400 font-bold">03:14:18</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">STATUS:</span>
+                    <span className="text-amber-400 font-bold">VERIFIED</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">HUD:</span>
+                    <span className={`font-bold ${themeText}`}>83% OPTIMAL</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mode 2: 18 Projects Quick Roster (Phase 2 & 3) */}
+          {leftWingMode === 'projects' && (
+            <div
+              className={`rounded-2xl border ${themeBorder} ${
+                isRedAlert ? 'bg-[#180508]/90' : 'bg-[#020d28]/90'
+              } p-3 shadow-[0_0_25px_rgba(0,240,255,0.2)] backdrop-blur-xl flex flex-col h-[200px]`}
+            >
+              <div className="border-b border-cyan-500/25 pb-1 mb-2 flex items-center justify-between text-[11px] font-bold">
+                <span className={themeText}>D:\LIGHT // 18 REPOSITORIES</span>
+                <span className="text-[9px] text-emerald-400">AUTONOMOUS GIT</span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-1 pr-1 font-mono text-[9px] scrollbar-thin">
+                {projectsList.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between p-1.5 rounded-lg bg-black/50 border border-cyan-500/10 hover:border-cyan-400/50 transition-all group"
+                  >
+                    <span className="truncate text-slate-300 group-hover:text-cyan-200">{p.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetProjectName(p.name);
+                          setIsProjectOrchestratorOpen(true);
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 hover:bg-cyan-900 border border-cyan-500/30 text-[8px] font-bold cursor-pointer"
+                        title="เปิดแก้ไขโค้ดและ Push"
+                      >
+                        CODE
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 3 Company Operation Cards (Left Side) */}
           <div className="space-y-2">
@@ -1966,6 +2085,19 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
           </form>
         </div>
       </footer>
+
+      {/* Phase 1: Gemini AI Settings Modal */}
+      <GeminiSettingsModal
+        isOpen={isGeminiSettingsOpen}
+        onClose={() => setIsGeminiSettingsOpen(false)}
+      />
+
+      {/* Phase 2 & 3: Project Code & Autonomous Git Orchestrator Modal */}
+      <ProjectOrchestratorModal
+        isOpen={isProjectOrchestratorOpen}
+        initialProject={targetProjectName}
+        onClose={() => setIsProjectOrchestratorOpen(false)}
+      />
     </div>
   );
 });
