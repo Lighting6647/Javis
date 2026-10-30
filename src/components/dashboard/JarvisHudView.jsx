@@ -57,6 +57,7 @@ export function JarvisHudView({
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const recognitionRef = useRef(null);
+  const audioPlayerRef = useRef(null);
   const chatScrollRef = useRef(null);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -224,59 +225,113 @@ export function JarvisHudView({
     return () => cancelAnimationFrame(animationId);
   }, [hudState, activeSquadId]);
 
-  // Web Speech Synthesis (Thai Executive Voice Output)
+  // Dual-Engine Thai Speech Synthesis (Primary: High-Fidelity Audio Stream, Fallback: Web Speech API)
   const speakThai = useCallback(
     (text) => {
-      if (!voiceEnabled) return;
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'th-TH';
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
+      if (!voiceEnabled || !text || !text.trim()) return;
 
-          // Select best native Thai voice in Windows / Chrome
-          const availVoices = window.speechSynthesis.getVoices();
-          const thaiVoice = availVoices.find(
-            (v) =>
-              v.lang === 'th-TH' ||
-              v.lang.toLowerCase().startsWith('th') ||
-              v.name.toLowerCase().includes('thai') ||
-              v.name.includes('ภาษาไทย') ||
-              v.name.includes('Premwadee') ||
-              v.name.includes('Niwat')
-          );
-          if (thaiVoice) {
-            utterance.voice = thaiVoice;
-          }
-
-          utterance.onstart = () => {
-            setIsSpeaking(true);
-            setHudState('SPEAKING');
-          };
-          utterance.onend = () => {
-            setIsSpeaking(false);
-            setHudState('READY');
-          };
-          utterance.onerror = (e) => {
-            console.warn('Speech error:', e);
-            setIsSpeaking(false);
-            setHudState('READY');
-          };
-
-          if (window.speechSynthesis.paused) {
-            window.speechSynthesis.resume();
-          }
-          window.speechSynthesis.speak(utterance);
-        } catch (err) {
-          console.warn('TTS error:', err);
-          setIsSpeaking(false);
-          setHudState('READY');
+      // 1. Temporarily pause microphone while J.A.R.V.I.S. speaks to prevent feedback loop
+      try {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
         }
+      } catch {}
+
+      // 2. Stop any ongoing audio playback
+      if (audioPlayerRef.current) {
+        try {
+          audioPlayerRef.current.pause();
+          audioPlayerRef.current.currentTime = 0;
+        } catch {}
       }
+
+      setIsSpeaking(true);
+      setHudState('SPEAKING');
+
+      // Callback when speech completes: re-arm microphone for two-way continuous Thai conversation
+      const handleSpeechDone = () => {
+        setIsSpeaking(false);
+        setHudState('READY');
+        if (wakeWordActive) {
+          setTimeout(() => {
+            try {
+              if (recognitionRef.current) {
+                recognitionRef.current.start();
+                setIsListening(true);
+                setHudState('LISTENING');
+              }
+            } catch {}
+          }, 350);
+        }
+      };
+
+      // Strip symbols for speech
+      const cleanSpeech = text
+        .replace(/[*#•_`~[\]\\/]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Primary Engine: Neural Thai Audio Stream (Works 100% on Windows without Thai voice pack)
+      const encoded = encodeURIComponent(cleanSpeech.slice(0, 180));
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encoded}`;
+
+      const audio = new Audio(audioUrl);
+      audioPlayerRef.current = audio;
+
+      audio.onended = () => {
+        handleSpeechDone();
+      };
+
+      audio.onerror = () => {
+        // Fallback Engine: Web Speech Synthesis API
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+            utterance.lang = 'th-TH';
+            utterance.rate = 1.0;
+            const availVoices = window.speechSynthesis.getVoices();
+            const thaiVoice = availVoices.find(
+              (v) =>
+                v.lang === 'th-TH' ||
+                v.lang.toLowerCase().startsWith('th') ||
+                v.name.toLowerCase().includes('thai') ||
+                v.name.includes('ภาษาไทย') ||
+                v.name.includes('Premwadee') ||
+                v.name.includes('Niwat')
+            );
+            if (thaiVoice) utterance.voice = thaiVoice;
+            utterance.onend = handleSpeechDone;
+            utterance.onerror = handleSpeechDone;
+            if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+            window.speechSynthesis.speak(utterance);
+          } catch {
+            handleSpeechDone();
+          }
+        } else {
+          handleSpeechDone();
+        }
+      };
+
+      audio.play().catch(() => {
+        // If audio autoplay blocked, fallback to Web Speech
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+            utterance.lang = 'th-TH';
+            utterance.onend = handleSpeechDone;
+            utterance.onerror = handleSpeechDone;
+            window.speechSynthesis.speak(utterance);
+          } catch {
+            handleSpeechDone();
+          }
+        } else {
+          handleSpeechDone();
+        }
+      });
     },
-    [voiceEnabled]
+    [voiceEnabled, wakeWordActive]
   );
 
   // Core Command Dispatcher & AI Squad Query Engine
@@ -442,26 +497,58 @@ export function JarvisHudView({
     }
   }, [isSpeaking, handleDispatchCommand, onShowToast, speakThai, wakeWordActive]);
 
-  const toggleMic = () => {
+  const toggleMic = useCallback(() => {
     playClickSound();
     if (isListening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
       setIsListening(false);
       setHudState('READY');
+      if (audioPlayerRef.current) {
+        try {
+          audioPlayerRef.current.pause();
+        } catch {}
+      }
+      if (onShowToast) {
+        onShowToast('info', 'พักไมโครโฟน', 'ปิดระบบดักฟังเสียงเรียบร้อยครับ กดที่ลูกแก้วเพื่อเปิดใหม่ได้ทุกเมื่อ');
+      }
     } else {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.start();
+          setIsListening(true);
+          setHudState('LISTENING');
+          speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี พร้อมรับคำสั่งเสียงภาษาไทยแล้วครับ');
+          if (onShowToast) {
+            onShowToast(
+              'success',
+              'เปิดระบบพูดคุยภาษาไทยแล้ว',
+              'พูดคำสั่งภาษาไทย เช่น "ตรวจระบบ", "ดูข้อมูล POS", หรือคุยกับจาร์วิสได้ทันทีครับ'
+            );
+          }
         } catch {
-          recognitionRef.current.stop();
+          try {
+            recognitionRef.current.stop();
+            setTimeout(() => {
+              recognitionRef.current?.start();
+              setIsListening(true);
+              setHudState('LISTENING');
+              speakThai('สวัสดีครับ บอส กำลังรับฟังอยู่ครับ');
+            }, 300);
+          } catch {}
         }
       } else {
         if (onShowToast) {
-          onShowToast('info', 'Speech Input', 'เบราว์เซอร์นี้ไม่รองรับการจับเสียง กรุณาพิมพ์คำสั่งในช่องด้านล่างแทนครับ');
+          onShowToast(
+            'warning',
+            'ไมโครโฟนยังไม่พร้อมใช้งาน',
+            'กรุณากดไอคอนแม่กุญแจ 🔒 ที่แถบ URL เพื่ออนุญาต (Allow) การใช้ไมโครโฟน หรือคลิกปุ่มคำสั่งภาษาไทยด้านล่างได้ทันทีครับ'
+          );
         }
       }
     }
-  };
+  }, [isListening, onShowToast, speakThai]);
 
   const toggleFullscreen = () => {
     playClickSound();
@@ -744,6 +831,35 @@ export function JarvisHudView({
                 }}
               />
             ))}
+          </div>
+
+          {/* Central Voice Two-Way Status / Tap-to-Talk Button */}
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleMic}
+              className={`flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold transition-all shadow-lg cursor-pointer ${
+                isListening
+                  ? 'border border-red-500/80 bg-red-950/70 text-red-200 shadow-red-500/30 animate-pulse'
+                  : isSpeaking
+                  ? 'border border-sky-400 bg-sky-950/70 text-sky-200 shadow-sky-500/30 animate-pulse'
+                  : 'border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900/90 hover:border-cyan-300 shadow-cyan-500/40 hover:scale-105'
+              }`}
+            >
+              <Mic className="h-4 w-4" />
+              <span>
+                {isListening
+                  ? '🎙️ กำลังรับฟังเสียงภาษาไทย... (พูดโต้ตอบได้ทันที)'
+                  : isSpeaking
+                  ? '🔊 กำลังพูดตอบกลับ...'
+                  : '🎙️ เริ่มพูดคุยโต้ตอบภาษาไทย (คลิกเปิดไมค์)'}
+              </span>
+            </button>
+            <span className="text-[10px] text-slate-400">
+              {wakeWordActive
+                ? 'ระบบโต้ตอบต่อเนื่อง: พูด "เฮ้ จาร์วิส" หรือสั่งงานได้ตลอดเวลา'
+                : 'คลิกปุ่มเพื่อเริ่มพูดคุย'}
+            </span>
           </div>
 
           {/* Bottom-Left Collapsible "SMART CONTROL" Widget (Matching Screenshot) */}
