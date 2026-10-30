@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   Mic,
   Send,
@@ -28,7 +28,7 @@ import {
   stopArcReactorHum,
 } from '../../../utils/soundEffects';
 
-export function StarkWorkshopView({
+export const StarkWorkshopView = memo(function StarkWorkshopView({
   userTitle,
   onCycleTitle,
   wakeWordActive,
@@ -275,17 +275,17 @@ export function StarkWorkshopView({
       ctx.fillStyle = sweepGrad;
       ctx.fill();
 
-      // Target Blips
+      // Target Blips (Zero shadowBlur overhead)
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.fillStyle = isRedAlert ? '#ffedd5' : '#ef4444';
       targets.forEach((t) => {
         const tx = cx + t.r * Math.cos(t.a);
         const ty = cy + t.r * Math.sin(t.a);
-        ctx.beginPath();
-        ctx.fillStyle = isRedAlert ? '#ffedd5' : '#ef4444';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#ef4444';
+        ctx.moveTo(tx + 2.5, ty);
         ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
-        ctx.fill();
       });
+      ctx.fill();
 
       ctx.restore();
       angle += isRedAlert ? 0.05 : 0.035;
@@ -359,9 +359,9 @@ export function StarkWorkshopView({
       // Upper & Lower Segmented Rotating Gyro Arcs
       ctx.beginPath();
       ctx.strokeStyle = mainColor;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 3.5;
       ctx.lineCap = 'round';
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 12;
       ctx.shadowColor = themeGlow;
       ctx.arc(cx, cy, baseR + 18, ry, ry + Math.PI * 0.7);
       ctx.stroke();
@@ -373,11 +373,14 @@ export function StarkWorkshopView({
       // Counter-Rotating Inner Gyro Ring
       ctx.beginPath();
       ctx.strokeStyle = isRedAlert ? 'rgba(248, 113, 113, 0.7)' : 'rgba(56, 189, 248, 0.7)';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.8;
       ctx.arc(cx, cy, baseR + 4, -ry * 1.4, -ry * 1.4 + Math.PI * 0.85);
       ctx.stroke();
 
-      // 2. 3D Spherical Geodesic Wireframe Lattice (Rotates with rx & ry)
+      // PERFORMANCE OPTIMIZATION: Clear shadowBlur immediately so ellipses & particles don't lag
+      ctx.shadowBlur = 0;
+
+      // 2. 3D Spherical Geodesic Wireframe Lattice (Rotates with rx & ry - Crisp 60FPS)
       const numLat = 9;
       for (let i = 1; i < numLat; i++) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
@@ -410,7 +413,9 @@ export function StarkWorkshopView({
         ctx.stroke();
       }
 
-      // 3. Glowing 3D Vertices
+      // 3. Batched 3D Vertices (Single draw-call for zero stutter)
+      ctx.beginPath();
+      ctx.fillStyle = isRedAlert ? '#fecaca' : isLive ? '#bae6fd' : '#38bdf8';
       for (let i = 1; i < numLat; i += 2) {
         const latAngle = (i / numLat) * Math.PI - Math.PI / 2;
         const latR = baseR * Math.cos(latAngle);
@@ -419,17 +424,16 @@ export function StarkWorkshopView({
           const ptAngle = ry + (j / 6) * Math.PI * 2;
           const px = cx + latR * Math.cos(ptAngle);
           const py = cy + yOffset + latR * 0.35 * Math.sin(ptAngle);
-          ctx.beginPath();
-          ctx.fillStyle = isRedAlert ? '#fecaca' : isLive ? '#bae6fd' : '#38bdf8';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = themeGlow;
+          ctx.moveTo(px + 1.8, py);
           ctx.arc(px, py, 1.8, 0, Math.PI * 2);
-          ctx.fill();
         }
       }
+      ctx.fill();
 
-      // 4. Audio-Reactive Particle Cloud Rendering & Dispersion
+      // 4. Batched Audio-Reactive Particle Cloud (Ultra-smooth 60FPS)
       if (particlesRef.current) {
+        ctx.beginPath();
+        ctx.fillStyle = isRedAlert ? '#ef4444' : isLive ? '#ffffff' : '#38bdf8';
         particlesRef.current.forEach((p) => {
           p.theta += isLive ? p.speed * 2.8 : p.speed;
           const scaledDist = p.dist * hologramScale;
@@ -442,25 +446,30 @@ export function StarkWorkshopView({
             currentDist * Math.sin(p.phi) * Math.cos(rx) +
             currentDist * Math.cos(p.phi) * Math.sin(p.theta + ry * 0.5) * Math.sin(rx) * 0.35;
 
-          ctx.beginPath();
-          ctx.fillStyle = isRedAlert ? '#ef4444' : isLive ? '#ffffff' : p.color;
-          ctx.shadowBlur = isLive ? 12 : 5;
-          ctx.shadowColor = themeGlow;
-          ctx.arc(px, py, isLive ? p.size * 1.35 : p.size, 0, Math.PI * 2);
-          ctx.fill();
+          const pSize = isLive ? p.size * 1.3 : p.size;
+          ctx.moveTo(px + pSize, py);
+          ctx.arc(px, py, pSize, 0, Math.PI * 2);
+        });
+        ctx.fill();
 
-          if (isLive && Math.random() > 0.78) {
-            ctx.beginPath();
-            ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.45)' : 'rgba(0, 240, 255, 0.4)';
-            ctx.lineWidth = 0.8;
+        // Subtle dynamic laser traces without heavy blur
+        if (isLive) {
+          ctx.beginPath();
+          ctx.strokeStyle = isRedAlert ? 'rgba(239, 68, 68, 0.45)' : 'rgba(0, 240, 255, 0.4)';
+          ctx.lineWidth = 0.8;
+          for (let pIdx = 0; pIdx < particlesRef.current.length; pIdx += 6) {
+            const p = particlesRef.current[pIdx];
+            const scaledDist = p.dist * hologramScale;
+            const px = cx + scaledDist * Math.cos(p.phi) * Math.cos(p.theta + ry * 0.5);
+            const py = cy + scaledDist * Math.sin(p.phi) * Math.cos(rx);
             ctx.moveTo(cx, cy);
             ctx.lineTo(px, py);
-            ctx.stroke();
           }
-        });
+          ctx.stroke();
+        }
       }
 
-      // 5. Center High-Energy Reactor Core Pulse
+      // 5. Center High-Energy Reactor Core Pulse (Hardware-accelerated gradient)
       const coreR = isLive ? 22 + Math.sin(ry * 8) * 4 : 16;
       const gradient = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR * 2.5);
       gradient.addColorStop(0, '#ffffff');
@@ -490,9 +499,7 @@ export function StarkWorkshopView({
         if (isDelegated) {
           ctx.beginPath();
           ctx.strokeStyle = ag.color;
-          ctx.lineWidth = 2.2;
-          ctx.shadowBlur = 14;
-          ctx.shadowColor = ag.color;
+          ctx.lineWidth = 2.0;
           ctx.moveTo(cx, cy);
           ctx.lineTo(ax, ay);
           ctx.stroke();
@@ -500,13 +507,11 @@ export function StarkWorkshopView({
 
         ctx.beginPath();
         ctx.fillStyle = isDelegated ? '#ffffff' : ag.color;
-        ctx.shadowBlur = isDelegated ? 16 : 8;
-        ctx.shadowColor = ag.color;
-        ctx.arc(ax, ay, isDelegated ? 5.5 : 3.5, 0, Math.PI * 2);
+        ctx.arc(ax, ay, isDelegated ? 5.0 : 3.5, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // 7. Feature 3: Sound-Reactive Pulsing Sonic Resonance Rings (Arc Core Resonance)
+      // 7. Feature 3: Sound-Reactive Pulsing Sonic Resonance Rings (Arc Core Resonance - Zero Lag)
       if (isListening || isSpeaking || hudState === 'SEARCHING') {
         const pulseTime = Date.now() * 0.003;
         for (let ringIdx = 0; ringIdx < 3; ringIdx++) {
@@ -518,9 +523,7 @@ export function StarkWorkshopView({
           ctx.strokeStyle = isRedAlert
             ? `rgba(239, 68, 68, ${opacity})`
             : `rgba(0, 240, 255, ${opacity})`;
-          ctx.lineWidth = 2.5 * (1 - progress) + 0.6;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = themeGlow;
+          ctx.lineWidth = 2.2 * (1 - progress) + 0.6;
           ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
           ctx.stroke();
         }
@@ -612,18 +615,17 @@ export function StarkWorkshopView({
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
 
-      // 8 Rotating Radial Spokes
-      ctx.lineWidth = 2;
+      // 8 Rotating Radial Spokes (Batched single path with zero blur lag)
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.8;
       ctx.strokeStyle = themeSecondary;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = themeGlow;
+      ctx.beginPath();
       for (let s = 0; s < 8; s++) {
         const spokeAngle = angle + (s / 8) * Math.PI * 2;
-        ctx.beginPath();
         ctx.moveTo(cx + 9 * Math.cos(spokeAngle), cy + 9 * Math.sin(spokeAngle));
         ctx.lineTo(cx + (r - 2) * Math.cos(spokeAngle), cy + (r - 2) * Math.sin(spokeAngle));
-        ctx.stroke();
       }
+      ctx.stroke();
 
       // Center Hub
       ctx.beginPath();
@@ -1966,4 +1968,4 @@ export function StarkWorkshopView({
       </footer>
     </div>
   );
-}
+});
