@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { playClickSound, playSuccessSound } from '../../utils/soundEffects';
+import { playClickSound, playSuccessSound, playSciFiBeep } from '../../utils/soundEffects';
 import { processJarvisCommand, USER_TITLE, setUserTitle } from '../../utils/jarvisBrain';
 import { StarkWorkshopView } from './hud/StarkWorkshopView';
 
@@ -170,6 +170,7 @@ export function JarvisHudView({
       lastDispatchedRef.current = { text: clean, time: now };
 
       playClickSound();
+      playSciFiBeep();
       const nowTime = new Date().toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
@@ -271,6 +272,8 @@ export function JarvisHudView({
             lower.includes('จาวิษ');
 
           if (!isWakeWord) return;
+
+          playSciFiBeep();
 
           const cleanedCommand = lower
             .replace(/^(เฮ้|ไฮ|สวัสดี|โอเค)?\s*(javis|jarvis|จาร์วิส|จาวิส|จาวิซ|จาวิด|จาวิษ)\s*/i, '')

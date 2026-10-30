@@ -1,6 +1,25 @@
-import { useState, useRef, useEffect } from 'react';
-import { Mic, Send, Volume2, Search, X } from 'lucide-react';
-import { playClickSound } from '../../../utils/soundEffects';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  Mic,
+  Send,
+  Volume2,
+  Search,
+  X,
+  VolumeX,
+  Sparkles,
+  Radio,
+  FileText,
+  ShieldCheck,
+  CheckCircle,
+  Cpu,
+  Activity,
+} from 'lucide-react';
+import {
+  playClickSound,
+  playSciFiBeep,
+  startArcReactorHum,
+  stopArcReactorHum,
+} from '../../../utils/soundEffects';
 
 export function StarkWorkshopView({
   userTitle,
@@ -24,7 +43,13 @@ export function StarkWorkshopView({
 }) {
   const [inputText, setInputText] = useState('');
   const [searchProject, setSearchProject] = useState('');
+  const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline' | 'chat'
+  const [isHumming, setIsHumming] = useState(false);
+  const [selectedMockupProject, setSelectedMockupProject] = useState(null);
+
   const canvasRef = useRef(null);
+  const radarCanvasRef = useRef(null);
+  const turbineCanvasRef = useRef(null);
   const chatScrollRef = useRef(null);
 
   // Auto scroll chat
@@ -34,7 +59,133 @@ export function StarkWorkshopView({
     }
   }, [messages]);
 
-  // Canvas 3D Holographic Wireframe Arc Reactor Sphere (Stark Workshop Edition)
+  // Stark Workshop Ambient Hum Lifecycle
+  const toggleAmbientHum = () => {
+    playClickSound();
+    if (isHumming) {
+      stopArcReactorHum();
+      setIsHumming(false);
+    } else {
+      startArcReactorHum();
+      setIsHumming(true);
+    }
+  };
+
+  useEffect(() => {
+    // Gracefully clean up hum on unmount
+    return () => {
+      stopArcReactorHum();
+    };
+  }, []);
+
+  // Sync selected mockup with activeHologram
+  useEffect(() => {
+    if (activeHologram) {
+      playSciFiBeep();
+      const titleLower = (activeHologram.title || '').toLowerCase();
+      if (titleLower.includes('pos')) {
+        setSelectedMockupProject('pos');
+      } else if (titleLower.includes('ticket') || titleLower.includes('คอน')) {
+        setSelectedMockupProject('ticket');
+      } else if (titleLower.includes('fit')) {
+        setSelectedMockupProject('fit');
+      } else if (titleLower.includes('pass') || titleLower.includes('vault')) {
+        setSelectedMockupProject('pass');
+      } else {
+        setSelectedMockupProject('pos');
+      }
+    }
+  }, [activeHologram]);
+
+  // =========================================================================
+  // CANVAS 1: Tactical Sonar Radar Sweep (Left Panel matching Image 1:1)
+  // =========================================================================
+  useEffect(() => {
+    const canvas = radarCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animId;
+    let angle = 0;
+
+    const targets = [
+      { r: 35, a: 0.9, label: 'LEAD-01' },
+      { r: 58, a: 1.4, label: 'WEBAPP-DEAL' },
+      { r: 46, a: 2.3, label: 'QU-READY' },
+      { r: 68, a: 3.1, label: 'POS-LIGHT' },
+    ];
+
+    const render = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const maxR = 82;
+
+      ctx.save();
+
+      // Outer Glow Border
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Concentric Range Rings
+      [22, 42, 62, maxR].forEach((r, idx) => {
+        ctx.beginPath();
+        ctx.strokeStyle = idx === 3 ? '#00f0ff' : 'rgba(0, 240, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash(idx % 2 === 0 ? [3, 3] : []);
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+
+      // Crosshairs & Grid Lines
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - maxR, cy);
+      ctx.lineTo(cx + maxR, cy);
+      ctx.moveTo(cx, cy - maxR);
+      ctx.lineTo(cx, cy + maxR);
+      ctx.stroke();
+
+      // Rotating Radar Sweep Cone
+      const sweepGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, maxR);
+      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+      sweepGrad.addColorStop(1, 'rgba(16, 185, 129, 0.2)');
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, maxR, angle - 0.5, angle);
+      ctx.closePath();
+      ctx.fillStyle = sweepGrad;
+      ctx.fill();
+
+      // Target Blips
+      targets.forEach((t) => {
+        const tx = cx + t.r * Math.cos(t.a);
+        const ty = cy + t.r * Math.sin(t.a);
+        ctx.beginPath();
+        ctx.fillStyle = '#ef4444';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#ef4444';
+        ctx.arc(tx, ty, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+      angle += 0.035;
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  // =========================================================================
+  // CANVAS 2: 3D Holographic Wireframe Arc Reactor Sphere (Center)
+  // =========================================================================
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -127,7 +278,7 @@ export function StarkWorkshopView({
         for (let j = 0; j < 6; j++) {
           const ptAngle = angle + (j / 6) * Math.PI * 2;
           const px = cx + latR * Math.cos(ptAngle);
-          const py = cy + yOffset + (latR * 0.35) * Math.sin(ptAngle);
+          const py = cy + yOffset + latR * 0.35 * Math.sin(ptAngle);
           ctx.beginPath();
           ctx.fillStyle = isLive ? '#bae6fd' : '#38bdf8';
           ctx.shadowBlur = 10;
@@ -197,55 +348,273 @@ export function StarkWorkshopView({
     return () => cancelAnimationFrame(animationId);
   }, [hudState, activeSquadId]);
 
+  // =========================================================================
+  // CANVAS 3: 8-Spoke Diagnostic Turbine Gauge (Right Panel)
+  // =========================================================================
+  useEffect(() => {
+    const canvas = turbineCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animId;
+    let angle = 0;
+
+    const render = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const r = 50;
+
+      ctx.save();
+
+      // Outer Ticks Ring
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 12, 0, Math.PI * 2);
+      ctx.stroke();
+
+      for (let i = 0; i < 32; i++) {
+        const rad = (i / 32) * Math.PI * 2;
+        const isMajor = i % 4 === 0;
+        const r1 = r + 12;
+        const r2 = r + (isMajor ? 18 : 15);
+        ctx.beginPath();
+        ctx.strokeStyle = isMajor ? '#38bdf8' : 'rgba(0, 240, 255, 0.3)';
+        ctx.lineWidth = isMajor ? 1.5 : 1;
+        ctx.moveTo(cx + r1 * Math.cos(rad), cy + r1 * Math.sin(rad));
+        ctx.lineTo(cx + r2 * Math.cos(rad), cy + r2 * Math.sin(rad));
+        ctx.stroke();
+      }
+
+      // Middle Turbine Rim
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 8 Rotating Radial Spokes
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = '#00f0ff';
+      for (let s = 0; s < 8; s++) {
+        const spokeAngle = angle + (s / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + 10 * Math.cos(spokeAngle), cy + 10 * Math.sin(spokeAngle));
+        ctx.lineTo(cx + (r - 2) * Math.cos(spokeAngle), cy + (r - 2) * Math.sin(spokeAngle));
+        ctx.stroke();
+      }
+
+      // Center Hub
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+      ctx.fillStyle = '#020b1e';
+      ctx.fill();
+      ctx.strokeStyle = '#67e8f9';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.restore();
+      angle += 0.04;
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    playSciFiBeep();
     onDispatchCommand(inputText.trim());
     setInputText('');
   };
 
-  const projects = [
-    { id: 'pos', name: 'POS & Inventory Light', cat: 'Digital Commerce', path: 'D:\\Light\\Inventoty AI Light', price: '฿390 / เดือน' },
-    { id: 'ticket', name: 'ThaiTicket Concert Hub', cat: 'Event Ticketing', path: 'D:\\Light\\บัตรคอน Light', price: '฿1,500 / งาน' },
-    { id: 'fit', name: 'Krob Fit Gym Management', cat: 'Fitness & Scanner', path: 'D:\\Light\\Fitness', price: '฿990 / เดือน' },
-    { id: 'pass', name: 'Krob Pass Vault & Gate', cat: 'Cybersecurity', path: 'D:\\Light\\Pass App Light', price: '฿690 / เดือน' },
-  ].filter(p => !searchProject || p.name.toLowerCase().includes(searchProject.toLowerCase()) || p.cat.toLowerCase().includes(searchProject.toLowerCase()));
+  const projects = useMemo(
+    () => [
+      {
+        id: 'pos',
+        name: 'POS & Inventory Light',
+        cat: 'Digital Commerce',
+        path: 'D:\\Light\\Inventoty AI Light',
+        price: '฿390 / เดือน',
+        mockupType: 'pos',
+      },
+      {
+        id: 'ticket',
+        name: 'ThaiTicket Concert Hub',
+        cat: 'Event Ticketing',
+        path: 'D:\\Light\\บัตรคอน Light',
+        price: '฿1,500 / งาน',
+        mockupType: 'ticket',
+      },
+      {
+        id: 'fit',
+        name: 'Krob Fit Gym Management',
+        cat: 'Fitness & Scanner',
+        path: 'D:\\Light\\Fitness',
+        price: '฿990 / เดือน',
+        mockupType: 'fit',
+      },
+      {
+        id: 'pass',
+        name: 'Krob Pass Vault & Gate',
+        cat: 'Cybersecurity',
+        path: 'D:\\Light\\Pass App Light',
+        price: '฿690 / เดือน',
+        mockupType: 'pass',
+      },
+    ],
+    []
+  );
+
+  const filteredProjects = useMemo(() => {
+    if (!searchProject) return projects;
+    return projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchProject.toLowerCase()) ||
+        p.cat.toLowerCase().includes(searchProject.toLowerCase())
+    );
+  }, [projects, searchProject]);
+
+  const handleSelectProjectHologram = (proj) => {
+    playSciFiBeep();
+    setSelectedMockupProject(proj.mockupType);
+    onDispatchCommand(`ดูข้อมูล ${proj.name}`);
+  };
 
   return (
     <div className="relative w-full min-h-screen overflow-hidden bg-[#010614] text-slate-100 font-mono select-none flex flex-col justify-between">
       {/* ============================================================ */}
-      {/* 1. STARK WORKSHOP 4K PHOTOREALISTIC HOLOGRAPHIC BACKGROUND   */}
+      {/* 0. STARK WORKSHOP 4K PHOTOREALISTIC HOLOGRAPHIC BACKGROUND   */}
       {/* ============================================================ */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         <img
           src="/assets/jarvis-stark-workshop.jpg"
           alt="Tony Stark Laboratory Workshop Holographic Environment"
-          className="w-full h-full object-cover object-center opacity-80 mix-blend-screen select-none"
+          className="w-full h-full object-cover object-center opacity-75 mix-blend-screen select-none"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#010614] via-transparent to-[#010614]/85" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#010614]/85 via-transparent to-[#010614]/85" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#010614]/90 via-transparent to-[#010614]/90" />
       </div>
 
       {/* ============================================================ */}
-      {/* 2. TOP HUD HEADER BAR (Stark Labs Style)                     */}
+      {/* 1. CURVED HUD LADDERS & SCALES (Left 16.7 & Right 1.4, 0.6)  */}
       {/* ============================================================ */}
-      <header className="relative z-20 border-b border-cyan-500/30 bg-[#020b22]/90 backdrop-blur-md px-4 lg:px-8 py-3 shadow-2xl">
+      <div className="pointer-events-none fixed left-1.5 top-1/2 -translate-y-1/2 z-30 hidden 2xl:flex items-center gap-1 opacity-80">
+        <span className="text-[11px] font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+          16.7
+        </span>
+        <svg className="w-10 h-[480px] stroke-cyan-400 fill-none" viewBox="0 0 48 520">
+          <path d="M 40 10 Q 6 260, 40 510" strokeWidth="2.5" strokeLinecap="round" />
+          {Array.from({ length: 28 }).map((_, i) => {
+            const y = 20 + i * 17.5;
+            const isMajor = i % 4 === 0;
+            const x1 = 40 - Math.sin((i / 28) * Math.PI) * 28;
+            const x2 = x1 - (isMajor ? 14 : 7);
+            return (
+              <line
+                key={i}
+                x1={x1}
+                y1={y}
+                x2={x2}
+                y2={y}
+                strokeWidth={isMajor ? 2 : 1}
+                stroke={isMajor ? '#38bdf8' : 'rgba(56,189,248,0.4)'}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="pointer-events-none fixed right-1.5 top-1/2 -translate-y-1/2 z-30 hidden 2xl:flex items-center gap-1 opacity-80">
+        <svg className="w-10 h-[480px] stroke-cyan-400 fill-none" viewBox="0 0 48 520">
+          <path d="M 8 10 Q 42 260, 8 510" strokeWidth="2.5" strokeLinecap="round" />
+          {Array.from({ length: 28 }).map((_, i) => {
+            const y = 20 + i * 17.5;
+            const isMajor = i % 4 === 0;
+            const x1 = 8 + Math.sin((i / 28) * Math.PI) * 28;
+            const x2 = x1 + (isMajor ? 14 : 7);
+            return (
+              <line
+                key={i}
+                x1={x1}
+                y1={y}
+                x2={x2}
+                y2={y}
+                strokeWidth={isMajor ? 2 : 1}
+                stroke={isMajor ? '#38bdf8' : 'rgba(56,189,248,0.4)'}
+              />
+            );
+          })}
+        </svg>
+        <div className="flex flex-col text-[10px] font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+          <span>1.4</span>
+          <span className="mt-8">0.6</span>
+          <span className="mt-16">2.17</span>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 2. TOP HUD HEADER BAR (6 Nodes, Identity, Audio Ambient Hum) */}
+      {/* ============================================================ */}
+      <header className="relative z-20 border-b border-cyan-500/30 bg-[#020b22]/90 backdrop-blur-md px-4 lg:px-8 py-2.5 shadow-2xl">
         <div className="flex items-center justify-between">
-          {/* Identity */}
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-black tracking-[0.25em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
-              J . A . R . V . I . S .
-            </span>
-            <span className="rounded border border-cyan-400/60 bg-cyan-950/80 px-2 py-0.5 text-xs font-bold text-cyan-200">
-              STARK WORKSHOP LABS
-            </span>
-            <span className="hidden sm:inline-flex rounded border border-emerald-500/50 bg-emerald-950/70 px-2.5 py-0.5 text-xs text-emerald-300 font-bold">
-              ● 15 APPS ONLINE
-            </span>
+          {/* Identity & 6 Top Nodes */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black tracking-[0.25em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
+                J . A . R . V . I . S .
+              </span>
+              <span className="rounded border border-cyan-400/60 bg-cyan-950/80 px-2 py-0.5 text-[11px] font-bold text-cyan-200">
+                TACTICAL HUD
+              </span>
+            </div>
+
+            {/* 6 Circular Nodes from Reference Image: ◯ ◯ ◯ ◯ ◯ ◯ */}
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/25 bg-cyan-950/40">
+              {[1, 2, 3, 4, 5, 6].map((node) => (
+                <div
+                  key={node}
+                  className={`h-3 w-3 rounded-full border transition-all ${
+                    node <= 4
+                      ? 'border-cyan-400 bg-cyan-400/30 shadow-[0_0_8px_#00f0ff]'
+                      : 'border-slate-700 bg-slate-900/60'
+                  }`}
+                />
+              ))}
+              <span className="text-[10px] text-cyan-300 font-bold ml-1">GRID [ALPHA] ACTIVE</span>
+            </div>
           </div>
 
-          {/* Right Controls for sir ไลท์ */}
-          <div className="flex items-center gap-2.5 sm:gap-4 text-xs">
+          {/* Controls for sir ไลท์ */}
+          <div className="flex items-center gap-2.5 sm:gap-3 text-xs">
+            {/* Feature 3: Arc Reactor Hum Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleAmbientHum}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border transition-all cursor-pointer ${
+                isHumming
+                  ? 'border-emerald-400 bg-emerald-950/90 text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
+                  : 'border-slate-700 bg-slate-900/80 text-slate-400 hover:text-cyan-300'
+              }`}
+              title="เปิด/ปิดเสียงฮัมเตาปฏิกรณ์ Arc Reactor ในพื้นหลัง (Web Audio API 55Hz)"
+            >
+              {isHumming ? (
+                <>
+                  <Activity className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                  <span>ARC HUM: ON (55Hz)</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="h-3.5 w-3.5 text-slate-400" />
+                  <span>ARC HUM: OFF</span>
+                </>
+              )}
+            </button>
+
             {/* Honorific Switcher */}
             <button
               type="button"
@@ -259,7 +628,10 @@ export function StarkWorkshopView({
             {/* Thai Voice Test Button */}
             <button
               type="button"
-              onClick={onTestThaiVoice}
+              onClick={() => {
+                playSciFiBeep();
+                onTestThaiVoice();
+              }}
               className="hidden lg:flex items-center gap-1.5 rounded-full border border-emerald-500/50 bg-emerald-950/70 px-3 py-1 text-xs font-bold text-emerald-300 hover:bg-emerald-900/70 transition-all cursor-pointer shadow-sm"
               title="ทดสอบฟังเสียงสังเคราะห์ภาษาไทย"
             >
@@ -291,18 +663,18 @@ export function StarkWorkshopView({
               🕒 {currentTime || '03:25:18 AM'}
             </div>
 
-            {/* App Nav */}
+            {/* Company Hub Navigation */}
             {onOpenCompany && (
               <button
                 type="button"
                 onClick={onOpenCompany}
-                className="hidden xl:inline-flex rounded-lg border border-cyan-500/50 bg-cyan-950/60 px-2.5 py-1 text-xs font-bold text-cyan-300 hover:bg-cyan-900/60"
+                className="hidden xl:inline-flex rounded-lg border border-cyan-500/50 bg-cyan-950/60 px-2.5 py-1 text-xs font-bold text-cyan-300 hover:bg-cyan-900/60 cursor-pointer"
               >
                 AI COMPANY
               </button>
             )}
 
-            {/* Window Fullscreen */}
+            {/* Fullscreen */}
             <button
               type="button"
               onClick={onToggleFullscreen}
@@ -326,110 +698,136 @@ export function StarkWorkshopView({
       </header>
 
       {/* ============================================================ */}
-      {/* 3. MULTI-AGENT HUB BAR (5 Specialized Agents)               */}
+      {/* 3. MULTI-AGENT HUB CONDUIT BAR                               */}
       {/* ============================================================ */}
-      <div className="relative z-10 mx-4 lg:mx-8 mt-3 flex items-center justify-between border border-cyan-500/25 bg-[#020d28]/80 px-4 py-2 rounded-2xl backdrop-blur-md overflow-x-auto scrollbar-none shadow-lg">
+      <div className="relative z-10 mx-4 lg:mx-8 mt-2.5 flex items-center justify-between border border-cyan-500/25 bg-[#020d28]/80 px-4 py-1.5 rounded-2xl backdrop-blur-md overflow-x-auto scrollbar-none shadow-lg">
         <div className="flex items-center gap-2 font-mono text-xs">
           <span className="text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-            MULTI-AGENT HUB:
+            <Radio className="h-3 w-3 text-cyan-400 animate-pulse" />
+            MULTI-AGENT PIPELINE:
           </span>
-          <span className="rounded-full border border-cyan-400/70 bg-cyan-950/80 px-3 py-0.5 text-cyan-200">
-            AI Manager (Direct)
+          <span className="rounded-full border border-cyan-400/70 bg-cyan-950/80 px-2.5 py-0.5 text-cyan-200">
+            AI Manager
           </span>
-          <span className="rounded-full border border-emerald-500/50 bg-emerald-950/50 px-3 py-0.5 text-emerald-300">
+          <span className="text-cyan-500">➔</span>
+          <span className="rounded-full border border-emerald-500/50 bg-emerald-950/50 px-2.5 py-0.5 text-emerald-300">
             AI เลขา (Sales)
           </span>
-          <span className="rounded-full border border-purple-500/50 bg-purple-950/50 px-3 py-0.5 text-purple-300">
-            AI Dev (Tech Lead)
+          <span className="text-cyan-500">➔</span>
+          <span className="rounded-full border border-purple-500/50 bg-purple-950/50 px-2.5 py-0.5 text-purple-300">
+            AI Dev (Tech)
           </span>
-          <span className="rounded-full border border-amber-500/50 bg-amber-950/50 px-3 py-0.5 text-amber-300">
+          <span className="text-cyan-500">➔</span>
+          <span className="rounded-full border border-amber-500/50 bg-amber-950/50 px-2.5 py-0.5 text-amber-300">
             AI บัญชี (Finance)
           </span>
-          <span className="rounded-full border border-blue-500/50 bg-blue-950/50 px-3 py-0.5 text-blue-300">
+          <span className="text-cyan-500">➔</span>
+          <span className="rounded-full border border-blue-500/50 bg-blue-950/50 px-2.5 py-0.5 text-blue-300">
             AI Admin (Docs)
           </span>
         </div>
-        <span className="text-cyan-300/80 text-xs hidden lg:inline">
-          🎯 สั่งการ Webapp Sales & Dev ครบวงจร
+        <span className="text-cyan-300/80 text-[11px] hidden lg:inline">
+          BEARING: 284° // DEPTH: -450m // BEACON LOCK: 4/4
         </span>
       </div>
 
       {/* ============================================================ */}
-      {/* 4. MAIN STARK HOLOGRAPHIC WORKSPACE (Center Orb + Side Pods) */}
+      {/* 4. MAIN WORKSPACE (Left Radar + Center Orb + Right Turbine) */}
       {/* ============================================================ */}
-      <main className="relative z-10 flex-1 flex flex-col 2xl:flex-row items-center justify-between gap-6 p-4 lg:p-8 max-w-[1920px] mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col 2xl:flex-row items-center justify-between gap-4 p-3 lg:p-6 max-w-[1920px] mx-auto w-full">
+        {/* ------------------------------------------------------------ */}
+        {/* LEFT POD: TACTICAL RADAR/SONAR ARRAY                         */}
+        {/* ------------------------------------------------------------ */}
+        <div className="w-full 2xl:w-80 flex flex-col space-y-2.5 shrink-0">
+          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/85 p-3.5 shadow-[0_0_30px_rgba(0,240,255,0.2)] backdrop-blur-xl">
+            {/* Top Telemetry Header */}
+            <div className="border-b border-cyan-500/25 pb-1.5 mb-2">
+              <span className="text-[11px] font-black tracking-wider text-cyan-300 block">
+                TACTICAL RADAR/SONAR ARRAY
+              </span>
+              <div className="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>RADAR SCAN: REGION 7</span>
+                <span className="text-emerald-400">ETA: 03:14:18</span>
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-cyan-400/80">
+                <span>BEARING: 284°</span>
+                <span>DEPTH: -450m</span>
+              </div>
+            </div>
 
-        {/* ------------------------------------------------------------ */}
-        {/* LEFT POD: FLOATING HOLOGRAPHIC PROJECT CARDS                 */}
-        {/* ------------------------------------------------------------ */}
-        <div className="w-full 2xl:w-88 flex flex-col space-y-3 shrink-0">
-          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/85 p-4 shadow-[0_0_30px_rgba(0,240,255,0.2)] backdrop-blur-xl">
-            <div className="flex items-center justify-between text-xs text-cyan-300 font-bold border-b border-cyan-500/25 pb-2 mb-3">
-              <span>PROJECT PIPELINES // D:\LIGHT</span>
-              <span className="text-emerald-400">4 READY</span>
+            {/* Radar Canvas */}
+            <div className="flex items-center justify-center my-1">
+              <canvas
+                ref={radarCanvasRef}
+                width={170}
+                height={170}
+                className="rounded-full border border-cyan-500/30 shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+              />
+            </div>
+
+            {/* Telemetry Numbers */}
+            <div className="grid grid-cols-2 gap-1.5 my-2 text-[10px] bg-slate-950/70 p-2 rounded-xl border border-cyan-500/20">
+              <div>
+                <span className="text-slate-500 block">CONTACTS</span>
+                <span className="text-emerald-400 font-bold">12 DETECTED</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">RANGE</span>
+                <span className="text-cyan-300 font-bold">4.8 KM</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">ID STATUS</span>
+                <span className="text-amber-400 font-bold">VERIFIED</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">TELEMETRY</span>
+                <span className="text-cyan-400 font-bold">83% OPTIMAL</span>
+              </div>
             </div>
 
             {/* Search Box */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-slate-950/80 px-3 py-1.5 mb-3 text-xs">
-              <Search className="h-3.5 w-3.5 text-cyan-400" />
+            <div className="flex items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-slate-950/80 px-2.5 py-1 text-xs mb-2">
+              <Search className="h-3 w-3 text-cyan-400" />
               <input
                 type="text"
                 value={searchProject}
                 onChange={(e) => setSearchProject(e.target.value)}
-                placeholder="ค้นหาโปรเจกต์..."
-                className="w-full bg-transparent text-xs text-cyan-200 placeholder-slate-500 focus:outline-none"
+                placeholder="ค้นหาโปรเจกต์ D:\Light..."
+                className="w-full bg-transparent text-[11px] text-cyan-200 placeholder-slate-500 focus:outline-none"
               />
             </div>
 
-            {/* Project List */}
-            <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1 text-xs">
-              {projects.map((p) => (
+            {/* Interactive Project List (Triggers Hologram) */}
+            <div className="space-y-1.5 max-h-[175px] overflow-y-auto pr-1 text-xs scrollbar-none">
+              {filteredProjects.map((p) => (
                 <div
                   key={p.id}
-                  onClick={() => onDispatchCommand(`ดูข้อมูล ${p.name}`)}
-                  className="p-3 rounded-xl border border-cyan-500/25 bg-cyan-950/30 hover:border-cyan-400 hover:bg-cyan-900/40 transition-all cursor-pointer shadow-sm"
+                  onClick={() => handleSelectProjectHologram(p)}
+                  className="p-2 rounded-xl border border-cyan-500/25 bg-cyan-950/30 hover:border-cyan-400 hover:bg-cyan-900/40 transition-all cursor-pointer shadow-sm group"
                 >
-                  <div className="flex items-center justify-between text-cyan-200 font-bold">
-                    <span>{p.name}</span>
-                    <span className="text-emerald-400 text-[11px] font-mono">{p.price}</span>
+                  <div className="flex items-center justify-between text-cyan-200 font-bold text-[11px]">
+                    <span className="group-hover:text-cyan-300 transition-colors">{p.name}</span>
+                    <span className="text-emerald-400 text-[10px] font-mono">{p.price}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+                  <div className="flex items-center justify-between text-[9px] text-slate-400 mt-0.5">
                     <span>{p.cat}</span>
-                    <span className="text-cyan-400 font-mono">คลิกเพื่อสั่งการ →</span>
+                    <span className="text-cyan-400 font-mono flex items-center gap-1">
+                      <Sparkles className="h-2.5 w-2.5" /> ฉายโฮโลแกรม
+                    </span>
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* Audio Spectrum Equalizer */}
-            <div className="mt-3 pt-3 border-t border-cyan-500/20">
-              <div className="flex items-center justify-between text-[11px] text-cyan-400 mb-1.5">
-                <span>HOLOGRAPHIC AUDIO SPECTRUM</span>
-                <span className="text-emerald-400 font-bold">48.0 kHz</span>
-              </div>
-              <div className="flex items-end justify-between h-9 px-1 gap-1">
-                {[20, 45, 80, 60, 95, 30, 70, 50, 85, 40, 90, 65, 35, 75].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-cyan-400 rounded-t shadow-[0_0_8px_#00f0ff] transition-all"
-                    style={{
-                      height: isListening || isSpeaking ? `${h}%` : '20%',
-                    }}
-                  />
-                ))}
-              </div>
             </div>
           </div>
         </div>
 
         {/* ------------------------------------------------------------ */}
-        {/* CENTER: GIGANTIC FLOATING 3D HOLOGRAPHIC AI SPHERE           */}
+        {/* CENTER POD: 3D HOLOGRAPHIC SPHERE & ARC REACTOR CORE         */}
         {/* ------------------------------------------------------------ */}
-        <div className="flex-1 flex flex-col items-center justify-center py-2">
-          {/* Subtitle */}
-          <div className="text-xs font-mono font-bold tracking-[0.3em] text-cyan-400/90 mb-2 drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
-            STARK LABS // NEURAL CORE // MARK III
+        <div className="relative flex-1 flex flex-col items-center justify-center py-1">
+          {/* Top Status */}
+          <div className="text-[11px] font-mono font-bold tracking-[0.25em] text-cyan-400 mb-1 text-center drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">
+            000°-359° // CORE STATUS: STABLE // ENERGY: 98.4%
           </div>
 
           {/* 3D Holographic Sphere Canvas & Core Reactor */}
@@ -446,7 +844,10 @@ export function StarkWorkshopView({
             {/* Center Touch Mic Orb */}
             <button
               type="button"
-              onClick={onToggleMic}
+              onClick={() => {
+                playSciFiBeep();
+                onToggleMic();
+              }}
               className={`absolute flex h-16 w-16 items-center justify-center rounded-full transition-all shadow-2xl backdrop-blur-md cursor-pointer ${
                 isListening
                   ? 'bg-red-500/35 border-2 border-red-400 text-red-200 animate-pulse shadow-red-500/60'
@@ -455,11 +856,217 @@ export function StarkWorkshopView({
             >
               <Mic className={`h-7 w-7 ${isListening ? 'text-red-300' : 'text-cyan-200'}`} />
             </button>
+
+            {/* ============================================================ */}
+            {/* FEATURE 1: INTERACTIVE HOLOGRAPHIC PROJECT POPUP MOCKUP      */}
+            {/* Emerges in 3D directly above the arc reactor sphere          */}
+            {/* ============================================================ */}
+            {selectedMockupProject && (
+              <div className="absolute -top-12 z-40 w-[94%] max-w-[560px] animate-fade-in pointer-events-auto">
+                <div className="relative rounded-2xl border-2 border-cyan-400/80 bg-[#020b22]/95 p-4 shadow-[0_0_50px_rgba(0,240,255,0.5)] backdrop-blur-2xl">
+                  {/* Hologram Corner Brackets */}
+                  <div className="absolute top-1 left-1 text-[8px] text-cyan-400/80 font-mono">
+                    ┌ PROJECTION #8841-A ┐
+                  </div>
+                  <div className="absolute top-1 right-1 text-[8px] text-cyan-400/80 font-mono">
+                    └ HOLO RES: 4K ┘
+                  </div>
+
+                  {/* Header */}
+                  <div className="flex items-start justify-between border-b border-cyan-500/30 pb-2 mb-3 mt-1">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-[9px] font-bold text-cyan-300 border border-cyan-500/40">
+                          {selectedMockupProject === 'pos' && 'DIGITAL COMMERCE // SAAS'}
+                          {selectedMockupProject === 'ticket' && 'EVENT & TICKETING // INFRA'}
+                          {selectedMockupProject === 'fit' && 'IOT & MEMBER SCANNER // APP'}
+                          {selectedMockupProject === 'pass' && 'SECURITY VAULT // ENCRYPTED'}
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-bold">● LIVE DEMO READY</span>
+                      </div>
+                      <h3 className="mt-1 text-sm font-black tracking-wider text-cyan-100 flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-cyan-300 animate-spin" />
+                        {selectedMockupProject === 'pos' && 'KROB POS & INVENTORY LIGHT'}
+                        {selectedMockupProject === 'ticket' && 'THAITICKET CONCERT HUB'}
+                        {selectedMockupProject === 'fit' && 'KROB FIT // GYM MANAGEMENT'}
+                        {selectedMockupProject === 'pass' && 'KROB PASS VAULT & GATE'}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        setSelectedMockupProject(null);
+                        if (onDismissHologram) onDismissHologram();
+                      }}
+                      className="rounded-lg border border-slate-700 bg-slate-900 p-1 text-slate-400 hover:text-white hover:border-red-400 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Realistic Project Screen Mockup */}
+                  <div className="rounded-xl border border-cyan-500/40 bg-slate-950/90 p-3 mb-3 shadow-inner">
+                    {/* Simulated Screen Mockup for POS */}
+                    {selectedMockupProject === 'pos' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1.5">
+                          <span className="text-cyan-300 font-bold">🛒 POS CASH REGISTER MOCKUP</span>
+                          <span className="text-emerald-400 font-mono">ORDER #1042</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                          <div className="p-1.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-center">
+                            <span className="block text-slate-300">กาแฟสด</span>
+                            <span className="text-emerald-400 font-bold">฿65</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-center">
+                            <span className="block text-slate-300">ชาเขียวนม</span>
+                            <span className="text-emerald-400 font-bold">฿55</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-center">
+                            <span className="block text-slate-300">ครัวซองต์</span>
+                            <span className="text-emerald-400 font-bold">฿45</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800 text-slate-400">
+                          <span>ตัดสต็อกเรียลไทม์: 24 รายการ</span>
+                          <span className="text-cyan-300 font-bold">ยอดรวม: ฿165.00</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Simulated Screen Mockup for Ticket */}
+                    {selectedMockupProject === 'ticket' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1.5">
+                          <span className="text-cyan-300 font-bold">🎫 STADIUM SEATING CHART & TICKET</span>
+                          <span className="text-red-400 font-mono">IMPACT ARENA</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-2 py-2">
+                          <div className="px-3 py-1 rounded bg-red-950/60 border border-red-500/50 text-[10px] text-red-300 font-bold">
+                            STAGE [เวทีหลัก]
+                          </div>
+                          <div className="px-2 py-1 rounded bg-emerald-950/60 border border-emerald-500/50 text-[9px] text-emerald-300">
+                            ZONE VIP [฿1,500]
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800 text-slate-400">
+                          <span>Anti-passback QR Check-in: ACTIVE</span>
+                          <span className="text-emerald-400 font-bold">SHA-256 Validated</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Simulated Screen Mockup for Fit */}
+                    {selectedMockupProject === 'fit' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1.5">
+                          <span className="text-cyan-300 font-bold">🏋️ GYM CAMERA SCANNER</span>
+                          <span className="text-emerald-400 font-mono">GATE 01</span>
+                        </div>
+                        <div className="p-2 rounded bg-slate-900 border border-cyan-500/30 flex items-center justify-between text-[10px]">
+                          <div>
+                            <span className="text-slate-300 block font-bold">คุณวิชัย (Member VIP)</span>
+                            <span className="text-emerald-400">อายุสมาชิกคงเหลือ 142 วัน</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            ✓ สแกนผ่าน
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Simulated Screen Mockup for Pass Vault */}
+                    {selectedMockupProject === 'pass' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] border-b border-slate-800 pb-1.5">
+                          <span className="text-cyan-300 font-bold">🛡️ ZERO-KNOWLEDGE PASS VAULT</span>
+                          <span className="text-cyan-400 font-mono">AES-256-GCM</span>
+                        </div>
+                        <div className="p-2 rounded bg-slate-900 border border-cyan-500/30 text-[10px] space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Master Cipher:</span>
+                            <span className="text-cyan-300 font-mono">9a8f...3e21 (Encrypted)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Audit Logs:</span>
+                            <span className="text-emerald-400">100% Zero-Leak Guard</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Multi-Agent Breakdown Cards */}
+                  <div className="grid grid-cols-2 gap-2 text-[10px] mb-3">
+                    <div className="p-2 rounded-lg bg-purple-950/30 border border-purple-500/30">
+                      <span className="text-purple-300 font-bold block flex items-center gap-1">
+                        <Cpu className="h-3 w-3" /> AI Dev (Tech Lead)
+                      </span>
+                      <span className="text-slate-300">
+                        {selectedMockupProject === 'pos' && 'Next.js 16 + Prisma + Thermal Print'}
+                        {selectedMockupProject === 'ticket' && 'Node.js + SQLite + Anti-Fraud Slip'}
+                        {selectedMockupProject === 'fit' && 'React + HTML5 Web Camera QR'}
+                        {selectedMockupProject === 'pass' && 'Web Crypto API + LocalStorage AES'}
+                      </span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30">
+                      <span className="text-emerald-300 font-bold block flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" /> AI เลขา (Sales)
+                      </span>
+                      <span className="text-slate-300">
+                        {selectedMockupProject === 'pos' && '฿390 / เดือน (กำไร Margin 84%)'}
+                        {selectedMockupProject === 'ticket' && '฿1,500 / งาน (ปิดดีลได้ทันที)'}
+                        {selectedMockupProject === 'fit' && '฿990 / เดือน (ตลาดฟิตเนสโตเร็ว)'}
+                        {selectedMockupProject === 'pass' && '฿690 / เดือน (ต่อยอดทุกบริษัท)'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Hologram Action Buttons */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-cyan-500/30 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSciFiBeep();
+                        onDispatchCommand(`ออกใบเสนอราคาสำหรับ ${selectedMockupProject.toUpperCase()}`);
+                      }}
+                      className="flex items-center gap-1 rounded-xl bg-cyan-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-cyan-400 cursor-pointer shadow-md"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>ออกใบเสนอราคา</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSciFiBeep();
+                        onDispatchCommand(`ให้ AI Dev ตรวจสอบโค้ด ${selectedMockupProject.toUpperCase()}`);
+                      }}
+                      className="flex items-center gap-1 rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3 py-1.5 text-[11px] font-bold text-cyan-300 hover:bg-cyan-900/60 cursor-pointer"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      <span>ให้ AI Dev ตรวจโค้ด</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        setSelectedMockupProject(null);
+                        if (onDismissHologram) onDismissHologram();
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
+                    >
+                      ย่อโฮโลแกรม
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Status Label */}
-          <div className="mt-3 text-center">
-            <span className="text-sm font-black tracking-[0.3em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
+          <div className="mt-2 text-center">
+            <span className="text-xs font-black tracking-[0.3em] text-cyan-300 drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]">
               {hudState === 'LISTENING' && 'L I S T E N I N G . . .'}
               {hudState === 'SEARCHING' && 'M U L T I - A G E N T   S Y N C . . .'}
               {hudState === 'SPEAKING' && 'S P E A K I N G . . .'}
@@ -467,9 +1074,12 @@ export function StarkWorkshopView({
             </span>
           </div>
 
-          {/* Smooth Undulating Sine Waveform */}
-          <div className="mt-2 flex items-center justify-center">
-            <svg className="w-64 h-8 stroke-cyan-400 fill-none drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]" viewBox="0 0 200 24">
+          {/* Undulating Sine Waveform */}
+          <div className="mt-1 flex items-center justify-center">
+            <svg
+              className="w-56 h-7 stroke-cyan-400 fill-none drop-shadow-[0_0_12px_rgba(0,240,255,0.9)]"
+              viewBox="0 0 200 24"
+            >
               <path
                 d={
                   isListening || isSpeaking
@@ -482,12 +1092,15 @@ export function StarkWorkshopView({
             </svg>
           </div>
 
-          {/* Voice Prompt Pill */}
-          <div className="mt-3 flex items-center gap-2">
+          {/* Voice Prompt Button */}
+          <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
-              onClick={onToggleMic}
-              className={`flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold transition-all shadow-lg cursor-pointer ${
+              onClick={() => {
+                playSciFiBeep();
+                onToggleMic();
+              }}
+              className={`flex items-center gap-2 rounded-full px-5 py-1.5 text-xs font-bold transition-all shadow-lg cursor-pointer ${
                 isListening
                   ? 'border border-red-500/80 bg-red-950/70 text-red-200 animate-pulse'
                   : isSpeaking
@@ -501,80 +1114,195 @@ export function StarkWorkshopView({
                   ? '🎙️ รับฟังภาษาไทยอยู่ครับ... (สั่งงานได้ทันที)'
                   : isSpeaking
                   ? '🔊 กำลังพูดตอบกลับ...'
-                  : '🎙️ สแตนด์บายรับคำสั่งเสียงภาษาไทยจาก sir ไลท์'}
+                  : `🎙️ สแตนด์บายรับคำสั่งเสียงภาษาไทยจาก ${userTitle}`}
               </span>
             </button>
           </div>
-          <span className="text-[11px] text-slate-400 mt-1">
-            {wakeWordActive
-              ? 'ระบบ Standby: เรียก "จาร์วิส" หรือ "javis" ได้ตลอดเวลา'
-              : 'คลิกปุ่มเพื่อเริ่มพูด'}
-          </span>
         </div>
 
         {/* ------------------------------------------------------------ */}
-        {/* RIGHT POD: MULTI-AGENT CHAT TERMINAL FOR SIR ไลท์            */}
+        {/* RIGHT POD: TURBINE GAUGES & MULTI-AGENT LIVE STREAM TERMINAL */}
         {/* ------------------------------------------------------------ */}
-        <div className="w-full 2xl:w-96 flex flex-col space-y-3 shrink-0">
-          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/90 p-4 shadow-[0_0_35px_rgba(0,240,255,0.25)] backdrop-blur-xl flex flex-col h-[480px]">
-            {/* Terminal Title */}
-            <div className="flex items-center justify-between border-b border-cyan-500/30 pb-2 mb-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="font-bold tracking-wider text-cyan-300 font-mono">
-                  AI MANAGER // CONSOLE
-                </span>
+        <div className="w-full 2xl:w-96 flex flex-col space-y-2.5 shrink-0">
+          <div className="rounded-2xl border border-cyan-500/35 bg-[#020d28]/90 p-3.5 shadow-[0_0_35px_rgba(0,240,255,0.25)] backdrop-blur-xl flex flex-col h-[520px]">
+            {/* Top Gauges Strip */}
+            <div className="border-b border-cyan-500/25 pb-2 mb-2">
+              <div className="flex items-center justify-between text-[11px] font-black text-cyan-300">
+                <span>CIRCULAR DIAGNOSTIC TURBINE GAUGES</span>
+                <span className="text-emerald-400 text-[10px]">HUD: 83%</span>
               </div>
-              <span className="text-[10px] text-emerald-400 font-mono">MULTI-AGENT DIRECT</span>
+              <div className="flex items-center justify-between mt-2">
+                {/* 8-Spoke Rotating Turbine Canvas */}
+                <canvas
+                  ref={turbineCanvasRef}
+                  width={96}
+                  height={96}
+                  className="rounded-full border border-cyan-500/30"
+                />
+                {/* Gauge Metric Numbers */}
+                <div className="flex-1 ml-3 text-[10px] space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">POWER CORE:</span>
+                    <span className="text-cyan-300 font-bold">94% OPTIMAL</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">REACTOR TEMP:</span>
+                    <span className="text-emerald-400 font-bold">28°C</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">CPU LOAD:</span>
+                    <span className="text-cyan-300 font-bold">81%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">BEACON LOCK:</span>
+                    <span className="text-emerald-400 font-bold">4/4 ACTIVE</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Message Stream */}
-            <div
-              ref={chatScrollRef}
-              className="flex-1 space-y-2 overflow-y-auto pr-1 text-xs scrollbar-thin scrollbar-thumb-cyan-900"
-            >
-              {messages.map((m) => (
+            {/* Equalizer Frequency Bar */}
+            <div className="flex items-center justify-between text-[10px] text-cyan-400 mb-1">
+              <span>AUDIO FREQ // ANALYSIS // VOLUME</span>
+              <span className="text-emerald-400">48.0 kHz</span>
+            </div>
+            <div className="flex items-end justify-between h-5 px-1 gap-1 mb-2">
+              {[25, 60, 90, 45, 80, 30, 70, 50, 85, 40, 95, 65, 35, 75].map((h, i) => (
                 <div
-                  key={m.id}
-                  className={`rounded-xl p-2.5 transition-all text-xs ${
-                    m.sender === userTitle.toUpperCase() || m.sender === 'SIR ไลท์'
-                      ? 'border border-cyan-500/60 bg-cyan-950/40 text-cyan-100 ml-4'
-                      : 'border border-slate-800/90 bg-slate-900/80 text-slate-200 mr-2'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
-                    <span className="font-bold text-cyan-400">
-                      [ {m.time} ] {m.sender}
-                    </span>
-                    {m.delegatedTo && (
-                      <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                        {m.delegatedTo}
-                      </span>
-                    )}
-                  </div>
-                  <p className="whitespace-pre-wrap leading-relaxed text-[11px] font-sans">
-                    {m.text}
-                  </p>
-                </div>
+                  key={i}
+                  className="flex-1 bg-cyan-400 rounded-t shadow-[0_0_8px_#00f0ff] transition-all"
+                  style={{
+                    height: isListening || isSpeaking ? `${h}%` : '25%',
+                  }}
+                />
               ))}
             </div>
 
+            {/* Terminal Switcher Tabs */}
+            <div className="flex items-center border-b border-cyan-500/30 pb-1.5 mb-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setActiveTab('pipeline');
+                }}
+                className={`flex-1 py-1 rounded-lg text-center font-bold transition-all cursor-pointer ${
+                  activeTab === 'pipeline'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                ⚡ PIPELINE LIVE STREAM
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setActiveTab('chat');
+                }}
+                className={`flex-1 py-1 rounded-lg text-center font-bold transition-all cursor-pointer ${
+                  activeTab === 'chat'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                💬 CHAT CONSOLE
+              </button>
+            </div>
+
+            {/* TAB CONTENT 1: FEATURE 2: Multi-Agent Pipeline Live Stream */}
+            {activeTab === 'pipeline' && (
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-[11px] scrollbar-thin scrollbar-thumb-cyan-900">
+                <div className="p-2.5 rounded-xl border border-cyan-500/30 bg-cyan-950/30">
+                  <div className="flex items-center justify-between text-[10px] text-cyan-400 font-bold mb-1">
+                    <span>[STEP 1: INTENT & SQUAD CLASSIFY]</span>
+                    <span className="text-emerald-400">AI MANAGER</span>
+                  </div>
+                  <p className="text-slate-300">
+                    รับคำสั่งจาก {userTitle} ➔ วิเคราะห์รูปแบบโปรเจกต์และกระจายงาน 3 ส่วน (Context, Goal, Format)
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20">
+                  <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold mb-1">
+                    <span>[CONTEXT: บริบทของโปรเจกต์]</span>
+                    <span>AI เลขา (SALES)</span>
+                  </div>
+                  <p className="text-slate-300">
+                    โปรเจกต์ใน D:\Light (POS & Inventory, Concert Hub, Fitness, Pass Vault)
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-xl border border-purple-500/30 bg-purple-950/20">
+                  <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold mb-1">
+                    <span>[GOAL: เป้าหมายที่ต้องทำ]</span>
+                    <span>AI DEV (TECH LEAD)</span>
+                  </div>
+                  <p className="text-slate-300">
+                    ประเมินความเป็นไปได้เชิงเทคนิค สถาปัตยกรรมระบบ และความปลอดภัย
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-950/20">
+                  <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold mb-1">
+                    <span>[FORMAT: รูปแบบผลลัพธ์]</span>
+                    <span>AI บัญชี & ADMIN</span>
+                  </div>
+                  <p className="text-slate-300">
+                    รายงานเสียงสังเคราะห์ภาษาไทย 100% สรุปงบประมาณ กำไร Margin และโฮโลแกรม 3D
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT 2: CHAT CONSOLE */}
+            {activeTab === 'chat' && (
+              <div
+                ref={chatScrollRef}
+                className="flex-1 space-y-2 overflow-y-auto pr-1 text-xs scrollbar-thin scrollbar-thumb-cyan-900"
+              >
+                {messages.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`rounded-xl p-2.5 transition-all text-xs ${
+                      m.sender === userTitle.toUpperCase() || m.sender === 'SIR ไลท์'
+                        ? 'border border-cyan-500/60 bg-cyan-950/40 text-cyan-100 ml-4'
+                        : 'border border-slate-800/90 bg-slate-900/80 text-slate-200 mr-2'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
+                      <span className="font-bold text-cyan-400">
+                        [ {m.time} ] {m.sender}
+                      </span>
+                      {m.delegatedTo && (
+                        <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                          {m.delegatedTo}
+                        </span>
+                      )}
+                    </div>
+                    <p className="whitespace-pre-wrap leading-relaxed text-[11px] font-sans">
+                      {m.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Quick Action Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto py-2 text-[10px] scrollbar-none border-t border-cyan-500/20">
-              <span className="text-slate-500 shrink-0 font-bold">สั่งการเร็ว:</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 text-[10px] scrollbar-none border-t border-cyan-500/20">
               {[
                 '🔊 ฟังเสียงภาษาไทย',
-                'วิเคราะห์เว็บแอพ',
-                'สถานะทีม AI',
+                'ดูระบบ POS',
+                'ดูระบบบัตรคอน',
+                'ดูระบบฟิตเนส',
                 'ตรวจระบบทั้งหมด',
                 'ออกใบเสนอราคา',
-                'ดูระบบ POS',
               ].map((chip) => (
                 <button
                   key={chip}
                   type="button"
                   onClick={() => {
-                    playClickSound();
+                    playSciFiBeep();
                     if (chip === '🔊 ฟังเสียงภาษาไทย') {
                       onTestThaiVoice();
                     } else {
@@ -593,7 +1321,10 @@ export function StarkWorkshopView({
             </div>
 
             {/* Command Input Field: [ INITIALIZE COMMAND ... ] */}
-            <form onSubmit={handleSubmit} className="mt-1 flex items-center gap-2 pt-1 border-t border-cyan-500/20">
+            <form
+              onSubmit={handleSubmit}
+              className="mt-1 flex items-center gap-2 pt-1 border-t border-cyan-500/20"
+            >
               <div className="relative flex-1">
                 <input
                   type="text"
@@ -608,7 +1339,10 @@ export function StarkWorkshopView({
               </div>
               <button
                 type="button"
-                onClick={onToggleMic}
+                onClick={() => {
+                  playSciFiBeep();
+                  onToggleMic();
+                }}
                 className={`rounded-xl border p-2 transition-all cursor-pointer ${
                   isListening
                     ? 'border-red-500 bg-red-600 text-white animate-pulse'
@@ -630,11 +1364,9 @@ export function StarkWorkshopView({
         </div>
       </main>
 
-      {/* Holographic Projection Modal */}
-      {activeHologram && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in select-none"
-        >
+      {/* Legacy Fallback Holographic Modal if triggered directly */}
+      {activeHologram && !selectedMockupProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in select-none">
           <div className="w-full max-w-lg rounded-2xl border-2 border-cyan-400/60 bg-slate-950/95 p-5 shadow-[0_0_50px_rgba(0,240,255,0.4)] backdrop-blur-xl">
             <div className="flex items-start justify-between border-b border-cyan-500/30 pb-3">
               <div>
@@ -655,7 +1387,7 @@ export function StarkWorkshopView({
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 my-4">
-              {activeHologram.details.map((d, i) => (
+              {activeHologram.details?.map((d, i) => (
                 <div key={i} className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-2.5 text-xs">
                   <span className="text-[10px] text-slate-500 block">{d.label}</span>
                   <span className="font-bold text-cyan-300">{d.val}</span>
