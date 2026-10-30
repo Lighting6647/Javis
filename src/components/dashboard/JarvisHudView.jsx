@@ -38,6 +38,7 @@ export function JarvisHudView({
   const [activeHologram, setActiveHologram] = useState(null);
   const [activeSquadId, setActiveSquadId] = useState(null);
   const [wakeWordActive, setWakeWordActive] = useState(true); // Always-on Hands-free "javis" / "จาร์วิส"
+  const [continuousVoice, setContinuousVoice] = useState(true); // Continuous Auto-Listen Loop
   const [isRedAlert, setIsRedAlert] = useState(false);
 
   const recognitionRef = useRef(null);
@@ -84,16 +85,16 @@ export function JarvisHudView({
       const handleSpeechDone = () => {
         setIsSpeaking(false);
         setHudState('READY');
-        if (wakeWordActive) {
+        if (continuousVoice || wakeWordActive) {
           setTimeout(() => {
             try {
-              if (wakeWordActive && recognitionRef.current) {
+              if (recognitionRef.current) {
                 recognitionRef.current.start();
                 setIsListening(true);
                 setHudState('LISTENING');
               }
             } catch {}
-          }, 350);
+          }, 500);
         }
       };
 
@@ -180,7 +181,7 @@ export function JarvisHudView({
         tryDirectGoogleTts();
       }
     },
-    [voiceEnabled, wakeWordActive]
+    [voiceEnabled, wakeWordActive, continuousVoice]
   );
 
   // Core Command Dispatcher & Multi-Agent Coordinator
@@ -293,17 +294,30 @@ export function JarvisHudView({
               delegatedTo: `Google Gemini Neural Core (${geminiRes.model})`,
               reply: geminiRes.reply,
               speech: geminiRes.speech,
-              hologram: {
-                title: 'GOOGLE GEMINI // NATURAL DIALOGUE',
-                category: 'CONVERSATIONAL NEURAL BRAIN',
-                badge: 'ONLINE',
-                details: [
-                  { label: 'AI Model', val: geminiRes.model },
-                  { label: 'Personality', val: 'Paul Bettany (Thai Native)' },
-                  { label: 'Knowledge Base', val: '18 Projects in D:\\Light' },
-                  { label: 'Dialogue Mode', val: 'Dynamic Adaptive' },
-                ],
-              },
+              hologram: geminiRes.isNews
+                ? {
+                    title: 'NEWS DISPATCH // DAILY INTELLIGENCE',
+                    category: 'THAILAND & GLOBAL BRIEFING',
+                    badge: '5 HEADLINES READY',
+                    details: [
+                      { label: 'เรื่องที่ 1', val: 'เศรษฐกิจและการค้า' },
+                      { label: 'เรื่องที่ 2', val: 'นโยบายรัฐบาล' },
+                      { label: 'เรื่องที่ 3', val: 'เทคโนโลยีและ AI' },
+                      { label: 'เรื่องที่ 4', val: 'พลังงานและคมนาคม' },
+                      { label: 'เรื่องที่ 5', val: 'การลงทุนต่างประเทศ' },
+                    ],
+                  }
+                : {
+                    title: 'GOOGLE GEMINI // NATURAL DIALOGUE',
+                    category: 'CONVERSATIONAL NEURAL BRAIN',
+                    badge: 'ONLINE',
+                    details: [
+                      { label: 'AI Model', val: geminiRes.model },
+                      { label: 'Personality', val: 'Paul Bettany (Thai Native)' },
+                      { label: 'Knowledge Base', val: '18 Projects in D:\\Light' },
+                      { label: 'Dialogue Mode', val: 'Dynamic Adaptive' },
+                    ],
+                  },
             };
           } catch {
             result = processJarvisCommand(clean);
@@ -551,6 +565,8 @@ export function JarvisHudView({
       onDismissHologram={() => setActiveHologram(null)}
       isRedAlert={isRedAlert}
       onToggleRedAlert={handleToggleRedAlert}
+      continuousVoice={continuousVoice}
+      onToggleContinuous={() => setContinuousVoice((v) => !v)}
     />
   );
 }

@@ -3,6 +3,7 @@ import { GeminiSettingsModal } from './GeminiSettingsModal';
 import { ProjectOrchestratorModal } from './ProjectOrchestratorModal';
 import { GraphifyEcosystemModal } from './GraphifyEcosystemModal';
 import { ThreeArcReactor } from './ThreeArcReactor';
+import { AudioWaveformRibbon } from './AudioWaveformRibbon';
 import {
   Mic,
   Send,
@@ -54,6 +55,8 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
   onDismissHologram,
   isRedAlert = false,
   onToggleRedAlert,
+  continuousVoice = true,
+  onToggleContinuous,
 }) {
   const [inputText, setInputText] = useState('');
   const [isHumming, setIsHumming] = useState(false);
@@ -172,7 +175,7 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
       } else if (titleLower.includes('quote') || titleLower.includes('ใบเสนอราคา')) {
         setSelectedMockupProject('quote');
       } else {
-        setSelectedMockupProject('pos');
+        setSelectedMockupProject(null);
       }
     }
   }, [activeHologram]);
@@ -1665,6 +1668,32 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
                             </div>
                           ))}
                         </div>
+
+                        {activeHologram?.title?.includes('NEWS') && (
+                          <div className="mt-2.5 pt-2 border-t border-cyan-500/30">
+                            <div className="text-[10px] text-cyan-300 font-mono mb-1.5 flex items-center gap-1 font-bold">
+                              <Sparkles className="w-3 h-3 text-cyan-400 animate-pulse" />
+                              เลือกฟังข่าวเจาะลึก (พูดด้วยเสียง หรือคลิกเลือกเรื่อง):
+                            </div>
+                            <div className="grid grid-cols-5 gap-1">
+                              {[1, 2, 3, 4, 5].map((num) => (
+                                <button
+                                  key={num}
+                                  type="button"
+                                  onClick={() => {
+                                    playClickSound();
+                                    if (onDispatchCommand) {
+                                      onDispatchCommand(`อยากฟังเรื่องที่ ${num} ช่วยเล่ารายละเอียดให้ฟังอย่างละเอียดหน่อย`);
+                                    }
+                                  }}
+                                  className="px-1.5 py-1 rounded bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-mono font-bold text-cyan-200 hover:bg-cyan-500 hover:text-slate-950 transition-all cursor-pointer text-center shadow-sm hover:scale-105"
+                                >
+                                  เรื่อง {num}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1792,22 +1821,15 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
             </span>
           </div>
 
-          {/* Undulating Sine Waveform */}
-          <div className="mt-1 flex items-center justify-center">
-            <svg
-              className={`w-56 h-7 stroke-${isRedAlert ? 'red' : 'cyan'}-400 fill-none drop-shadow-[0_0_12px_${themeGlow}]`}
-              viewBox="0 0 200 24"
-            >
-              <path
-                d={
-                  isListening || isSpeaking || isRedAlert
-                    ? 'M 10 12 Q 35 2, 60 12 T 100 12 T 140 12 T 180 12'
-                    : 'M 10 12 Q 35 8, 60 12 T 100 12 T 140 12 T 180 12'
-                }
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </svg>
+          {/* Visual Speech Waveform Ribbon (Audio-Reactive DSP & Continuous Auto-Listen Toggle) */}
+          <div className="mt-2 w-full max-w-sm px-2">
+            <AudioWaveformRibbon
+              isListening={isListening}
+              isSpeaking={isSpeaking}
+              isAlert={isRedAlert}
+              continuousVoice={continuousVoice}
+              onToggleContinuous={onToggleContinuous}
+            />
           </div>
 
           {/* Voice Prompt Standby Button */}
