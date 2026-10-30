@@ -226,7 +226,7 @@ export function JarvisHudView({
     return () => cancelAnimationFrame(animationId);
   }, [hudState, activeSquadId]);
 
-  // Dual-Engine Thai Speech Synthesis (Primary: High-Fidelity Audio Stream, Fallback: Web Speech API)
+  // Triple-Layered Pure Thai Speech Synthesis (Zero English Voice Guarantee)
   const speakThai = useCallback(
     (text) => {
       if (!voiceEnabled || !text || !text.trim()) return;
@@ -261,26 +261,14 @@ export function JarvisHudView({
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Primary Engine: High-Fidelity Local / Vercel Proxy Endpoint (100% Thai audio, zero CORS errors)
       const encoded = encodeURIComponent(cleanSpeech.slice(0, 200));
-      const audioUrl = `/api/tts?text=${encoded}`;
 
-      const audio = new Audio(audioUrl);
-      audioPlayerRef.current = audio;
-
-      audio.onended = () => {
-        handleSpeechDone();
-      };
-
-      audio.onerror = () => {
-        // Fallback Engine: Web Speech Synthesis API
+      // Attempt 3: Web Speech API - STRICTLY ENFORCING ONLY NATIVE THAI VOICES
+      const tryWebSpeech = () => {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(cleanSpeech);
-            utterance.lang = 'th-TH';
-            utterance.rate = 1.0;
-            const availVoices = window.speechSynthesis.getVoices();
+            const availVoices = window.speechSynthesis.getVoices() || [];
             const thaiVoice = availVoices.find(
               (v) =>
                 v.lang === 'th-TH' ||
@@ -290,11 +278,21 @@ export function JarvisHudView({
                 v.name.includes('Premwadee') ||
                 v.name.includes('Niwat')
             );
-            if (thaiVoice) utterance.voice = thaiVoice;
-            utterance.onend = handleSpeechDone;
-            utterance.onerror = handleSpeechDone;
-            if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-            window.speechSynthesis.speak(utterance);
+
+            // STRICT GUARD: If no Thai voice found in system, NEVER let an English voice speak Thai!
+            if (thaiVoice) {
+              const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+              utterance.voice = thaiVoice;
+              utterance.lang = 'th-TH';
+              utterance.rate = 1.0;
+              utterance.onend = handleSpeechDone;
+              utterance.onerror = handleSpeechDone;
+              if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+              window.speechSynthesis.speak(utterance);
+            } else {
+              // No Thai voice installed on OS - complete cleanly without speaking English
+              handleSpeechDone();
+            }
           } catch {
             handleSpeechDone();
           }
@@ -303,23 +301,31 @@ export function JarvisHudView({
         }
       };
 
-      audio.play().catch(() => {
-        // Fallback if browser audio autoplay is blocked
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          try {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(cleanSpeech);
-            utterance.lang = 'th-TH';
-            utterance.onend = handleSpeechDone;
-            utterance.onerror = handleSpeechDone;
-            window.speechSynthesis.speak(utterance);
-          } catch {
-            handleSpeechDone();
-          }
-        } else {
-          handleSpeechDone();
+      // Attempt 2: Direct Google Neural Thai Stream
+      const tryDirectGoogleTts = () => {
+        try {
+          const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encoded}`;
+          const directAudio = new Audio(directUrl);
+          audioPlayerRef.current = directAudio;
+          directAudio.onended = handleSpeechDone;
+          directAudio.onerror = tryWebSpeech;
+          directAudio.play().catch(tryWebSpeech);
+        } catch {
+          tryWebSpeech();
         }
-      });
+      };
+
+      // Attempt 1: Server Proxy (/api/tts)
+      try {
+        const proxyUrl = `/api/tts?text=${encoded}`;
+        const proxyAudio = new Audio(proxyUrl);
+        audioPlayerRef.current = proxyAudio;
+        proxyAudio.onended = handleSpeechDone;
+        proxyAudio.onerror = tryDirectGoogleTts;
+        proxyAudio.play().catch(tryDirectGoogleTts);
+      } catch {
+        tryDirectGoogleTts();
+      }
     },
     [voiceEnabled]
   );
@@ -612,6 +618,23 @@ export function JarvisHudView({
               <span className="text-slate-400">UPDATED 03:15</span>
             </div>
           </div>
+
+          {/* Thai Voice Sound Test Button */}
+          <button
+            type="button"
+            onClick={() => {
+              playClickSound();
+              speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งานแล้วครับ');
+              if (onShowToast) {
+                onShowToast('info', 'ทดสอบเสียงภาษาไทย', 'กำลังเล่นเสียงสังเคราะห์ภาษาไทยออกลำโพงครับ');
+              }
+            }}
+            className="hidden sm:flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-950/40 px-2.5 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-400 transition-all shadow-sm cursor-pointer"
+            title="คลิกเพื่อทดสอบฟังเสียงพูดภาษาไทยของจาร์วิส"
+          >
+            <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+            <span>🇹🇭 เสียงไทย (THAI VOICE)</span>
+          </button>
 
           {/* Wake Word Standby Toggle Button */}
           <button
@@ -1109,6 +1132,7 @@ export function JarvisHudView({
             <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 text-[10px] scrollbar-none border-t border-slate-800/80">
               <span className="text-slate-500 shrink-0 font-bold">ลองคลิก/พูด:</span>
               {[
+                '🔊 ฟังเสียงภาษาไทย',
                 'สวัสดี จาร์วิส',
                 'คุยภาษาไทยได้ไหม',
                 'ตรวจระบบทั้งหมด',
@@ -1119,11 +1143,22 @@ export function JarvisHudView({
                 <button
                   key={chip}
                   type="button"
-                  onClick={() => handleDispatchCommand(chip)}
-                  className="shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-2 py-0.5 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400 transition-all font-sans cursor-pointer"
+                  onClick={() => {
+                    if (chip === '🔊 ฟังเสียงภาษาไทย') {
+                      playClickSound();
+                      speakThai('สวัสดีครับ บอส ผม จาร์วิส มาร์คทรี เสียงภาษาไทยพร้อมใช้งาน 100% แล้วครับ');
+                    } else {
+                      handleDispatchCommand(chip);
+                    }
+                  }}
+                  className={`shrink-0 rounded-lg px-2 py-0.5 transition-all font-sans cursor-pointer ${
+                    chip.startsWith('🔊')
+                      ? 'border border-emerald-500/50 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60 font-bold shadow-sm'
+                      : 'border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400'
+                  }`}
                   title={`ส่งคำสั่ง "${chip}"`}
                 >
-                  "{chip}"
+                  {chip.startsWith('🔊') ? chip : `"${chip}"`}
                 </button>
               ))}
             </div>

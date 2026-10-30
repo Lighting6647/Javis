@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ceo-master-cache-v1';
+const CACHE_NAME = 'ceo-master-cache-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -35,6 +35,9 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (!url.protocol.startsWith('http')) return;
+
+  // Never intercept backend API endpoints like /api/tts
+  if (url.pathname.startsWith('/api')) return;
 
   event.respondWith(
     fetch(event.request)
