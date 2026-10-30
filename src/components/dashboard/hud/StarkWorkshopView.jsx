@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { GeminiSettingsModal } from './GeminiSettingsModal';
 import { ProjectOrchestratorModal } from './ProjectOrchestratorModal';
+import { GraphifyEcosystemModal } from './GraphifyEcosystemModal';
+import { ThreeArcReactor } from './ThreeArcReactor';
 import {
   Mic,
   Send,
@@ -22,6 +24,7 @@ import {
   Terminal,
   Gauge,
   Compass,
+  Network,
 } from 'lucide-react';
 import {
   playClickSound,
@@ -65,6 +68,8 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
   const [isProjectOrchestratorOpen, setIsProjectOrchestratorOpen] = useState(false);
   const [targetProjectName, setTargetProjectName] = useState('CEO');
   const [projectsList, setProjectsList] = useState([]);
+  const [isGraphifyOpen, setIsGraphifyOpen] = useState(false);
+  const [useThree3D, setUseThree3D] = useState(false);
 
   // Load 18 projects in D:\Light
   useEffect(() => {
@@ -1073,6 +1078,20 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
               <span>18 PROJECTS</span>
             </button>
 
+            {/* Graphify Architectural Knowledge Graph */}
+            <button
+              type="button"
+              onClick={() => {
+                playClickSound();
+                setIsGraphifyOpen(true);
+              }}
+              className="hidden md:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/60 bg-emerald-950/70 px-2.5 py-1 text-xs font-bold text-emerald-200 hover:bg-emerald-900/80 hover:border-emerald-400 cursor-pointer shadow-sm transition-all"
+              title="เปิดผังใยแมงมุมสถาปัตยกรรมทั้ง 18 โปรเจกต์ใน D:\Light"
+            >
+              <Network className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+              <span>GRAPHIFY 18</span>
+            </button>
+
             {/* Company Hub Navigation */}
             {onOpenCompany && (
               <button
@@ -1403,6 +1422,22 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
               >
                 <RotateCcw className="h-2.5 w-2.5" />
               </button>
+              <span className="text-slate-600">|</span>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setUseThree3D((prev) => !prev);
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                  useThree3D
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
+                    : 'bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/30'
+                }`}
+                title="สลับโหมดเรนเดอร์เตาปฏิกรณ์ระหว่าง React Three Fiber (R3F 3D) กับ 2D Gyroscope"
+              >
+                {useThree3D ? '⚡ 3D R3F' : '🪐 2D GYRO'}
+              </button>
             </div>
           </div>
 
@@ -1426,6 +1461,10 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
                 >
                   🛡️ SAFE MODE ACTIVE (CLICK TO RESTORE CANVAS)
                 </button>
+              </div>
+            ) : useThree3D ? (
+              <div className="w-[380px] h-[380px] flex items-center justify-center relative">
+                <ThreeArcReactor isAlarm={isCombatAlert} className="w-[380px] h-[380px]" />
               </div>
             ) : (
               <canvas
@@ -2097,6 +2136,12 @@ export const StarkWorkshopView = memo(function StarkWorkshopView({
         isOpen={isProjectOrchestratorOpen}
         initialProject={targetProjectName}
         onClose={() => setIsProjectOrchestratorOpen(false)}
+      />
+
+      {/* Graphify Architectural Knowledge Graph Modal */}
+      <GraphifyEcosystemModal
+        isOpen={isGraphifyOpen}
+        onClose={() => setIsGraphifyOpen(false)}
       />
     </div>
   );
