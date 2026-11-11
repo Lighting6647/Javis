@@ -406,6 +406,15 @@ describe("createResponseReducer", () => {
     incomplete.push({ type: "response.incomplete" });
     expect(incomplete.done).toBe(true);
 
+    const quota = { type: "insufficient_quota", code: "credit_balance_exhausted", message: "no credits" };
+    const streamError = createResponseReducer();
+    streamError.push({ type: "error", error: quota });
+    expect(streamError.failureCodes).toEqual(["credit_balance_exhausted", "insufficient_quota"]);
+
+    const failedResponse = createResponseReducer();
+    failedResponse.push({ type: "response.failed", response: { error: quota } });
+    expect(failedResponse.failureCodes).toContain("insufficient_quota");
+
     for (const type of ["response.failed", "error"]) {
       const failed = createResponseReducer();
       failed.push({ type });

@@ -1,4 +1,5 @@
 import type { ChatEvent, FillProposal, MemoryEntry, PageField, WebSource } from "./chatProtocol.js";
+import { readUpstreamErrorCodes } from "./upstreamError.js";
 
 export const OPEN_PAGE_TOOL = "open_web_page";
 export const FILL_FORM_TOOL = "fill_form_fields";
@@ -66,6 +67,8 @@ export interface ResponseReducer {
   finish(): ChatEvent[];
   /** ต้นทางแจ้งว่าการตอบล้มเหลว */
   readonly failed: boolean;
+  /** รหัสข้อผิดพลาดที่ต้นทางแจ้งมาพร้อมความล้มเหลว ว่างถ้าไม่ได้แจ้ง */
+  readonly failureCodes: string[];
   /** ต้นทางแจ้งว่าตอบจบแล้ว */
   readonly done: boolean;
   /** การเรียกเครื่องมือความจำในคำตอบนี้ */
@@ -95,6 +98,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let searched = false;
   let searchAnnounced = false;
   let failed = false;
+  const failureCodes = new Set<string>();
   let done = false;
   let page: { url: string; title: string } | null = null;
   let fill: FillProposal[] | null = null;
@@ -226,7 +230,10 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
 
       if (type === "response.output_text.annotation.added") addSource(event.annotation);
       else if (type === "response.output_item.done") readItem(event.item);
-      else if (type === "response.failed" || type === "error") failed = true;
+      else if (type === "response.failed" || type === "error") {
+        failed = true;
+        readUpstreamErrorCodes(event).forEach((code) => failureCodes.add(code));
+      }
       else if (type === "response.incomplete") done = true;
       else if (type === "response.completed") {
         done = true;
@@ -262,6 +269,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
 
     get failed() {
       return failed;
+    },
+    get failureCodes() {
+      return [...failureCodes];
     },
     get done() {
       return done;

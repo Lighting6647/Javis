@@ -31,6 +31,13 @@ function extractFormFields(): RawContext {
   const SENSITIVE_HINT =
     /passw|pwd|otp|one.?time|cvv|cvc|card.?num|credit|debit|security.?code|\bpin\b|รหัสผ่าน|บัตรเครดิต|บัตรเดบิต|เลขบัตร|หมายเลขบัตร|รหัสยืนยัน/i;
   const clean = (text: string | null | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
+  /** ข้อความของป้ายชื่อ ไม่รวมข้อความของช่องกรอกที่ซ้อนอยู่ข้างใน เช่น ตัวเลือกของรายการแบบเลื่อนลง */
+  const labelText = (label: HTMLLabelElement | null | undefined) => {
+    if (!label) return "";
+    const copy = label.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll("select, textarea, input, button, datalist").forEach((control) => control.remove());
+    return clean(copy.textContent);
+  };
 
   document.querySelectorAll("[data-javis-field]").forEach((element) => element.removeAttribute("data-javis-field"));
 
@@ -55,7 +62,7 @@ function extractFormFields(): RawContext {
     const labelledBy = element.getAttribute("aria-labelledby");
     const label =
       clean(element.getAttribute("aria-label")) ||
-      clean(element.labels?.[0]?.textContent) ||
+      labelText(element.labels?.[0]) ||
       clean(labelledBy ? document.getElementById(labelledBy)?.textContent : "") ||
       clean(element.getAttribute("placeholder")) ||
       clean(element.getAttribute("name")) ||

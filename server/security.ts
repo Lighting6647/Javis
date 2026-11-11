@@ -24,6 +24,12 @@ function isOriginAllowed(headers: IncomingHttpHeaders): boolean {
   return config.allowedOrigins.has(normalizeOrigin(origin)) || isSameHost(origin, headers);
 }
 
+/**
+ * แอปเดสก์ท็อป: แท็ก <webview> ของ Electron ใส่สไตล์ภายในของตัวเองหนึ่งบรรทัด (`:host { display: flex; }`)
+ * อนุญาตเฉพาะข้อความนั้นด้วยค่าแฮช แทนการเปิด 'unsafe-inline' ให้สไตล์แทรกทุกแบบ
+ */
+const ELECTRON_WEBVIEW_STYLE_HASH = "'sha256-XNfYdUW7S7AWSxlvq47SGsGIxvvzKwvUGdsFQQ/zXf4='";
+
 export const securityHeaders: RequestHandler = helmet({
   strictTransportSecurity: { maxAge: 15_552_000, includeSubDomains: false },
   contentSecurityPolicy: {
@@ -31,7 +37,7 @@ export const securityHeaders: RequestHandler = helmet({
     directives: {
       "default-src": ["'self'"],
       "script-src": ["'self'"],
-      "style-src": ["'self'", "https://fonts.googleapis.com"],
+      "style-src": ["'self'", "https://fonts.googleapis.com", ELECTRON_WEBVIEW_STYLE_HASH],
       "font-src": ["'self'", "https://fonts.gstatic.com"],
       "img-src": ["'self'", "data:"],
       "media-src": ["'self'"],

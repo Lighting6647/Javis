@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { config } from "./config.js";
+import { describeUpstreamFailure, readRejectedResponse } from "./upstreamError.js";
 
 const UPSTREAM_TIMEOUT_MS = 30_000;
 /** เสียงสั้นกว่านี้ไม่มีคำพูดให้แปลง ตอบว่างได้เลยโดยไม่เสียค่าใช้จ่าย */
@@ -67,12 +68,10 @@ export const transcribeHandler: RequestHandler = async (request, response) => {
   }
 
   if (!upstream.ok) {
-    await upstream.body?.cancel().catch(() => undefined);
-    console.error("Transcribe upstream failed", upstream.status);
-    const busy = upstream.status === 429;
-    response.status(busy ? 503 : 502).json({
-      error: busy ? "บริการแปลงเสียงมีผู้ใช้งานหนาแน่น กรุณาลองใหม่ในอีกสักครู่" : "แปลงเสียงเป็นข้อความไม่สำเร็จ กรุณาลองใหม่"
-    });
+    const codes = await readRejectedResponse(upstream);
+    const failure = describeUpstreamFailure("transcribe", upstream.status, codes);
+    console.error("Transcribe upstream failed", upstream.status, failure.reason, codes.join(","));
+    response.status(failure.status).json({ error: failure.message });
     return;
   }
 

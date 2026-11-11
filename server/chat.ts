@@ -11,6 +11,7 @@ import {
   REMEMBER_TOOL
 } from "./responseStream.js";
 import { parseSseChunk } from "./sse.js";
+import { describeUpstreamFailure, readRejectedResponse } from "./upstreamError.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -300,26 +301,32 @@ export const chatHandler: RequestHandler = async (request, response) => {
   }
 
   if (!upstream.ok || !upstream.body) {
-    await upstream.body?.cancel().catch(() => undefined);
-    console.error("Chat upstream failed", upstream.status);
-    const busy = upstream.status === 429;
-    response.status(busy ? 503 : 502).json({
-      error: busy
-        ? "บริการ AI มีผู้ใช้งานหนาแน่น กรุณาลองใหม่ในอีกสักครู่"
-        : "บริการ AI ตอบกลับผิดพลาด กรุณาลองใหม่"
-    });
+    const codes = await readRejectedResponse(upstream);
+    const failure = describeUpstreamFailure("chat", upstream.status, codes);
+    console.error("Chat upstream failed", upstream.status, failure.reason, codes.join(","));
+    response.status(failure.status).json({ error: failure.message });
     return;
   }
 
-  response.status(200).set({
-    "Content-Type": "application/x-ndjson; charset=utf-8",
-    "Cache-Control": "no-store",
-    "X-Accel-Buffering": "no"
-  });
-  response.flushHeaders();
+  // ต้นทางอาจตอบ 200 แล้วแจ้งล้มเหลวเป็นเหตุการณ์แรก (เช่น เครดิตหมด) จึงยังไม่เปิดสตรีมให้แอป
+  // จนกว่าจะมีอะไรให้ส่งจริง เพื่อให้ยังตอบเป็นข้อผิดพลาดที่มีข้อความชัดเจนได้
+  let streaming = false;
+  const openStream = () => {
+    if (streaming) return;
+    streaming = true;
+    response.status(200).set({
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no"
+    });
+    response.flushHeaders();
+  };
 
   const reducer = createResponseReducer({ pageFields, memories });
-  const send = (event: unknown) => response.write(`${JSON.stringify(event)}\n`);
+  const send = (event: unknown) => {
+    openStream();
+    response.write(`${JSON.stringify(event)}\n`);
+  };
 
   /**
    * AI จำหรือลืมแล้วหยุดโดยยังไม่ได้ตอบ: แจ้งผลกลับไปให้ตอบต่อหนึ่งรอบ โดยไม่ให้เรียกเครื่องมือซ้ำ
@@ -359,12 +366,30 @@ export const chatHandler: RequestHandler = async (request, response) => {
     }
 
     reducer.finish().forEach(send);
+    openStream();
     response.end();
   } catch (error) {
-    if (!clientGone.signal.aborted) {
-      console.error("Chat stream interrupted", error instanceof Error ? error.message : "unknown");
+    if (clientGone.signal.aborted) {
+      response.destroy();
+      return;
     }
-    // ตัดการเชื่อมต่อแทนการจบปกติ เพื่อให้ฝั่งผู้ใช้รู้ว่าคำตอบมาไม่ครบ
-    response.destroy();
+
+    const codes = reducer.failureCodes;
+    const failure = describeUpstreamFailure("chat", null, codes);
+    console.error(
+      "Chat stream interrupted",
+      error instanceof Error ? error.message : "unknown",
+      reducer.failed ? `${failure.reason} ${codes.join(",")}` : ""
+    );
+
+    if (streaming) {
+      // ส่งคำตอบไปบางส่วนแล้ว: ตัดการเชื่อมต่อแทนการจบปกติ เพื่อให้ฝั่งผู้ใช้รู้ว่าคำตอบมาไม่ครบ
+      response.destroy();
+      return;
+    }
+    // ยังไม่ได้ส่งอะไร: บอกสาเหตุให้ผู้ใช้รู้ว่าลองใหม่แล้วจะหายหรือต้องแจ้งผู้ดูแล
+    const interrupted = { status: 502, message: "บริการ AI ตอบกลับไม่ครบ กรุณาลองใหม่อีกครั้ง" };
+    const reply = reducer.failed ? failure : interrupted;
+    response.status(reply.status).json({ error: reply.message });
   }
 };
