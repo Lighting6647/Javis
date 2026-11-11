@@ -127,13 +127,46 @@ export function describeUpstreamFailure(
   }
 }
 
-/** อ่านรหัสข้อผิดพลาดจากคำตอบที่ถูกปฏิเสธ แล้วปิดการเชื่อมต่อของคำตอบนั้น */
-export async function readRejectedResponse(upstream: Response): Promise<string[]> {
+export interface UpstreamRejection {
+  codes: string[];
+  /**
+   * ข้อความของต้นทางที่ตัดให้สั้นและปิดบังสิ่งที่ดูเหมือนกุญแจแล้ว
+   * สำหรับ log ของผู้ดูแลเท่านั้น ห้ามส่งให้ผู้ใช้
+   */
+  logDetail: string;
+}
+
+const MAX_LOG_DETAIL_LENGTH = 240;
+/** สิ่งที่ดูเหมือนกุญแจหรือโทเค็น: กุญแจของ OpenAI และ Google และค่าที่ตามหลังคำว่า Bearer */
+const SECRET_LIKE = /sk-[A-Za-z0-9_*.-]{6,}|AIza[0-9A-Za-z_-]{10,}|Bearer\s+\S+/g;
+
+/** ทำข้อความของต้นทางให้ปลอดภัยพอจะเขียนลง log: บรรทัดเดียว ไม่มีสิ่งที่ดูเหมือนกุญแจ และไม่ยาวเกินกำหนด */
+export function sanitizeUpstreamMessage(message: unknown): string {
+  if (typeof message !== "string") return "";
+  return message.replace(/\s+/g, " ").replace(SECRET_LIKE, "[ปิดบัง]").trim().slice(0, MAX_LOG_DETAIL_LENGTH);
+}
+
+function messageOf(input: unknown): unknown {
+  const payload: unknown = Array.isArray(input) ? input[0] : input;
+  return isObject(payload) && isObject(payload.error) ? payload.error.message : undefined;
+}
+
+/**
+ * อ่านคำตอบที่ถูกปฏิเสธ แล้วปิดการเชื่อมต่อของคำตอบนั้น
+ * คืนรหัสข้อผิดพลาดสำหรับจัดกลุ่ม และข้อความที่ปิดบังแล้วสำหรับให้ผู้ดูแลหาสาเหตุ
+ */
+export async function readRejection(upstream: Response): Promise<UpstreamRejection> {
   try {
-    return readUpstreamErrorCodes(await upstream.json());
+    const payload: unknown = await upstream.json();
+    return { codes: readUpstreamErrorCodes(payload), logDetail: sanitizeUpstreamMessage(messageOf(payload)) };
   } catch {
     // ต้นทางไม่ได้ตอบเป็น JSON: ไม่มีรหัสให้อ่าน
     await upstream.body?.cancel().catch(() => undefined);
-    return [];
+    return { codes: [], logDetail: "" };
   }
+}
+
+/** อ่านเฉพาะรหัสข้อผิดพลาดจากคำตอบที่ถูกปฏิเสธ */
+export async function readRejectedResponse(upstream: Response): Promise<string[]> {
+  return (await readRejection(upstream)).codes;
 }

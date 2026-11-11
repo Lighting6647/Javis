@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsRequest, toChatTools } from "./chatCompletions.js";
+import {
+  createChatCompletionsTranslator,
+  memoryFollowUpNote,
+  toAlternatingTurns,
+  toChatCompletionsRequest,
+  toChatTools
+} from "./chatCompletions.js";
 import { createResponseReducer } from "./responseStream.js";
 
 const OPEN_PAGE = {
@@ -98,6 +104,52 @@ describe("toChatCompletionsRequest", () => {
       { role: "system", content: "คำสั่งระบบ" },
       { role: "user", content: "สวัสดี" }
     ]);
+  });
+});
+
+describe("toAlternatingTurns", () => {
+  const user = (content: string) => ({ role: "user", content });
+  const assistant = (content: string) => ({ role: "assistant", content });
+
+  it("บทสนทนาที่สลับผู้พูดอยู่แล้วไม่ถูกแก้", () => {
+    const turns = [user("หนึ่ง"), assistant("สอง"), user("สาม")];
+    expect(toAlternatingTurns(turns)).toEqual(turns);
+  });
+
+  it("คำตอบก่อนหน้าล้มเหลว ข้อความของผู้ใช้จึงมาติดกัน: รวมเป็นข้อความเดียว เนื้อหาอยู่ครบ", () => {
+    expect(toAlternatingTurns([user("เปิดเว็บข่าว"), user("ได้ยินไหม"), assistant("ได้ยินครับ"), user("ขอบคุณ")])).toEqual([
+      user("เปิดเว็บข่าว\n\nได้ยินไหม"),
+      assistant("ได้ยินครับ"),
+      user("ขอบคุณ")
+    ]);
+  });
+
+  it("ประวัติที่ถูกตัดจนขึ้นต้นด้วยคำตอบของผู้ช่วย: เริ่มที่ข้อความแรกของผู้ใช้", () => {
+    expect(toAlternatingTurns([assistant("คำตอบเก่า"), assistant("อีกคำตอบ"), user("คำถามใหม่")])).toEqual([user("คำถามใหม่")]);
+  });
+
+  it("ข้อความแจ้งผลจากระบบถูกรวมกับคำถามล่าสุดของผู้ใช้ ไม่กลายเป็นผู้ใช้พูดสองครั้งติดกัน", () => {
+    const turns = toAlternatingTurns([user("จำไว้ว่าผมชื่อไลท์"), user(memoryFollowUpNote(["บันทึกแล้ว"]))]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.content).toContain("จำไว้ว่าผมชื่อไลท์");
+    expect(turns[0]?.content).toContain("บันทึกแล้ว");
+  });
+
+  it("ไม่แก้ไขรายการต้นฉบับ", () => {
+    const original = [user("หนึ่ง"), user("สอง")];
+    toAlternatingTurns(original);
+    expect(original).toEqual([user("หนึ่ง"), user("สอง")]);
+  });
+
+  it("คำขอที่ส่งจริงใช้บทสนทนาที่จัดแล้วเสมอ", () => {
+    const request = toChatCompletionsRequest({
+      model: "m",
+      instructions: "ระบบ",
+      messages: [assistant("เก่า"), user("หนึ่ง"), user("สอง")],
+      tools: [],
+      maxTokens: 100
+    });
+    expect(request.messages).toEqual([{ role: "system", content: "ระบบ" }, user("หนึ่ง\n\nสอง")]);
   });
 });
 

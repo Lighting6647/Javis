@@ -13,7 +13,7 @@ import {
   REMEMBER_TOOL
 } from "./responseStream.js";
 import { parseSseChunk } from "./sse.js";
-import { describeUpstreamFailure, readRejectedResponse } from "./upstreamError.js";
+import { describeUpstreamFailure, readRejection, type UpstreamRejection } from "./upstreamError.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -158,6 +158,12 @@ const MEMORY_TOOL_DEFINITIONS = [
  */
 let webSearchUsable = config.ai.webSearch;
 
+/**
+ * เปลี่ยนเป็น false เมื่อพบว่าโมเดลที่ตั้งไว้ไม่รับการกำหนดระดับการคิด
+ * คำขอถัดไปจะปล่อยให้โมเดลใช้ระดับการคิดของตัวเอง (ตอบช้าลงบ้าง) แทนที่ทุกคำถามจะล้มเหลว
+ */
+let reasoningEffortUsable = true;
+
 function buildTools(withWebSearch: boolean, withFormFill: boolean): unknown[] {
   return [
     ...(withWebSearch ? [{ type: "web_search" }] : []),
@@ -297,7 +303,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
-  const requestReply = (input: unknown[], withWebSearch: boolean, allowTools: boolean) => {
+  const requestReply = (input: unknown[], withWebSearch: boolean, allowTools: boolean, withReasoningEffort = reasoningEffortUsable) => {
     const instructions = buildInstructions(page, memories, withWebSearch);
     const tools = buildTools(withWebSearch, pageFields.length > 0);
 
@@ -310,7 +316,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
             // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
             tools: allowTools ? tools : [],
             maxTokens: MAX_CHAT_STYLE_TOKENS,
-            reasoningEffort: ai.reasoningEffort
+            reasoningEffort: withReasoningEffort ? ai.reasoningEffort : undefined
           })
         : {
             model: ai.chatModel,
@@ -336,6 +342,8 @@ export const chatHandler: RequestHandler = async (request, response) => {
   };
 
   let upstream: Response;
+  /** รายละเอียดของคำตอบที่ถูกปฏิเสธ ถ้าอ่านเนื้อหาไปแล้วระหว่างตัดสินว่าจะลองใหม่ไหม (เนื้อหาอ่านได้ครั้งเดียว) */
+  let rejection: UpstreamRejection | null = null;
   try {
     upstream = await requestReply(messages, webSearchUsable, true);
 
@@ -352,6 +360,25 @@ export const chatHandler: RequestHandler = async (request, response) => {
       }
       upstream = retry;
     }
+
+    // รูปแบบ Chat Completions: โมเดลบางรุ่นไม่รับการกำหนดระดับการคิด ลองใหม่หนึ่งครั้งโดยไม่กำหนด
+    // กุญแจผิดก็ได้รหัส 400 เหมือนกันในผู้ให้บริการบางราย กรณีนั้นลองใหม่ไปก็ไม่ช่วย จึงไม่ลอง
+    if (upstream.status === 400 && ai.apiStyle === "chat" && ai.reasoningEffort && reasoningEffortUsable) {
+      rejection = await readRejection(upstream);
+      if (!rejection.codes.includes("invalid_api_key")) {
+        const retry = await requestReply(messages, false, true, false);
+        if (retry.ok) {
+          reasoningEffortUsable = false;
+          console.warn(
+            `โมเดล ${ai.chatModel} ไม่รับระดับการคิด "${ai.reasoningEffort}" จึงใช้ค่าเริ่มต้นของโมเดลจนกว่าจะรีสตาร์ต ` +
+              `ตั้ง GEMINI_REASONING_EFFORT เป็นค่าที่โมเดลรองรับ หรือ default เพื่อปิดคำเตือนนี้ (${rejection.logDetail})`
+          );
+        }
+        // คำขอที่ลองใหม่มีเนื้อหาของตัวเอง รายละเอียดของคำขอแรกจึงไม่ใช้แล้ว
+        rejection = null;
+        upstream = retry;
+      }
+    }
   } catch (error) {
     if (clientGone.signal.aborted) return;
     console.error("Chat upstream error", error instanceof Error ? error.message : "unknown");
@@ -360,9 +387,11 @@ export const chatHandler: RequestHandler = async (request, response) => {
   }
 
   if (!upstream.ok || !upstream.body) {
-    const codes = await readRejectedResponse(upstream);
+    const { codes, logDetail } = rejection ?? (await readRejection(upstream));
     const failure = describeUpstreamFailure("chat", upstream.status, codes);
-    console.error("Chat upstream failed", upstream.status, failure.reason, codes.join(","));
+    // ต้นทางปฏิเสธรูปแบบคำขอ (400): บันทึกข้อความที่ปิดบังแล้วไว้ให้ผู้ดูแลหาสาเหตุ กรณีอื่นรหัสก็บอกสาเหตุพอแล้ว
+    const detail = upstream.status === 400 && failure.reason === "unknown" ? logDetail : "";
+    console.error("Chat upstream failed", upstream.status, failure.reason, codes.join(","), detail);
     aiAccount.reportFailure("chat", failure.reason);
     response.status(failure.status).json({ error: failure.message });
     return;

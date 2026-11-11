@@ -56,6 +56,26 @@ export function toChatTools(tools: readonly unknown[]): unknown[] {
   });
 }
 
+/**
+ * จัดบทสนทนาให้เริ่มที่ผู้ใช้และสลับผู้พูดทุกข้อความ ซึ่งผู้ให้บริการบางรายบังคับ
+ * ประวัติจากแอปอาจไม่เป็นแบบนั้นเสมอ: ประวัติที่ตัดให้เหลือช่วงท้ายอาจขึ้นต้นด้วยคำตอบของผู้ช่วย
+ * และเมื่อคำตอบก่อนหน้าล้มเหลว ข้อความของผู้ใช้จะมาติดกันสองข้อความ
+ * ข้อความของผู้พูดคนเดียวกันที่ติดกันจะถูกรวมเป็นข้อความเดียว เนื้อหาจึงอยู่ครบ
+ */
+export function toAlternatingTurns(messages: ReadonlyArray<{ role: string; content: string }>): Array<{ role: string; content: string }> {
+  const turns: Array<{ role: string; content: string }> = [];
+
+  for (const { role, content } of messages) {
+    // คำตอบของผู้ช่วยที่ไม่มีคำถามของผู้ใช้นำหน้า ไม่ช่วยให้เข้าใจบทสนทนา จึงข้ามได้
+    if (turns.length === 0 && role !== "user") continue;
+
+    const previous = turns.at(-1);
+    if (previous && previous.role === role) previous.content = `${previous.content}\n\n${content}`;
+    else turns.push({ role, content });
+  }
+  return turns;
+}
+
 /** สร้างเนื้อหาคำขอแบบ Chat Completions ที่สตรีมคำตอบ */
 export function toChatCompletionsRequest(options: ChatCompletionsRequestOptions): Json {
   const tools = toChatTools(options.tools);
@@ -64,7 +84,7 @@ export function toChatCompletionsRequest(options: ChatCompletionsRequestOptions)
     model: options.model,
     stream: true,
     max_tokens: options.maxTokens,
-    messages: [{ role: "system", content: options.instructions }, ...options.messages.map(({ role, content }) => ({ role, content }))],
+    messages: [{ role: "system", content: options.instructions }, ...toAlternatingTurns(options.messages)],
     ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
   };

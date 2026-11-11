@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { describeUpstreamFailure, readRejectedResponse, readUpstreamErrorCodes } from "./upstreamError.js";
+import {
+  describeUpstreamFailure,
+  readRejectedResponse,
+  readRejection,
+  readUpstreamErrorCodes,
+  sanitizeUpstreamMessage
+} from "./upstreamError.js";
 
 /** รูปแบบจริงที่ OpenAI ส่งเมื่อเครดิตของบัญชีหมด */
 const QUOTA_ERROR = {
@@ -143,6 +149,42 @@ describe("describeUpstreamFailure", () => {
     ] as const) {
       expect(describeUpstreamFailure("chat", status, codes).message).not.toMatch(/AI[ก-๙]/);
     }
+  });
+});
+
+describe("sanitizeUpstreamMessage", () => {
+  it("ทำให้เป็นบรรทัดเดียวและตัดให้สั้น", () => {
+    expect(sanitizeUpstreamMessage("Invalid value\n  at 'reasoning_effort'\t(TYPE_ENUM)")).toBe("Invalid value at 'reasoning_effort' (TYPE_ENUM)");
+    expect(sanitizeUpstreamMessage("x".repeat(1000))).toHaveLength(240);
+  });
+
+  it("ปิดบังสิ่งที่ดูเหมือนกุญแจหรือโทเค็น", () => {
+    // ค่าทดสอบเท่านั้น ไม่ใช่กุญแจจริง ประกอบขึ้นตอนรันเพื่อไม่ให้เครื่องมือสแกนความลับเข้าใจผิด
+    const openaiLike = ["sk", "proj", "****abcd1234"].join("-");
+    const googleLike = `${"AI"}${"za"}SyTESTONLYnotarealkey0000`;
+    const message = `Incorrect API key provided: ${openaiLike}. Also ${googleLike} and Bearer abc.def-123 failed`;
+    const clean = sanitizeUpstreamMessage(message);
+    expect(clean).not.toMatch(/sk-proj|SyTESTONLY|abc\.def-123/);
+    expect(clean).toContain("Incorrect API key provided");
+    expect(clean.match(/\[ปิดบัง\]/g)).toHaveLength(3);
+  });
+
+  it("คืนข้อความว่างเมื่อไม่ใช่ข้อความ", () => {
+    for (const input of [undefined, null, 42, {}, []]) expect(sanitizeUpstreamMessage(input)).toBe("");
+  });
+});
+
+describe("readRejection", () => {
+  it("คืนทั้งรหัสสำหรับจัดกลุ่ม และข้อความที่ปิดบังแล้วสำหรับ log", async () => {
+    const body = [{ error: { code: 400, message: "Invalid value at 'reasoning_effort': \"minimal\"", status: "INVALID_ARGUMENT" } }];
+    const rejection = await readRejection(new Response(JSON.stringify(body), { status: 400 }));
+    expect(rejection.codes).toEqual(["INVALID_ARGUMENT"]);
+    expect(rejection.logDetail).toBe("Invalid value at 'reasoning_effort': \"minimal\"");
+  });
+
+  it("คำตอบที่ไม่ใช่ JSON หรือไม่มีข้อความ: ไม่มีรายละเอียด", async () => {
+    expect(await readRejection(new Response("<html>Bad gateway</html>", { status: 502 }))).toEqual({ codes: [], logDetail: "" });
+    expect(await readRejection(new Response(JSON.stringify({ error: { code: "x" } }), { status: 400 }))).toEqual({ codes: ["x"], logDetail: "" });
   });
 });
 
