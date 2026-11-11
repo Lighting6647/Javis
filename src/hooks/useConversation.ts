@@ -1,6 +1,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { browserStore, isDesktopApp } from "../browser/browserStore";
 import { ConversationController } from "../conversation/controller";
+import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
+import { openExternalPage } from "../services/openPage";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import { createSpeechServices } from "../speech";
 
@@ -10,7 +13,23 @@ export function useConversation() {
     const services = createSpeechServices();
     services.synthesizer.applySettings(voiceSettingsStore.get());
     return {
-      controller: new ConversationController({ ...services, chat: streamChatReply }),
+      controller: new ConversationController({
+        ...services,
+        chat: streamChatReply,
+        // แอปเดสก์ท็อปเปิดหน้าเว็บในเบราว์เซอร์ในตัว ที่อื่นเปิดแท็บใหม่หรือเบราว์เซอร์ของระบบ
+        openPage: (url) => (isDesktopApp() ? browserStore.open(url) : openExternalPage(url)),
+        getPageContext: async () => {
+          if (!browserStore.get().requestedUrl) return null;
+          return (await browserStore.getBridge()?.getContext()) ?? null;
+        },
+        fillPage: async (pageUrl, values) =>
+          (await browserStore.getBridge()?.fill(pageUrl, values)) ?? {
+            filled: 0,
+            missing: values.map((entry) => entry.id),
+            failure: "unavailable"
+          },
+        memory: { list: memoryStore.get, add: memoryStore.add, remove: memoryStore.remove }
+      }),
       synthesizer: services.synthesizer
     };
   });
@@ -33,6 +52,9 @@ export function useConversation() {
     reset: controller.reset,
     interrupt: controller.interrupt,
     finishListening: controller.finishListening,
-    sendText: controller.sendText
+    sendText: controller.sendText,
+    confirmFill: controller.confirmFill,
+    cancelFill: controller.cancelFill,
+    undoMemory: controller.undoMemory
   };
 }

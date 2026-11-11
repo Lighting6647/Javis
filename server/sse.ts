@@ -1,39 +1,28 @@
 export interface SseParseResult {
-  /** ข้อความคำตอบที่แกะได้จากบรรทัดที่ครบแล้ว เรียงตามลำดับ */
-  deltas: string[];
+  /** เหตุการณ์ JSON ที่แกะได้จากบรรทัดที่ครบแล้ว เรียงตามลำดับ */
+  events: unknown[];
   /** ส่วนท้ายที่ยังไม่ครบบรรทัด ต้องนำไปต่อกับข้อมูลก้อนถัดไป */
   rest: string;
-  /** พบสัญญาณจบสตรีม `[DONE]` แล้ว */
-  done: boolean;
 }
 
-function readDelta(payload: string): string {
-  try {
-    const event = JSON.parse(payload) as {
-      choices?: Array<{ delta?: { content?: unknown } }>;
-    };
-    const content = event.choices?.[0]?.delta?.content;
-    return typeof content === "string" ? content : "";
-  } catch {
-    return "";
-  }
-}
-
-/** แกะข้อความคำตอบออกจากสตรีม SSE ของ Chat Completions */
+/** แกะเหตุการณ์ JSON ออกจากสตรีม SSE บรรทัดที่ไม่ใช่ข้อมูลหรือไม่ใช่ JSON จะถูกข้าม */
 export function parseSseChunk(buffer: string): SseParseResult {
   const lines = buffer.split(/\r?\n/);
   const rest = lines.pop() ?? "";
-  const deltas: string[] = [];
+  const events: unknown[] = [];
 
   for (const line of lines) {
     if (!line.startsWith("data:")) continue;
 
     const payload = line.slice("data:".length).trim();
-    if (payload === "[DONE]") return { deltas, rest: "", done: true };
+    if (!payload || payload === "[DONE]") continue;
 
-    const delta = readDelta(payload);
-    if (delta) deltas.push(delta);
+    try {
+      events.push(JSON.parse(payload));
+    } catch {
+      // บรรทัดเสียหาย: ข้ามไป ไม่ให้ทั้งคำตอบล้ม
+    }
   }
 
-  return { deltas, rest, done: false };
+  return { events, rest };
 }

@@ -1,5 +1,7 @@
-import { Play, RotateCcw, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { Check, Download, Play, RotateCcw, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { type Theme, themeStore } from "../services/themeStore";
+import { MemorySection } from "./MemorySection";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import {
   DEFAULT_VOICE_SETTINGS,
@@ -13,11 +15,20 @@ import {
 const SAMPLE_SENTENCE = "สวัสดีครับ ผมคือ Javis ผู้ช่วยของคุณ วันนี้ให้ช่วยเรื่องอะไรดีครับ";
 const AUTOMATIC_VOICE = "";
 
+interface InstallPrompt {
+  canInstall: boolean;
+  installed: boolean;
+  install: () => Promise<void>;
+}
+
 interface VoiceSettingsDialogProps {
   open: boolean;
   onClose: () => void;
   synthesizer: SpeechSynthesizer;
   settings: VoiceSettings;
+  installPrompt: InstallPrompt;
+  /** กำลังรันในแอปเดสก์ท็อป */
+  desktop: boolean;
 }
 
 function describeRate(rate: number): string {
@@ -25,8 +36,8 @@ function describeRate(rate: number): string {
   return `${rate < DEFAULT_VOICE_SETTINGS.rate ? "ช้าลง" : "เร็วขึ้น"} ${rate.toFixed(1)} เท่า`;
 }
 
-/** เนื้อหาในหน้าต่าง สร้างใหม่ทุกครั้งที่เปิด จึงโหลดรายการเสียงล่าสุดของอุปกรณ์เสมอ */
-function VoiceSettingsForm({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, "synthesizer" | "settings">) {
+/** ส่วนตั้งค่าเสียง สร้างใหม่ทุกครั้งที่เปิด จึงโหลดรายการเสียงล่าสุดของอุปกรณ์เสมอ */
+function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, "synthesizer" | "settings">) {
   /** null = กำลังโหลดรายการเสียง */
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
   const rateId = useId();
@@ -65,10 +76,10 @@ function VoiceSettingsForm({ synthesizer, settings }: Pick<VoiceSettingsDialogPr
 
   if (voices.length === 0) {
     return (
-      <div className="notice-banner info" role="status">
+      <p className="callout" role="status">
         อุปกรณ์นี้ยังไม่มีเสียงพูดภาษาไทย ติดตั้งเสียงภาษาไทยในการตั้งค่าของอุปกรณ์ แล้วเปิดหน้านี้อีกครั้ง
         ระหว่างนี้คำตอบจะแสดงเป็นข้อความ
-      </div>
+      </p>
     );
   }
 
@@ -121,22 +132,82 @@ function VoiceSettingsForm({ synthesizer, settings }: Pick<VoiceSettingsDialogPr
       </div>
 
       <div className="settings-actions">
-        <button type="button" className="ghost-button" onClick={preview}>
-          <Play size={17} aria-hidden /> ทดลองฟัง
+        <button type="button" className="btn btn-secondary" onClick={preview}>
+          <Play size={16} aria-hidden /> ทดลองฟัง
         </button>
         <button
           type="button"
-          className="ghost-button"
+          className="btn btn-secondary"
           onClick={() => voiceSettingsStore.update(DEFAULT_VOICE_SETTINGS)}
         >
-          <RotateCcw size={16} aria-hidden /> ค่าเริ่มต้น
+          <RotateCcw size={15} aria-hidden /> ค่าเริ่มต้น
         </button>
       </div>
     </>
   );
 }
 
-export function VoiceSettingsDialog({ open, onClose, synthesizer, settings }: VoiceSettingsDialogProps) {
+const THEME_OPTIONS: Array<{ value: Theme; name: string; hint: string }> = [
+  { value: "holo", name: "โฮโลแกรม", hint: "จอ HUD เรืองแสง พื้นมืด" },
+  { value: "plain", name: "เรียบ", hint: "สว่างหรือมืดตามอุปกรณ์" }
+];
+
+function ThemeSection() {
+  const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
+
+  return (
+    <fieldset>
+      <legend>รูปแบบหน้าจอ</legend>
+      <div className="option-grid">
+        {THEME_OPTIONS.map((option) => (
+          <label className="voice-option" key={option.value}>
+            <input
+              type="radio"
+              name="theme"
+              checked={theme === option.value}
+              onChange={() => themeStore.set(option.value)}
+            />
+            <span>{option.name} <small>{option.hint}</small></span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
+  const { canInstall, installed, install } = installPrompt;
+
+  return (
+    <div className="settings-section">
+      <h3>แอปหน้าต่างของตัวเอง</h3>
+      {installed ? (
+        <p className="settings-note"><Check size={15} aria-hidden /> ติดตั้งเป็นแอปบนอุปกรณ์นี้แล้ว</p>
+      ) : canInstall ? (
+        <>
+          <p className="settings-note">ติดตั้ง Javis เป็นแอปแยกหน้าต่าง เปิดได้จากหน้าจอหลักโดยไม่ต้องเข้าเบราว์เซอร์</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void install()}>
+            <Download size={16} aria-hidden /> ติดตั้งแอป Javis
+          </button>
+        </>
+      ) : (
+        <p className="settings-note">
+          ติดตั้งได้จากเมนูของเบราว์เซอร์: Chrome หรือ Edge เลือก "ติดตั้งแอป" ส่วน Safari บน iPhone เลือก
+          "แชร์" แล้ว "เพิ่มไปยังหน้าจอโฮม"
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function VoiceSettingsDialog({
+  open,
+  onClose,
+  synthesizer,
+  settings,
+  installPrompt,
+  desktop
+}: VoiceSettingsDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -152,7 +223,12 @@ export function VoiceSettingsDialog({ open, onClose, synthesizer, settings }: Vo
       ref={dialogRef}
       className="settings-dialog"
       aria-labelledby={titleId}
-      onClose={onClose}
+      // ปิดผ่านสถานะของแอปทางเดียว ไม่ฟังเหตุการณ์ close ของเบราว์เซอร์ ซึ่งอาจมาถึงช้า
+      // แล้วไปปิดหน้าต่างที่ผู้ใช้เพิ่งเปิดใหม่ กด Esc จึงรับที่เหตุการณ์ cancel แทน
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(event) => {
         // แตะพื้นหลังนอกกล่องเพื่อปิด
         if (event.target === dialogRef.current) onClose();
@@ -160,15 +236,19 @@ export function VoiceSettingsDialog({ open, onClose, synthesizer, settings }: Vo
     >
       <div className="settings-body">
         <header>
-          <h2 id={titleId}>ตั้งค่าเสียง</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="ปิดหน้าตั้งค่าเสียง">
+          <h2 id={titleId}>ตั้งค่า</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="ปิดหน้าตั้งค่า">
             <X size={18} aria-hidden />
           </button>
         </header>
 
-        {open && <VoiceSettingsForm synthesizer={synthesizer} settings={settings} />}
+        <ThemeSection />
+        {open && <VoiceSection synthesizer={synthesizer} settings={settings} />}
+        <MemorySection />
+        {/* แอปเดสก์ท็อปเป็นหน้าต่างของตัวเองอยู่แล้ว ไม่ต้องชวนติดตั้ง */}
+        {!desktop && <InstallSection installPrompt={installPrompt} />}
 
-        <button type="button" className="start-button settings-done" onClick={onClose}>
+        <button type="button" className="btn btn-primary settings-done" onClick={onClose}>
           เสร็จสิ้น
         </button>
       </div>

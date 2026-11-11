@@ -79,6 +79,21 @@ export const chatRateLimiter = rateLimit({
   }
 });
 
+/** การแปลงเสียงมีค่าใช้จ่ายต่อครั้ง จึงจำกัดเท่ากับจำนวนข้อความ (หนึ่งคำพูด = หนึ่งข้อความ) */
+export const transcribeRateLimiter = rateLimit({
+  windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
+  limit: config.chatRateLimitMax,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: (request, response) => {
+    const userName: unknown = response.locals.userName;
+    return typeof userName === "string" ? `user:${userName}` : ipKeyGenerator(request.ip ?? "");
+  },
+  handler: (_request, response) => {
+    response.status(429).json({ error: "ใช้เสียงถี่เกินไป กรุณารอสักครู่แล้วลองใหม่" });
+  }
+});
+
 /** กันการเดารหัสเข้าใช้งาน: นับเฉพาะครั้งที่ล้มเหลว */
 export const loginRateLimiter = rateLimit({
   windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,

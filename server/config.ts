@@ -13,6 +13,7 @@ const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHAT_MODEL = "gpt-4.1-mini";
+const DEFAULT_TRANSCRIBE_MODEL = "gpt-transcribe";
 
 function readInteger(name: string, fallback: number, minimum: number): number {
   const raw = process.env[name]?.trim();
@@ -89,6 +90,10 @@ export const config = {
   /** โมเดลข้อความที่ใช้คิดคำตอบ ควรเป็นโมเดลที่ตอบเร็วเพราะคำตอบถูกอ่านออกเสียงทันที */
   chatModel: process.env.OPENAI_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL,
   openaiBaseUrl: readBaseUrl("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
+  /** โมเดลแปลงเสียงเป็นข้อความ ใช้เฉพาะแอปเดสก์ท็อปที่ต้องอัดเสียงส่งมา */
+  transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL?.trim() || DEFAULT_TRANSCRIBE_MODEL,
+  /** ให้ AI ค้นเว็บเองเมื่อคำถามต้องใช้ข้อมูลล่าสุด (มีค่าใช้จ่ายต่อการค้นหนึ่งครั้ง) ปิดได้ด้วย WEB_SEARCH_ENABLED=false */
+  webSearchEnabled: process.env.WEB_SEARCH_ENABLED?.trim().toLowerCase() !== "false",
   /** จำนวน reverse proxy ที่อยู่หน้าเซิร์ฟเวอร์ (0 = ต่อตรง) ใช้หา IP จริงของผู้เรียก */
   trustProxyHops: readInteger("TRUST_PROXY", 0, 0),
   /** จำนวนข้อความสูงสุดที่ผู้ใช้หนึ่งคน (หรือ IP เดียวเมื่อไม่บังคับเข้าสู่ระบบ) ส่งได้ภายใน 10 นาที */

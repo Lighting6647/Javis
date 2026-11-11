@@ -25,8 +25,14 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules
   },
   {
-    files: ["server/**/*.ts", "*.config.{js,ts}"],
+    files: ["server/**/*.ts", "scripts/**/*.mjs", "*.config.{js,ts}"],
     languageOptions: { globals: globals.node }
+  },
+  {
+    // โปรเซสหลักของแอปเดสก์ท็อป (Electron) เป็น CommonJS
+    files: ["desktop/**/*.cjs"],
+    languageOptions: { sourceType: "commonjs", globals: globals.node },
+    rules: { "@typescript-eslint/no-require-imports": "off" }
   },
   {
     // เซิร์ฟเวอร์ต้องพิมพ์บรรทัดเริ่มทำงานให้ผู้ดูแลเห็น

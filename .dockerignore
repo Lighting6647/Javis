@@ -2,6 +2,7 @@ node_modules
 dist
 android
 ios
+desktop
 .git
 .github
 .claude

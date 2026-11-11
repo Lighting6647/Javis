@@ -1,73 +1,81 @@
-import { AudioLines, Send } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
-import { MESSAGE_LENGTH_LIMIT } from "../conversation/controller";
-import type { ConversationMessage } from "../conversation/types";
+import { CloudSun, ListChecks, Newspaper } from "lucide-react";
+import { useEffect, useRef } from "react";
+import type { ConversationMessage, Phase } from "../conversation/types";
+import { HoloRings, HudReadout } from "./HoloCore";
+import { MessageBubble } from "./MessageBubble";
 
 interface TranscriptProps {
   messages: ConversationMessage[];
-  onSend: (text: string) => void;
+  /** ผู้ใช้เลือกคำถามตัวอย่าง */
+  onSuggest: (text: string) => void;
+  /** เปิดลิงก์ในเบราว์เซอร์ในตัว (เฉพาะแอปเดสก์ท็อป) */
+  onOpenLink?: (url: string) => boolean;
+  /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ */
+  onUndoMemory: (messageId: string, memoryId: string) => void;
+  /** ข้อความท้ายหน้าเริ่มต้นที่บอกว่าเสียงถูกประมวลผลที่ใด */
+  privacyNote: string;
+  /** จังหวะปัจจุบัน ใช้ขับการเคลื่อนไหวของแกนกลางบนหน้าเริ่มต้น */
+  phase: Phase;
+  statusLabel: string;
+  platformLabel: string;
 }
 
-export function Transcript({ messages, onSend }: TranscriptProps) {
-  const [input, setInput] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
+const SUGGESTIONS = [
+  { icon: Newspaper, text: "ข่าวเด่นวันนี้มีอะไรบ้าง" },
+  { icon: CloudSun, text: "เปิดเว็บกรมอุตุนิยมวิทยาให้หน่อย" },
+  { icon: ListChecks, text: "ช่วยวางแผนงานสัปดาห์นี้" }
+];
+
+export function Transcript({
+  messages,
+  onSuggest,
+  onOpenLink,
+  onUndoMemory,
+  privacyNote,
+  phase,
+  statusLabel,
+  platformLabel
+}: TranscriptProps) {
+  const endRef = useRef<HTMLDivElement>(null);
 
   // เลื่อนตามข้อความล่าสุดเสมอ รวมถึงตอนคำตอบกำลังทยอยเข้ามา
   useEffect(() => {
-    const list = listRef.current;
-    if (list) list.scrollTop = list.scrollHeight;
+    endRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text) return;
-    onSend(text);
-    setInput("");
-  };
+  if (messages.length === 0) {
+    return (
+      <section className="welcome">
+        <div className={`core large ${phase}`} aria-hidden>
+          <HoloRings />
+          <span className="core-heart" />
+        </div>
+        <HudReadout status={statusLabel} platform={platformLabel} />
+        <h1>สวัสดีครับ ให้ Javis ช่วยอะไรดี</h1>
+        <p>ถามได้ทุกเรื่อง Javis ค้นข้อมูลล่าสุดจากเว็บและเปิดหน้าเว็บให้ได้</p>
+
+        <ul className="suggestions" aria-label="คำถามตัวอย่าง">
+          {SUGGESTIONS.map(({ icon: Icon, text }) => (
+            <li key={text}>
+              <button type="button" onClick={() => onSuggest(text)}>
+                <Icon size={17} aria-hidden />
+                {text}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <small>{privacyNote}</small>
+      </section>
+    );
+  }
 
   return (
-    <div className="transcript">
-      <div className="section-heading">
-        <span>บทสนทนา</span>
-        <span>{messages.length ? `${messages.length} ข้อความ` : "ยังไม่มีข้อความ"}</span>
-      </div>
-
-      <div className="messages" ref={listRef} aria-live="polite">
-        {messages.length === 0 ? (
-          <div className="empty-state">
-            <AudioLines size={24} aria-hidden />
-            <p>บทสนทนาจะปรากฏที่นี่เมื่อคุณเริ่มพูดหรือพิมพ์</p>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div className={`message ${message.role}`} key={message.id}>
-              <span>{message.role === "user" ? "คุณ" : "Javis"}</span>
-              {message.text ? (
-                <p>{message.text}</p>
-              ) : (
-                <p className="typing" aria-label="Javis กำลังคิดคำตอบ">
-                  <i /><i /><i />
-                </p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <form className="text-input" onSubmit={handleSubmit}>
-        <input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="พิมพ์ข้อความถึง Javis…"
-          aria-label="ข้อความถึง Javis"
-          maxLength={MESSAGE_LENGTH_LIMIT}
-          enterKeyHint="send"
-        />
-        <button type="submit" disabled={!input.trim()} aria-label="ส่งข้อความ">
-          <Send size={19} aria-hidden />
-        </button>
-      </form>
-    </div>
+    <section className="thread" role="log" aria-live="polite" aria-label="บทสนทนา">
+      {messages.map((message) => (
+        <MessageBubble key={message.id} message={message} onOpenLink={onOpenLink} onUndoMemory={onUndoMemory} />
+      ))}
+      <div ref={endRef} />
+    </section>
   );
 }

@@ -12,8 +12,13 @@ import {
   loginRateLimiter,
   originGuard,
   permissionsPolicy,
-  securityHeaders
+  securityHeaders,
+  transcribeRateLimiter
 } from "./security.js";
+import { transcribeHandler } from "./transcribe.js";
+
+/** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
+const MAX_AUDIO_UPLOAD = "8mb";
 
 const app = express();
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,6 +38,13 @@ app.use("/api", originGuard, corsMiddleware, express.json({ limit: "200kb" }));
 app.get("/api/auth/session", sessionHandler);
 app.post("/api/auth/login", loginRateLimiter, loginHandler);
 app.post("/api/chat", requireAuth, chatRateLimiter, chatHandler);
+app.post(
+  "/api/transcribe",
+  requireAuth,
+  transcribeRateLimiter,
+  express.raw({ type: "audio/*", limit: MAX_AUDIO_UPLOAD }),
+  transcribeHandler
+);
 app.use("/api", apiNotFound);
 
 app.use(express.static(distDir));

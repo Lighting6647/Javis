@@ -1,4 +1,5 @@
 import { ChatError, type StreamChat } from "../conversation/types";
+import { parseChatEventLine } from "./chatEvents";
 import { API_BASE } from "./http";
 import { sessionStore } from "./sessionStore";
 
@@ -12,14 +13,18 @@ async function readErrorMessage(response: Response): Promise<string> {
   return "ขอคำตอบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
 }
 
-/** ส่งประวัติบทสนทนาไปที่ backend และรับคำตอบแบบสตรีมทีละส่วน */
-export const streamChatReply: StreamChat = async (messages, { signal, onDelta }) => {
+/** ส่งประวัติบทสนทนาไปที่ backend และรับคำตอบแบบสตรีมทีละเหตุการณ์ */
+export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, memories }) => {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...sessionStore.authHeaders() },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({
+        messages,
+        ...(page ? { page } : {}),
+        ...(memories && memories.length > 0 ? { memories } : {})
+      }),
       signal
     });
   } catch (cause) {
@@ -35,24 +40,32 @@ export const streamChatReply: StreamChat = async (messages, { signal, onDelta })
   if (!response.ok) throw new ChatError(await readErrorMessage(response));
 
   const contentType = response.headers.get("content-type") ?? "";
-  if (!response.body || !contentType.startsWith("text/plain")) {
+  if (!response.body || !contentType.startsWith("application/x-ndjson")) {
     throw new ChatError("เซิร์ฟเวอร์ตอบกลับในรูปแบบที่ไม่รองรับ กรุณาตรวจการตั้งค่าที่อยู่ของ backend");
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = "";
   let reply = "";
+
+  const handleLine = (line: string) => {
+    const event = parseChatEventLine(line);
+    if (!event) return;
+    if (event.type === "delta") reply += event.text;
+    onEvent(event);
+  };
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const delta = decoder.decode(value, { stream: true });
-      if (!delta) continue;
-      reply += delta;
-      onDelta(delta);
+      const lines = (buffer + decoder.decode(value, { stream: true })).split("\n");
+      buffer = lines.pop() ?? "";
+      lines.forEach(handleLine);
     }
+    handleLine(buffer);
   } catch (cause) {
     if (signal.aborted) throw cause;
     throw new ChatError("การเชื่อมต่อขาดระหว่างรับคำตอบ กรุณาลองใหม่อีกครั้ง");

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Javis</title>
+    <style>
+      :root { color-scheme: dark light; font-family: "Segoe UI", "Leelawadee UI", system-ui, sans-serif; }
+      body { height: 100vh; margin: 0; display: grid; place-items: center; color: #e2f9ff; background: #020b14; text-align: center; }
+      @media (prefers-color-scheme: light) { body { color: #18181b; background: #fafafa; } }
+      main { max-width: 380px; padding: 24px; }
+      .orb { width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%; background: radial-gradient(circle, #e0faff, #22d3ee 45%, #086482); }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      p { margin: 0 0 20px; color: #8cc3d2; font-size: 14px; line-height: 1.6; }
+      code { font-size: 13px; overflow-wrap: anywhere; }
+      button { padding: 10px 20px; border: 0; border-radius: 12px; color: #021218; background: #22d3ee; font: inherit; font-weight: 600; cursor: pointer; }
+      button:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="orb"></div>
+      <h1>ยังติดต่อเซิร์ฟเวอร์ Javis ไม่ได้</h1>
+      <p>กำลังลองใหม่อัตโนมัติ ตรวจว่าเซิร์ฟเวอร์เปิดอยู่ที่ <code id="target"></code></p>
+      <button type="button" id="retry">ลองใหม่ตอนนี้</button>
+    </main>
+    <script>
+      // ที่อยู่ของเซิร์ฟเวอร์ถูกส่งมาทาง query string จากตัวแอป
+      const target = new URLSearchParams(location.search).get("target");
+      const isHttp = /^https?:\/\//.test(target || "");
+      document.getElementById("target").textContent = isHttp ? target : "(ไม่ได้ตั้งค่า)";
+      const retry = () => { if (isHttp) location.replace(target); };
+      document.getElementById("retry").addEventListener("click", retry);
+      setTimeout(retry, 3000);
+    </script>
+  </body>
+</html>

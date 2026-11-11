@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
-import { ConversationController, HISTORY_LIMIT } from "./controller";
+import { ConversationController, HISTORY_LIMIT, type MemoryPort } from "./controller";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
-import { ChatError, type ChatStreamOptions, type ChatTurn, type StreamChat } from "./types";
+import { ChatError, type ChatStreamOptions, type ChatTurn, type MemoryEntry, type StreamChat } from "./types";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -107,17 +108,34 @@ class FakeChat {
 
   /** จำลองคำตอบที่สตรีมเข้ามาทีละส่วนจนจบ */
   reply(...deltas: string[]): void {
-    deltas.forEach((delta) => this.current.options.onDelta(delta));
+    deltas.forEach((delta) => this.current.options.onEvent({ type: "delta", text: delta }));
     this.current.result.resolve(deltas.join(""));
   }
+}
+
+/** ตัวเปิดหน้าเว็บจำลอง: จดไว้ว่าถูกสั่งเปิดอะไร และกำหนดได้ว่าเปิดสำเร็จหรือถูกบล็อก */
+class FakeBrowser {
+  succeeds = true;
+  readonly opened: string[] = [];
+
+  readonly open = (url: string): boolean => {
+    this.opened.push(url);
+    return this.succeeds;
+  };
 }
 
 function setup() {
   const recognizer = new FakeRecognizer();
   const synthesizer = new FakeSynthesizer();
   const chat = new FakeChat();
-  const controller = new ConversationController({ recognizer, synthesizer, chat: chat.stream });
-  return { recognizer, synthesizer, chat, controller };
+  const browser = new FakeBrowser();
+  const controller = new ConversationController({
+    recognizer,
+    synthesizer,
+    chat: chat.stream,
+    openPage: browser.open
+  });
+  return { recognizer, synthesizer, chat, browser, controller };
 }
 
 describe("ConversationController", () => {
@@ -239,7 +257,7 @@ describe("ConversationController", () => {
     await settle();
 
     const firstCall = chat.current;
-    firstCall.options.onDelta("กาลครั้งหนึ่งนานมาแล้ว\n");
+    firstCall.options.onEvent({ type: "delta", text: "กาลครั้งหนึ่งนานมาแล้ว\n" });
     await settle();
     expect(controller.getState().phase).toBe("speaking");
 
@@ -254,7 +272,8 @@ describe("ConversationController", () => {
 
     // ผลลัพธ์ที่ตามมาจากรอบเก่าต้องไม่เปลี่ยนสถานะปัจจุบัน
     const snapshot = controller.getState();
-    firstCall.options.onDelta("มีกระต่ายตัวหนึ่ง");
+    firstCall.options.onEvent({ type: "delta", text: "มีกระต่ายตัวหนึ่ง" });
+    firstCall.options.onEvent({ type: "open", url: "https://example.com/", title: "ตัวอย่าง", auto: true });
     firstCall.result.resolve("กาลครั้งหนึ่งนานมาแล้ว\nมีกระต่ายตัวหนึ่ง");
     synthesizer.held.forEach((speech) => speech.resolve());
     await settle();
@@ -368,7 +387,7 @@ describe("ConversationController", () => {
     recognizer.current.result.resolve("ข้อมูลส่วนตัวของผู้ใช้คนแรก");
     await settle();
     const pending = chat.current;
-    pending.options.onDelta("คำตอบบางส่วน");
+    pending.options.onEvent({ type: "delta", text: "คำตอบบางส่วน" });
 
     controller.reset();
     pending.result.resolve("คำตอบบางส่วน ที่ตามมาทีหลัง");
@@ -381,8 +400,386 @@ describe("ConversationController", () => {
       messages: [],
       partial: "",
       notice: null,
-      onDeviceListening: false
+      onDeviceListening: false,
+      searching: false,
+      pendingFillId: null
     });
+  });
+
+  describe("ความจำ", () => {
+    /** คลังความจำจำลอง */
+    function setupWithMemory(initial: MemoryEntry[] = []) {
+      const recognizer = new FakeRecognizer();
+      const synthesizer = new FakeSynthesizer();
+      const chat = new FakeChat();
+      let items = [...initial];
+      let counter = 100;
+      const memory: MemoryPort = {
+        list: () => items,
+        add: (text) => {
+          if (items.some((item) => item.text === text)) return null;
+          const item = { id: `m${(counter += 1)}`, text };
+          items = [...items, item];
+          return item;
+        },
+        remove: (id) => {
+          const found = items.find((item) => item.id === id) ?? null;
+          items = items.filter((item) => item.id !== id);
+          return found;
+        }
+      };
+      const controller = new ConversationController({ recognizer, synthesizer, chat: chat.stream, openPage: () => true, memory });
+      return { recognizer, synthesizer, chat, controller, memory };
+    }
+
+    it("ส่งความจำที่มีอยู่ไปกับคำถาม", async () => {
+      const { chat, controller } = setupWithMemory([{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }]);
+
+      controller.sendText("สวัสดี");
+      await settle();
+
+      expect(chat.current.options.memories).toEqual([{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }]);
+    });
+
+    it("บันทึกสิ่งที่ AI ขอจำ และแนบป้ายไว้กับคำตอบ", async () => {
+      const { chat, controller, memory } = setupWithMemory();
+
+      controller.sendText("ผมชื่อไลท์ ทำงานด้านไอที");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ยินดีที่ได้รู้จักครับคุณไลท์" });
+      chat.current.options.onEvent({ type: "memory", added: ["ผู้ใช้ชื่อไลท์", "ทำงานด้านไอที"], removed: [] });
+      chat.current.result.resolve("ยินดีที่ได้รู้จักครับคุณไลท์");
+      await settle();
+
+      expect(memory.list().map((item) => item.text)).toEqual(["ผู้ใช้ชื่อไลท์", "ทำงานด้านไอที"]);
+      expect(controller.getState().messages.at(-1)?.memoryNotes).toEqual([
+        { kind: "added", id: "m101", text: "ผู้ใช้ชื่อไลท์" },
+        { kind: "added", id: "m102", text: "ทำงานด้านไอที" }
+      ]);
+    });
+
+    it("ไม่แสดงป้ายสำหรับเรื่องที่จำไว้อยู่แล้ว", async () => {
+      const { chat, controller, memory } = setupWithMemory([{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }]);
+
+      controller.sendText("ผมชื่อไลท์");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ครับคุณไลท์" });
+      chat.current.options.onEvent({ type: "memory", added: ["ผู้ใช้ชื่อไลท์"], removed: [] });
+      chat.current.result.resolve("ครับคุณไลท์");
+      await settle();
+
+      expect(memory.list()).toHaveLength(1);
+      expect(controller.getState().messages.at(-1)?.memoryNotes).toBeUndefined();
+    });
+
+    it("ลืมเรื่องที่ AI ขอลืม และบอกผู้ใช้ว่าลืมเรื่องอะไร", async () => {
+      const { chat, controller, memory } = setupWithMemory([
+        { id: "m1", text: "ผู้ใช้ชื่อไลท์" },
+        { id: "m2", text: "ชอบกาแฟดำ" }
+      ]);
+
+      controller.sendText("ลืมเรื่องกาแฟไปได้เลย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ลืมให้แล้วครับ" });
+      chat.current.options.onEvent({ type: "memory", added: [], removed: ["m2", "m99"] });
+      chat.current.result.resolve("ลืมให้แล้วครับ");
+      await settle();
+
+      expect(memory.list()).toEqual([{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }]);
+      expect(controller.getState().messages.at(-1)?.memoryNotes).toEqual([{ kind: "removed", text: "ชอบกาแฟดำ" }]);
+    });
+
+    it("กดยกเลิกแล้วลบเรื่องที่เพิ่งจำ และทำเครื่องหมายที่ป้าย", async () => {
+      const { chat, controller, memory } = setupWithMemory();
+
+      controller.sendText("ผมชื่อไลท์");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ครับ" });
+      chat.current.options.onEvent({ type: "memory", added: ["ผู้ใช้ชื่อไลท์"], removed: [] });
+      chat.current.result.resolve("ครับ");
+      await settle();
+
+      const message = controller.getState().messages.at(-1);
+      controller.undoMemory(message?.id ?? "", "m101");
+
+      expect(memory.list()).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.memoryNotes).toEqual([
+        { kind: "added", id: "m101", text: "ผู้ใช้ชื่อไลท์", undone: true }
+      ]);
+    });
+
+    it("ไม่ทำอะไรกับเหตุการณ์ความจำเมื่ออุปกรณ์ไม่มีคลังความจำ", async () => {
+      const { chat, controller } = setup();
+
+      controller.sendText("ผมชื่อไลท์");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ครับ" });
+      chat.current.options.onEvent({ type: "memory", added: ["ผู้ใช้ชื่อไลท์"], removed: [] });
+      chat.current.result.resolve("ครับ");
+      await settle();
+
+      expect(chat.current.options.memories).toBeUndefined();
+      expect(controller.getState().messages.at(-1)?.memoryNotes).toBeUndefined();
+    });
+  });
+
+  describe("การกรอกฟอร์มของหน้าเว็บ", () => {
+    const PAGE: PageContext = {
+      url: "https://clinic.example.com/register",
+      title: "ลงทะเบียนผู้ป่วยใหม่",
+      fields: [
+        { id: "f1", label: "ชื่อ-นามสกุล", type: "text" },
+        { id: "f2", label: "เบอร์โทรศัพท์", type: "tel" }
+      ]
+    };
+    const PROPOSAL: FillValue[] = [
+      { id: "f1", label: "ชื่อ-นามสกุล", value: "สมชาย ใจดี" },
+      { id: "f2", label: "เบอร์โทรศัพท์", value: "0812345678" }
+    ];
+
+    /** ตัวจำลองหน้าเว็บที่เปิดอยู่ในแอปเดสก์ท็อป */
+    function setupWithPage(result: FillResult = { filled: 2, missing: [] }) {
+      const recognizer = new FakeRecognizer();
+      const synthesizer = new FakeSynthesizer();
+      const chat = new FakeChat();
+      const fills: Array<{ pageUrl: string; values: FillValue[] }> = [];
+      const controller = new ConversationController({
+        recognizer,
+        synthesizer,
+        chat: chat.stream,
+        openPage: () => true,
+        getPageContext: async () => PAGE,
+        fillPage: async (pageUrl, values) => {
+          fills.push({ pageUrl, values });
+          return result;
+        }
+      });
+      return { recognizer, synthesizer, chat, controller, fills };
+    }
+
+    /** พิมพ์สั่งกรอก แล้วให้ AI เสนอรายการ */
+    async function propose(controller: ConversationController, chat: FakeChat) {
+      controller.sendText("กรอกชื่อ สมชาย ใจดี เบอร์ 0812345678");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "เตรียมไว้ให้แล้วครับ" });
+      chat.current.options.onEvent({ type: "fill", fields: PROPOSAL });
+      chat.current.result.resolve("เตรียมไว้ให้แล้วครับ");
+      await settle();
+    }
+
+    const lastFill = (controller: ConversationController) => controller.getState().messages.at(-1)?.fill;
+
+    it("ส่งข้อมูลหน้าเว็บไปกับคำถาม และเก็บรายการที่เสนอไว้รอยืนยันโดยยังไม่กรอก", async () => {
+      const { chat, controller, fills } = setupWithPage();
+
+      await propose(controller, chat);
+
+      expect(chat.current.options.page).toEqual(PAGE);
+      expect(fills).toEqual([]);
+      expect(lastFill(controller)).toEqual({ pageUrl: PAGE.url, fields: PROPOSAL, status: "pending" });
+      expect(controller.getState().pendingFillId).toBe(controller.getState().messages.at(-1)?.id);
+    });
+
+    it("กรอกเฉพาะรายการที่เสนอ เมื่อผู้ใช้กดยืนยัน", async () => {
+      const { chat, controller, fills } = setupWithPage();
+      await propose(controller, chat);
+
+      controller.confirmFill();
+      await settle();
+
+      expect(fills).toEqual([{ pageUrl: PAGE.url, values: PROPOSAL }]);
+      expect(lastFill(controller)).toMatchObject({ status: "filled", filledCount: 2 });
+      expect(controller.getState().pendingFillId).toBeNull();
+      expect(controller.getState().notice).toEqual({
+        tone: "info",
+        text: "กรอกให้แล้ว 2 ช่องครับ กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง"
+      });
+    });
+
+    it("กดยืนยันซ้ำไม่ทำให้กรอกซ้ำ", async () => {
+      const { chat, controller, fills } = setupWithPage();
+      await propose(controller, chat);
+
+      controller.confirmFill();
+      controller.confirmFill();
+      await settle();
+      controller.confirmFill();
+      await settle();
+
+      expect(fills).toHaveLength(1);
+    });
+
+    it("ไม่กรอกอะไรเมื่อผู้ใช้กดยกเลิก", async () => {
+      const { chat, controller, fills } = setupWithPage();
+      await propose(controller, chat);
+
+      controller.cancelFill();
+      await settle();
+
+      expect(fills).toEqual([]);
+      expect(lastFill(controller)).toMatchObject({ status: "cancelled" });
+      expect(controller.getState().notice).toEqual({ tone: "info", text: NOTICE_TEXT.fillCancelled });
+    });
+
+    it("พิมพ์หรือพูดว่า ยืนยัน แล้วกรอกทันทีโดยไม่ถาม AI ซ้ำ", async () => {
+      const { chat, controller, fills } = setupWithPage();
+      await propose(controller, chat);
+
+      controller.sendText("ยืนยันครับ");
+      await settle();
+
+      expect(fills).toHaveLength(1);
+      expect(chat.calls).toHaveLength(1);
+      expect(lastFill(controller)).toMatchObject({ status: "filled" });
+    });
+
+    it("ระหว่างสนทนาด้วยเสียง พูดว่า ยืนยัน แล้วอ่านผลให้ฟังและกลับมาฟังต่อ", async () => {
+      const { recognizer, synthesizer, chat, controller, fills } = setupWithPage();
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("กรอกชื่อ สมชาย ใจดี เบอร์ 0812345678");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "เตรียมไว้ให้แล้วครับ" });
+      chat.current.options.onEvent({ type: "fill", fields: PROPOSAL });
+      chat.current.result.resolve("เตรียมไว้ให้แล้วครับ");
+      await settle();
+
+      recognizer.current.result.resolve("ยืนยัน");
+      await settle();
+
+      expect(fills).toHaveLength(1);
+      expect(chat.calls).toHaveLength(1);
+      expect(synthesizer.spoken.at(-1)).toContain("กรอกให้แล้ว 2 ช่อง");
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+      expect(controller.getState().notice?.text).toContain("กดส่งฟอร์มด้วยตัวเอง");
+    });
+
+    it("คำถามใหม่ยกเลิกรายการที่ยังไม่ได้ยืนยัน", async () => {
+      const { chat, controller, fills } = setupWithPage();
+      await propose(controller, chat);
+      const proposalId = controller.getState().pendingFillId;
+
+      controller.sendText("ยืนยันการจองโรงแรมให้หน่อย");
+      await settle();
+
+      expect(fills).toEqual([]);
+      expect(chat.calls).toHaveLength(2);
+      expect(controller.getState().pendingFillId).toBeNull();
+      expect(controller.getState().messages.find((message) => message.id === proposalId)?.fill?.status).toBe("cancelled");
+    });
+
+    it.each([
+      ["หน้าเว็บเปลี่ยนไปแล้ว", { filled: 0, missing: ["f1", "f2"], failure: "page-changed" }, NOTICE_TEXT.fillPageChanged],
+      ["หน้าเว็บถูกปิดไปแล้ว", { filled: 0, missing: ["f1", "f2"], failure: "unavailable" }, NOTICE_TEXT.fillUnavailable],
+      ["หาช่องไม่เจอเลย", { filled: 0, missing: ["f1", "f2"] }, NOTICE_TEXT.fillNothing]
+    ] as Array<[string, FillResult, string]>)("แจ้งว่ายังไม่ได้กรอกเมื่อ%s", async (_name, result, text) => {
+      const { chat, controller } = setupWithPage(result);
+      await propose(controller, chat);
+
+      controller.confirmFill();
+      await settle();
+
+      expect(lastFill(controller)).toMatchObject({ status: "failed" });
+      expect(controller.getState().notice).toEqual({ tone: "error", text });
+    });
+
+    it("บอกจำนวนช่องที่กรอกไม่ได้เมื่อกรอกได้บางส่วน", async () => {
+      const { chat, controller } = setupWithPage({ filled: 1, missing: ["f2"] });
+      await propose(controller, chat);
+
+      controller.confirmFill();
+      await settle();
+
+      expect(lastFill(controller)).toMatchObject({ status: "filled", filledCount: 1 });
+      expect(controller.getState().notice?.text).toContain("อีก 1 ช่องกรอกไม่ได้");
+    });
+
+    it("ไม่รับรายการเสนอกรอกเมื่อไม่มีหน้าเว็บเปิดอยู่", async () => {
+      const { chat, controller } = setup();
+
+      controller.sendText("กรอกชื่อให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "ได้ครับ" });
+      chat.current.options.onEvent({ type: "fill", fields: PROPOSAL });
+      chat.current.result.resolve("ได้ครับ");
+      await settle();
+
+      expect(lastFill(controller)).toBeUndefined();
+      expect(controller.getState().pendingFillId).toBeNull();
+    });
+  });
+
+  it("แจ้งว่ากำลังค้นเว็บ แล้วแนบแหล่งที่มากับคำตอบ โดยไม่อ่านลิงก์ออกเสียง", async () => {
+    const { recognizer, synthesizer, chat, controller } = setup();
+
+    void controller.start();
+    await settle();
+    recognizer.current.result.resolve("ข่าววันนี้มีอะไรบ้าง");
+    await settle();
+
+    chat.current.options.onEvent({ type: "status", status: "searching" });
+    expect(controller.getState()).toMatchObject({ phase: "thinking", searching: true });
+
+    const answer = "วันนี้ฝนตกหนักในกรุงเทพครับ ([ข่าวสด](https://news.example.com/rain))\n";
+    chat.current.options.onEvent({ type: "delta", text: answer });
+    expect(controller.getState().searching).toBe(false);
+
+    const sources = [{ title: "ข่าวสด", url: "https://news.example.com/rain" }];
+    chat.current.options.onEvent({ type: "sources", sources });
+    chat.current.result.resolve(answer);
+    await settle();
+
+    expect(controller.getState().messages.at(-1)).toMatchObject({ role: "assistant", text: answer, sources });
+    expect(synthesizer.spoken).toEqual(["วันนี้ฝนตกหนักในกรุงเทพครับ"]);
+  });
+
+  it("เปิดหน้าเว็บให้เมื่อ backend ยืนยันว่าเป็นคำสั่งของผู้ใช้ และแนบลิงก์ไว้ในคำตอบ", async () => {
+    const { chat, browser, controller } = setup();
+
+    controller.sendText("เปิดเว็บกรมอุตุฯ ให้หน่อย");
+    await settle();
+    chat.current.options.onEvent({ type: "delta", text: "ได้เลยครับ" });
+    chat.current.options.onEvent({ type: "open", url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา", auto: true });
+    chat.current.result.resolve("ได้เลยครับ");
+    await settle();
+
+    expect(browser.opened).toEqual(["https://www.tmd.go.th/"]);
+    expect(controller.getState().messages.at(-1)?.link).toEqual({
+      title: "กรมอุตุนิยมวิทยา",
+      url: "https://www.tmd.go.th/",
+      opened: true
+    });
+  });
+
+  it("ไม่เปิดหน้าเว็บเองเมื่อลิงก์มาหลังการอ่านเนื้อหาเว็บ แต่แสดงลิงก์ให้ผู้ใช้กด", async () => {
+    const { chat, browser, controller } = setup();
+
+    controller.sendText("ค้นแล้วเปิดให้ด้วย");
+    await settle();
+    chat.current.options.onEvent({ type: "delta", text: "นี่ครับ" });
+    chat.current.options.onEvent({ type: "open", url: "https://unknown.example.net/", title: "ผลลัพธ์", auto: false });
+    chat.current.result.resolve("นี่ครับ");
+    await settle();
+
+    expect(browser.opened).toEqual([]);
+    expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false });
+  });
+
+  it("ยังแสดงลิงก์ให้กดเองเมื่อเบราว์เซอร์บล็อกการเปิดหน้าใหม่", async () => {
+    const { chat, browser, controller } = setup();
+    browser.succeeds = false;
+
+    controller.sendText("เปิดเว็บให้หน่อย");
+    await settle();
+    chat.current.options.onEvent({ type: "delta", text: "ได้เลยครับ" });
+    chat.current.options.onEvent({ type: "open", url: "https://example.com/", title: "ตัวอย่าง", auto: true });
+    chat.current.result.resolve("ได้เลยครับ");
+    await settle();
+
+    expect(browser.opened).toEqual(["https://example.com/"]);
+    expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false });
+    expect(controller.getState().notice).toBeNull();
   });
 
   it("สั่งจบการฟังเองได้เฉพาะตอนกำลังฟัง", async () => {

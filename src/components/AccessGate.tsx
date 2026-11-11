@@ -30,30 +30,31 @@ export function AccessGate({ onSignIn }: AccessGateProps) {
   };
 
   return (
-    <form className="access-gate" onSubmit={handleSubmit} noValidate>
-      <div className="gate-icon"><KeyRound size={26} aria-hidden /></div>
-      <h2>เข้าสู่ระบบเพื่อเริ่มใช้งาน</h2>
+    <form className="panel" onSubmit={handleSubmit} noValidate>
+      <div className="panel-icon"><KeyRound size={24} aria-hidden /></div>
+      <h1>เข้าสู่ระบบเพื่อเริ่มใช้งาน</h1>
       <p>กรอกรหัสเข้าใช้งานที่ได้รับจากผู้ดูแลระบบ</p>
 
-      <label htmlFor={inputId}>รหัสเข้าใช้งาน</label>
-      <input
-        id={inputId}
-        type="password"
-        value={code}
-        onChange={(event) => setCode(event.target.value)}
-        autoComplete="current-password"
-        autoCapitalize="none"
-        spellCheck={false}
-        maxLength={200}
-        disabled={busy}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-      />
+      <div className="field">
+        <label htmlFor={inputId}>รหัสเข้าใช้งาน</label>
+        <input
+          id={inputId}
+          type="password"
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          autoComplete="current-password"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={200}
+          disabled={busy}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+        />
+        {error && <p className="field-error" id={errorId} role="alert">{error}</p>}
+      </div>
 
-      {error && <div className="notice-banner error" id={errorId} role="alert">{error}</div>}
-
-      <button type="submit" className="start-button" disabled={busy || !code.trim()}>
-        <LogIn size={20} aria-hidden />
+      <button type="submit" className="btn btn-primary" disabled={busy || !code.trim()}>
+        <LogIn size={18} aria-hidden />
         {busy ? "กำลังตรวจสอบ…" : "เข้าสู่ระบบ"}
       </button>
     </form>

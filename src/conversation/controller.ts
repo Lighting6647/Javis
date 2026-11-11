@@ -1,4 +1,6 @@
+import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
+import { type FillDecision, interpretFillDecision } from "./fillDecision";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import { createSentenceChunker } from "./sentenceChunker";
 import {
@@ -6,6 +8,9 @@ import {
   type ChatTurn,
   type ConversationMessage,
   type ConversationState,
+  type FillStatus,
+  type MemoryEntry,
+  type MemoryNote,
   type Notice,
   type StreamChat
 } from "./types";
@@ -18,6 +23,23 @@ export interface ConversationDeps {
   recognizer: SpeechRecognizer;
   synthesizer: SpeechSynthesizer;
   chat: StreamChat;
+  /** เปิดหน้าเว็บให้ผู้ใช้ คืน false ถ้าเปิดไม่ได้ (ผู้ใช้ยังกดลิงก์ในบทสนทนาเองได้) */
+  openPage: (url: string) => boolean;
+  /** อ่านหน้าเว็บที่เปิดอยู่ในเบราว์เซอร์ในตัว มีเฉพาะในแอปเดสก์ท็อป */
+  getPageContext?: () => Promise<PageContext | null>;
+  /** กรอกค่าลงฟอร์มของหน้าเว็บที่เปิดอยู่ เรียกหลังผู้ใช้ยืนยันแล้วเท่านั้น */
+  fillPage?: (pageUrl: string, values: FillValue[]) => Promise<FillResult>;
+  /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
+  memory?: MemoryPort;
+}
+
+/** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
+export interface MemoryPort {
+  list(): MemoryEntry[];
+  /** จำเรื่องใหม่ คืน null ถ้าว่างหรือมีอยู่แล้ว */
+  add(text: string): MemoryEntry | null;
+  /** ลืมเรื่องหนึ่งเรื่อง คืนเรื่องที่ลบ หรือ null ถ้าไม่พบ */
+  remove(id: string): MemoryEntry | null;
 }
 
 const INITIAL_STATE: ConversationState = {
@@ -26,7 +48,9 @@ const INITIAL_STATE: ConversationState = {
   messages: [],
   partial: "",
   notice: null,
-  onDeviceListening: false
+  onDeviceListening: false,
+  searching: false,
+  pendingFillId: null
 };
 
 function toChatTurns(messages: ConversationMessage[]): ChatTurn[] {
@@ -51,6 +75,8 @@ export class ConversationController {
   private request: AbortController | null = null;
   private voiceReplies = false;
   private sequence = 0;
+  /** กันการกดยืนยันซ้ำระหว่างที่กำลังกรอก */
+  private filling = false;
 
   constructor(private readonly deps: ConversationDeps) {}
 
@@ -120,7 +146,26 @@ export class ConversationController {
     const epoch = this.halt();
     // พิมพ์แทรกระหว่างรอสิทธิ์ไมโครโฟน: ถือว่ายังไม่ได้เปิดโหมดเสียง
     if (this.state.phase === "starting") this.update({ active: false });
-    void this.respond(clean, epoch);
+    void this.handle(clean, epoch);
+  };
+
+  /** ผู้ใช้กดยืนยันรายการกรอกฟอร์มที่รออยู่ */
+  confirmFill = (): void => {
+    void this.decideFill("confirm").then((notice) => this.update({ notice }));
+  };
+
+  /** ผู้ใช้กดยกเลิกรายการกรอกฟอร์มที่รออยู่ */
+  cancelFill = (): void => {
+    void this.decideFill("cancel").then((notice) => this.update({ notice }));
+  };
+
+  /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ในข้อความนั้น */
+  undoMemory = (messageId: string, memoryId: string): void => {
+    this.deps.memory?.remove(memoryId);
+    this.patchMessage(messageId, (message) => ({
+      ...message,
+      memoryNotes: message.memoryNotes?.map((note) => (note.id === memoryId ? { ...note, undone: true } : note))
+    }));
   };
 
   private update(patch: Partial<ConversationState>): void {
@@ -142,10 +187,17 @@ export class ConversationController {
     this.deps.synthesizer.cancel();
     this.update({
       partial: "",
+      searching: false,
       // คำตอบที่ถูกตัดก่อนมีข้อความ ไม่ต้องค้างเป็นกล่องเปล่า
       messages: this.state.messages.filter((message) => message.text.trim())
     });
     return this.epoch;
+  }
+
+  private patchMessage(id: string, patch: (message: ConversationMessage) => ConversationMessage): void {
+    this.update({
+      messages: this.state.messages.map((message) => (message.id === id ? patch(message) : message))
+    });
   }
 
   private fail(notice: Notice | null): void {
@@ -158,11 +210,11 @@ export class ConversationController {
     this.fail(code === "aborted" ? null : { tone: "error", text: SPEECH_ERROR_TEXT[code] });
   }
 
-  private async listen(epoch: number): Promise<void> {
+  private async listen(epoch: number, notice: Notice | null = null): Promise<void> {
     this.update({
       phase: "listening",
       partial: "",
-      notice: this.voiceReplies ? null : { tone: "info", text: NOTICE_TEXT.noThaiVoice },
+      notice: notice ?? (this.voiceReplies ? null : { tone: "info", text: NOTICE_TEXT.noThaiVoice }),
       onDeviceListening: this.deps.recognizer.isOnDevice()
     });
 
@@ -182,10 +234,91 @@ export class ConversationController {
       this.fail({ tone: "info", text: NOTICE_TEXT.noSpeech });
       return;
     }
-    await this.respond(text, epoch);
+    await this.handle(text, epoch);
+  }
+
+  /** รับคำพูดหรือข้อความของผู้ใช้: ถ้าเป็นคำยืนยัน/ยกเลิกรายการกรอกฟอร์มให้จัดการเอง ไม่เช่นนั้นส่งไปถาม AI */
+  private async handle(userText: string, epoch: number): Promise<void> {
+    const decision = this.state.pendingFillId ? interpretFillDecision(userText) : null;
+    if (!decision) {
+      await this.respond(userText, epoch);
+      return;
+    }
+
+    this.update({ partial: "" });
+    const notice = await this.decideFill(decision);
+    if (epoch !== this.epoch) return;
+
+    if (!this.state.active) {
+      this.update({ phase: "idle", notice });
+      return;
+    }
+    if (notice && this.voiceReplies) {
+      this.update({ phase: "speaking", notice });
+      await this.deps.synthesizer.speak(notice.text).catch(() => undefined);
+      if (epoch !== this.epoch) return;
+    }
+    await this.listen(epoch, notice);
+  }
+
+  private setFillStatus(id: string, status: FillStatus, filledCount?: number): void {
+    this.patchMessage(id, (message) =>
+      message.fill ? { ...message, fill: { ...message.fill, status, filledCount } } : message
+    );
+  }
+
+  /** ทำตามการตัดสินใจของผู้ใช้ต่อรายการกรอกฟอร์มที่รออยู่ คืนข้อความแจ้งผล */
+  private async decideFill(decision: FillDecision): Promise<Notice | null> {
+    const id = this.state.pendingFillId;
+    const request = this.state.messages.find((message) => message.id === id)?.fill;
+    if (!id || !request || request.status !== "pending" || this.filling) return null;
+
+    if (decision === "cancel") {
+      this.setFillStatus(id, "cancelled");
+      this.update({ pendingFillId: null });
+      return { tone: "info", text: NOTICE_TEXT.fillCancelled };
+    }
+
+    this.filling = true;
+    let result: FillResult;
+    try {
+      result = this.deps.fillPage
+        ? await this.deps.fillPage(request.pageUrl, request.fields)
+        : { filled: 0, missing: request.fields.map((field) => field.id), failure: "unavailable" };
+    } catch {
+      result = { filled: 0, missing: request.fields.map((field) => field.id), failure: "unavailable" };
+    } finally {
+      this.filling = false;
+    }
+
+    this.update({ pendingFillId: null });
+
+    if (result.failure || result.filled === 0) {
+      this.setFillStatus(id, "failed");
+      const text =
+        result.failure === "page-changed"
+          ? NOTICE_TEXT.fillPageChanged
+          : result.failure === "unavailable"
+            ? NOTICE_TEXT.fillUnavailable
+            : NOTICE_TEXT.fillNothing;
+      return { tone: "error", text };
+    }
+
+    this.setFillStatus(id, "filled", result.filled);
+    const skipped = result.missing.length > 0 ? ` อีก ${result.missing.length} ช่องกรอกไม่ได้` : "";
+    return {
+      tone: "info",
+      text: `กรอกให้แล้ว ${result.filled} ช่องครับ${skipped} กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง`
+    };
   }
 
   private async respond(userText: string, epoch: number): Promise<void> {
+    // คำถามใหม่แทนที่รายการกรอกฟอร์มที่ยังไม่ได้ยืนยัน เพื่อไม่ให้มีรายการเก่าค้างรอกดผิด
+    if (this.state.pendingFillId) {
+      this.setFillStatus(this.state.pendingFillId, "cancelled");
+      this.update({ pendingFillId: null });
+    }
+
     const history: ConversationMessage[] = [
       ...this.state.messages,
       { id: this.nextId(), role: "user", text: userText }
@@ -201,6 +334,9 @@ export class ConversationController {
     const request = new AbortController();
     this.request = request;
 
+    const page = (await this.deps.getPageContext?.().catch(() => null)) ?? null;
+    if (epoch !== this.epoch) return;
+
     const speakReply = this.state.active && this.voiceReplies;
     let speech: Promise<void> = Promise.resolve();
     const chunker = createSentenceChunker((sentence) => {
@@ -215,14 +351,69 @@ export class ConversationController {
     try {
       reply = await this.deps.chat(toChatTurns(history), {
         signal: request.signal,
-        onDelta: (delta) => {
+        page,
+        memories: this.deps.memory?.list().map(({ id, text }) => ({ id, text })),
+        onEvent: (event) => {
           if (epoch !== this.epoch) return;
-          this.update({
-            messages: this.state.messages.map((message) =>
-              message.id === replyId ? { ...message, text: message.text + delta } : message
-            )
-          });
-          if (speakReply) chunker.push(delta);
+
+          switch (event.type) {
+            case "delta":
+              if (this.state.searching) this.update({ searching: false });
+              this.patchMessage(replyId, (message) => ({ ...message, text: message.text + event.text }));
+              if (speakReply) chunker.push(event.text);
+              break;
+
+            case "status":
+              this.update({ searching: true });
+              break;
+
+            case "sources":
+              this.patchMessage(replyId, (message) => ({ ...message, sources: event.sources }));
+              break;
+
+            case "open": {
+              // เปิดให้เองเฉพาะเมื่อ backend ยืนยันว่าลิงก์มาจากคำสั่งของผู้ใช้โดยตรง
+              const opened = event.auto && this.deps.openPage(event.url);
+              this.patchMessage(replyId, (message) => ({
+                ...message,
+                link: { title: event.title, url: event.url, opened }
+              }));
+              break;
+            }
+
+            case "fill":
+              // รับเฉพาะเมื่อรู้ว่ารายการนี้อ้างถึงหน้าไหน และเก็บไว้รอผู้ใช้ยืนยันเท่านั้น ยังไม่กรอก
+              if (!page) break;
+              this.patchMessage(replyId, (message) => ({
+                ...message,
+                fill: { pageUrl: page.url, fields: event.fields, status: "pending" }
+              }));
+              this.update({ pendingFillId: replyId });
+              break;
+
+            case "memory": {
+              // บันทึกลงอุปกรณ์ทันที และแนบป้ายไว้กับคำตอบให้ผู้ใช้เห็นและยกเลิกได้
+              const memory = this.deps.memory;
+              if (!memory) break;
+
+              const notes: MemoryNote[] = [];
+              for (const text of event.added) {
+                const added = memory.add(text);
+                if (added) notes.push({ kind: "added", id: added.id, text: added.text });
+              }
+              for (const id of event.removed) {
+                const removed = memory.remove(id);
+                if (removed) notes.push({ kind: "removed", text: removed.text });
+              }
+              if (notes.length > 0) {
+                this.patchMessage(replyId, (message) => ({
+                  ...message,
+                  memoryNotes: [...(message.memoryNotes ?? []), ...notes]
+                }));
+              }
+              break;
+            }
+          }
         }
       });
     } catch (error) {
@@ -234,6 +425,7 @@ export class ConversationController {
       return;
     }
     if (epoch !== this.epoch) return;
+    if (this.state.searching) this.update({ searching: false });
 
     if (!reply.trim()) {
       this.fail({ tone: "error", text: NOTICE_TEXT.emptyReply });
