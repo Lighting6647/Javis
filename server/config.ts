@@ -78,10 +78,15 @@ function readSessionSecret(authEnabled: boolean): string {
 }
 
 const isProduction = process.env.NODE_ENV === "production";
+/** รันเป็นฟังก์ชันบน Vercel: ไม่มีกระบวนการค้าง หลาย instance ทำงานพร้อมกัน และอยู่หลังตัวรับคำขอของ Vercel เสมอ */
+const isServerless = Boolean(process.env.VERCEL);
 const accessUsers = parseAccessCodes(process.env.ACCESS_CODES);
 
 export const config = {
   isProduction,
+  isServerless,
+  /** ผู้ดูแลตั้ง SESSION_SECRET ที่ยาวพอไว้หรือไม่ ถ้าไม่ กุญแจจะถูกสุ่มใหม่ทุกครั้งที่เริ่ม */
+  hasSessionSecret: (process.env.SESSION_SECRET?.trim() ?? "").length >= MIN_SESSION_SECRET_LENGTH,
   /** ผู้ใช้ที่เข้าใช้งานได้ พร้อมรหัสของแต่ละคน ว่างเปล่า = ไม่บังคับเข้าสู่ระบบ (เฉพาะตอนพัฒนา) */
   accessUsers,
   sessionSecret: readSessionSecret(accessUsers.length > 0),
@@ -100,8 +105,8 @@ export const config = {
   aiCreditCheck: process.env.AI_CREDIT_CHECK?.trim().toLowerCase() !== "false",
   /** ระหว่างที่บัญชี AI ยังมีปัญหา ตรวจซ้ำทุกกี่วินาที เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข */
   aiRecheckSeconds: readInteger("AI_RECHECK_SECONDS", 300, 5),
-  /** จำนวน reverse proxy ที่อยู่หน้าเซิร์ฟเวอร์ (0 = ต่อตรง) ใช้หา IP จริงของผู้เรียก */
-  trustProxyHops: readInteger("TRUST_PROXY", 0, 0),
+  /** จำนวน reverse proxy ที่อยู่หน้าเซิร์ฟเวอร์ (0 = ต่อตรง) ใช้หา IP จริงของผู้เรียก บน Vercel มีหนึ่งชั้นเสมอ */
+  trustProxyHops: readInteger("TRUST_PROXY", isServerless ? 1 : 0, 0),
   /** จำนวนข้อความสูงสุดที่ผู้ใช้หนึ่งคน (หรือ IP เดียวเมื่อไม่บังคับเข้าสู่ระบบ) ส่งได้ภายใน 10 นาที */
   chatRateLimitMax: readInteger("CHAT_RATE_LIMIT_MAX", 100, 1),
   allowedOrigins: new Set<string>([

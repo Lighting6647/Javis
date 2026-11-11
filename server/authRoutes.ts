@@ -7,11 +7,27 @@ const authenticator = createAuthenticator({ users: config.accessUsers, secret: c
 
 const hasUsers = config.accessUsers.length > 0;
 /** บนเครื่องใช้งานจริงต้องมีรหัสเข้าใช้งานเสมอ ถ้าไม่ได้ตั้งจะปิดรับคำขอแทนการเปิดให้ทุกคนใช้ */
-const misconfigured = config.isProduction && !hasUsers;
+const missingCodes = config.isProduction && !hasUsers;
+/**
+ * บนโฮสต์แบบฟังก์ชัน แต่ละ instance สุ่มกุญแจเซสชันของตัวเองถ้าไม่ได้ตั้ง SESSION_SECRET
+ * โทเค็นที่ instance หนึ่งออกให้จึงใช้กับอีก instance ไม่ได้ ผู้ใช้จะหลุดจากระบบแบบสุ่ม
+ * ปิดรับคำขอพร้อมบอกสาเหตุชัดเจน ดีกว่าปล่อยให้เข้าสู่ระบบได้บ้างไม่ได้บ้าง
+ */
+const missingSecret = config.isServerless && hasUsers && !config.hasSessionSecret;
+const misconfigured = missingCodes || missingSecret;
 
-export const authStatus = { required: hasUsers || misconfigured, misconfigured } as const;
+const MISCONFIGURED_MESSAGE = missingCodes
+  ? "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ารหัสเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
+  : "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจเซสชัน กรุณาติดต่อผู้ดูแลระบบ";
 
-const MISCONFIGURED_MESSAGE = "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ารหัสเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ";
+export const authStatus = {
+  required: hasUsers || misconfigured,
+  misconfigured,
+  /** ข้อความสำหรับ log ของผู้ดูแล บอกตัวแปรที่ต้องตั้ง */
+  misconfiguredLog: missingCodes
+    ? "ยังไม่ได้ตั้ง ACCESS_CODES: เซิร์ฟเวอร์จะปฏิเสธคำขอสนทนาทั้งหมดจนกว่าจะตั้งค่า"
+    : "ยังไม่ได้ตั้ง SESSION_SECRET (อย่างน้อย 32 ตัวอักษร): บนโฮสต์แบบฟังก์ชันจำเป็นต้องตั้ง เซิร์ฟเวอร์จะปฏิเสธการเข้าสู่ระบบจนกว่าจะตั้งค่า"
+} as const;
 
 const loginSchema = z.object({ code: z.string().trim().min(1).max(200) });
 

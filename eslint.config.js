@@ -25,7 +25,7 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules
   },
   {
-    files: ["server/**/*.ts", "scripts/**/*.mjs", "*.config.{js,ts}"],
+    files: ["server/**/*.ts", "api/**/*.ts", "scripts/**/*.mjs", "*.config.{js,ts}"],
     languageOptions: { globals: globals.node }
   },
   {
@@ -35,8 +35,8 @@ export default tseslint.config(
     rules: { "@typescript-eslint/no-require-imports": "off" }
   },
   {
-    // เซิร์ฟเวอร์ต้องพิมพ์บรรทัดเริ่มทำงานให้ผู้ดูแลเห็น
-    files: ["server/index.ts"],
+    // เซิร์ฟเวอร์ต้องพิมพ์บรรทัดเริ่มทำงานและผลตรวจบัญชี AI ให้ผู้ดูแลเห็น
+    files: ["server/index.ts", "server/accountMonitor.ts"],
     rules: { "no-console": "off" }
   }
 );
