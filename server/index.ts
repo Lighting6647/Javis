@@ -23,7 +23,7 @@ app.listen(config.port, "0.0.0.0", () => {
   if (authStatus.misconfigured) {
     console.error(authStatus.misconfiguredLog);
   } else if (!authStatus.required) {
-    console.warn("ยังไม่ได้ตั้ง ACCESS_CODES: ทุกคนที่เข้าถึงเซิร์ฟเวอร์นี้ใช้งานได้โดยไม่ต้องเข้าสู่ระบบ (เหมาะกับตอนพัฒนาเท่านั้น)");
+    console.warn(authStatus.openLog);
   }
 
   if (config.aiStartupCheck) {

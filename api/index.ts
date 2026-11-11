@@ -12,6 +12,7 @@ import { config } from "../server/config.js";
  * การตรวจบัญชี AI จึงทำตอนที่มีคนถามสถานะ แทนการตั้งเวลา
  */
 if (authStatus.misconfigured) console.error(authStatus.misconfiguredLog);
+else if (!authStatus.required) console.warn(authStatus.openLog);
 
 const app = createApp({
   beforeStatus: config.aiStartupCheck

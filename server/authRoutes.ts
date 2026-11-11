@@ -1,32 +1,37 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { createAuthenticator, readBearerToken } from "./auth.js";
+import { createAuthenticator, readBearerToken, resolveAccessMode } from "./auth.js";
 import { config } from "./config.js";
 
 const authenticator = createAuthenticator({ users: config.accessUsers, secret: config.sessionSecret });
 
 const hasUsers = config.accessUsers.length > 0;
-/** บนเครื่องใช้งานจริงต้องมีรหัสเข้าใช้งานเสมอ ถ้าไม่ได้ตั้งจะปิดรับคำขอแทนการเปิดให้ทุกคนใช้ */
-const missingCodes = config.isProduction && !hasUsers;
-/**
- * บนโฮสต์แบบฟังก์ชัน แต่ละ instance สุ่มกุญแจเซสชันของตัวเองถ้าไม่ได้ตั้ง SESSION_SECRET
- * โทเค็นที่ instance หนึ่งออกให้จึงใช้กับอีก instance ไม่ได้ ผู้ใช้จะหลุดจากระบบแบบสุ่ม
- * ปิดรับคำขอพร้อมบอกสาเหตุชัดเจน ดีกว่าปล่อยให้เข้าสู่ระบบได้บ้างไม่ได้บ้าง
- */
-const missingSecret = config.isServerless && hasUsers && !config.hasSessionSecret;
-const misconfigured = missingCodes || missingSecret;
+const accessMode = resolveAccessMode({
+  codesConfigured: config.accessCodesConfigured,
+  validUsers: config.accessUsers.length,
+  isServerless: config.isServerless,
+  hasSessionSecret: config.hasSessionSecret
+});
+/** ตั้งค่าไว้แต่ใช้ไม่ได้: ปิดรับคำขอพร้อมบอกสาเหตุ ดีกว่าเปิดโล่งหรือให้เข้าสู่ระบบได้บ้างไม่ได้บ้าง */
+const misconfigured = accessMode === "invalid-codes" || accessMode === "missing-secret";
 
-const MISCONFIGURED_MESSAGE = missingCodes
-  ? "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ารหัสเข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
-  : "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจเซสชัน กรุณาติดต่อผู้ดูแลระบบ";
+const MISCONFIGURED_MESSAGE =
+  accessMode === "invalid-codes"
+    ? "รหัสเข้าใช้งานของเซิร์ฟเวอร์ตั้งค่าไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ"
+    : "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจเซสชัน กรุณาติดต่อผู้ดูแลระบบ";
 
 export const authStatus = {
-  required: hasUsers || misconfigured,
+  required: accessMode !== "open",
   misconfigured,
-  /** ข้อความสำหรับ log ของผู้ดูแล บอกตัวแปรที่ต้องตั้ง */
-  misconfiguredLog: missingCodes
-    ? "ยังไม่ได้ตั้ง ACCESS_CODES: เซิร์ฟเวอร์จะปฏิเสธคำขอสนทนาทั้งหมดจนกว่าจะตั้งค่า"
-    : "ยังไม่ได้ตั้ง SESSION_SECRET (อย่างน้อย 32 ตัวอักษร): บนโฮสต์แบบฟังก์ชันจำเป็นต้องตั้ง เซิร์ฟเวอร์จะปฏิเสธการเข้าสู่ระบบจนกว่าจะตั้งค่า"
+  /** ข้อความสำหรับ log ของผู้ดูแล บอกตัวแปรที่ต้องแก้ */
+  misconfiguredLog:
+    accessMode === "invalid-codes"
+      ? "ACCESS_CODES ไม่มีรายการที่ใช้ได้ ต้องเขียนแบบ ชื่อ:รหัส (รหัสอย่างน้อย 8 ตัวอักษร): เซิร์ฟเวอร์จะปฏิเสธคำขอทั้งหมดจนกว่าจะแก้ หรือลบตัวแปรนี้ออกถ้าต้องการให้ใช้ได้โดยไม่ต้องเข้าสู่ระบบ"
+      : "ยังไม่ได้ตั้ง SESSION_SECRET (อย่างน้อย 32 ตัวอักษร): บนโฮสต์แบบฟังก์ชันจำเป็นต้องตั้งเมื่อใช้รหัสเข้าใช้งาน เซิร์ฟเวอร์จะปฏิเสธการเข้าสู่ระบบจนกว่าจะตั้งค่า",
+  /** คำเตือนเมื่อเปิดให้ใช้โดยไม่ต้องเข้าสู่ระบบ บนเครื่องใช้งานจริงคือเปิดสู่สาธารณะ */
+  openLog: config.isProduction
+    ? "ไม่ได้ตั้ง ACCESS_CODES: เปิดให้ทุกคนที่มีที่อยู่ของเว็บใช้งานได้โดยไม่ต้องเข้าสู่ระบบ และทุกคำตอบใช้เครดิตของบัญชี AI ควรตั้งเพดานค่าใช้จ่ายในบัญชี AI"
+    : "ยังไม่ได้ตั้ง ACCESS_CODES: ทุกคนที่เข้าถึงเซิร์ฟเวอร์นี้ใช้งานได้โดยไม่ต้องเข้าสู่ระบบ"
 } as const;
 
 const loginSchema = z.object({ code: z.string().trim().min(1).max(200) });

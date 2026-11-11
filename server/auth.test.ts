@@ -3,6 +3,7 @@ import {
   createAuthenticator,
   parseAccessCodes,
   readBearerToken,
+  resolveAccessMode,
   SESSION_TTL_MS,
   type AccessUser
 } from "./auth.js";
@@ -50,6 +51,56 @@ describe("parseAccessCodes", () => {
     expect(users).toEqual([{ name: "ok", code: "long-enough-code" }]);
     expect(warnings).toHaveLength(5);
     expect(warnings.join("\n")).not.toMatch(/1234567|long-enough-code|another-long-code/);
+  });
+
+  it("ใส่แต่รหัสโดยไม่มี ชื่อ: นำหน้า: บอกรูปแบบที่ถูก และไม่พิมพ์สิ่งที่ใส่มาเพราะอาจเป็นรหัสจริง", () => {
+    // กรณีจริงที่พบตอนตั้งค่าบนโฮสต์: ผู้ดูแลใส่รหัสอย่างเดียว คำเตือนเดิมบอกว่า "รหัสสั้นเกินไป" และพิมพ์รหัสนั้นลง log
+    for (const value of ["my-secret-code-2026", "12345678", "a-code,another-code-here"]) {
+      const warnings: string[] = [];
+      expect(parseAccessCodes(value, (message) => warnings.push(message))).toEqual([]);
+
+      expect(warnings.length).toBeGreaterThan(0);
+      for (const warning of warnings) {
+        expect(warning).toContain("ชื่อ:รหัส");
+        expect(warning).toContain("ไม่มีเครื่องหมาย :");
+        expect(warning).not.toMatch(/my-secret-code-2026|12345678|a-code|another-code-here/);
+      }
+    }
+  });
+
+  describe("resolveAccessMode", () => {
+    const base = { codesConfigured: false, validUsers: 0, isServerless: false, hasSessionSecret: false };
+
+    it("ไม่ตั้ง ACCESS_CODES คือเปิดให้ใช้โดยไม่ต้องเข้าสู่ระบบ ทั้งตอนพัฒนาและบนโฮสต์จริง", () => {
+      expect(resolveAccessMode(base)).toBe("open");
+      expect(resolveAccessMode({ ...base, isServerless: true })).toBe("open");
+    });
+
+    it("เปิดให้ทุกคนใช้ไม่ต้องมีกุญแจเซสชัน เพราะไม่มีโทเค็นให้ลงลายเซ็น", () => {
+      expect(resolveAccessMode({ ...base, isServerless: true, hasSessionSecret: false })).toBe("open");
+    });
+
+    it("ตั้ง ACCESS_CODES ไว้แต่ไม่มีรายการใดใช้ได้: ปิดรับคำขอ ไม่เปิดโล่งโดยที่ผู้ดูแลไม่รู้ตัว", () => {
+      expect(resolveAccessMode({ ...base, codesConfigured: true })).toBe("invalid-codes");
+      expect(resolveAccessMode({ ...base, codesConfigured: true, isServerless: true, hasSessionSecret: true })).toBe("invalid-codes");
+    });
+
+    it("มีผู้ใช้ที่ถูกต้อง: ต้องเข้าสู่ระบบ", () => {
+      expect(resolveAccessMode({ ...base, codesConfigured: true, validUsers: 2 })).toBe("protected");
+      expect(resolveAccessMode({ ...base, codesConfigured: true, validUsers: 1, isServerless: true, hasSessionSecret: true })).toBe("protected");
+    });
+
+    it("ต้องเข้าสู่ระบบบนโฮสต์แบบฟังก์ชันแต่ไม่มีกุญแจเซสชัน: ปิดรับการเข้าสู่ระบบพร้อมบอกสาเหตุ", () => {
+      expect(resolveAccessMode({ ...base, codesConfigured: true, validUsers: 1, isServerless: true })).toBe("missing-secret");
+    });
+  });
+
+  it("มีเครื่องหมาย : แต่รหัสสั้นเกินไป: บอกชื่อผู้ใช้ได้ แต่ไม่พิมพ์รหัส", () => {
+    const warnings: string[] = [];
+    expect(parseAccessCodes("light:abc1234", (message) => warnings.push(message))).toEqual([]);
+    expect(warnings).toEqual([expect.stringContaining("light")]);
+    expect(warnings[0]).toContain("อย่างน้อย 8 ตัวอักษร");
+    expect(warnings[0]).not.toContain("abc1234");
   });
 });
 

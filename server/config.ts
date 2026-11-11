@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { MIN_SESSION_SECRET_LENGTH, parseAccessCodes } from "./auth.js";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+// quiet: ไม่ให้ dotenv พิมพ์บรรทัดแนะนำของตัวเองลง log ทุกครั้งที่เริ่ม ซึ่งกลบข้อความที่ผู้ดูแลต้องอ่าน
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), quiet: true });
 
 /** ต้นทางของแอป Capacitor: Android (androidScheme: https) และ iOS */
 const NATIVE_APP_ORIGINS = ["https://localhost", "capacitor://localhost"];
@@ -85,6 +86,8 @@ const accessUsers = parseAccessCodes(process.env.ACCESS_CODES);
 export const config = {
   isProduction,
   isServerless,
+  /** ผู้ดูแลใส่ค่า ACCESS_CODES ไว้หรือไม่ ใช้แยก "ตั้งใจเปิดให้ทุกคนใช้" ออกจาก "ตั้งรหัสไว้แต่พิมพ์ผิดรูปแบบ" */
+  accessCodesConfigured: Boolean(process.env.ACCESS_CODES?.trim()),
   /** ผู้ดูแลตั้ง SESSION_SECRET ที่ยาวพอไว้หรือไม่ ถ้าไม่ กุญแจจะถูกสุ่มใหม่ทุกครั้งที่เริ่ม */
   hasSessionSecret: (process.env.SESSION_SECRET?.trim() ?? "").length >= MIN_SESSION_SECRET_LENGTH,
   /** ผู้ใช้ที่เข้าใช้งานได้ พร้อมรหัสของแต่ละคน ว่างเปล่า = ไม่บังคับเข้าสู่ระบบ (เฉพาะตอนพัฒนา) */
