@@ -41,10 +41,50 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   docker:
-    name: Docker image builds
+    name: Docker image builds and runs
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: verify
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --tag javis:ci .
+
+      - name: Build image
+        run: docker build --tag javis:ci .
+
+      # รันแบบ production จริง ด้วยค่าลับที่สุ่มขึ้นใหม่ทุกครั้งและใช้ได้เฉพาะในรอบนี้ (ไม่มี key จริง)
+      - name: Start container
+        run: |
+          docker run --detach --name javis --publish 8787:8787 \
+            --env OPENAI_API_KEY=ci-placeholder-not-a-real-key \
+            --env ACCESS_CODES="ci:$(openssl rand -hex 16)" \
+            --env SESSION_SECRET="$(openssl rand -hex 32)" \
+            javis:ci
+
+      - name: Smoke test the running container
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8787/health > /dev/null; then break; fi
+            if [ "$attempt" = 30 ]; then echo "container did not answer /health within 30s"; exit 1; fi
+            sleep 1
+          done
+
+          echo "health endpoint answers"
+          curl --silent --fail http://127.0.0.1:8787/health | grep --quiet '"ok":true'
+
+          echo "web app is served"
+          curl --silent --fail http://127.0.0.1:8787/ | grep --quiet 'id="root"'
+
+          echo "chat refuses requests without a session"
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"messages":[{"role":"user","content":"hi"}]}' \
+            http://127.0.0.1:8787/api/chat)
+          test "$status" = 401
+
+          echo "container does not run as root"
+          test "$(docker exec javis whoami)" = node
+
+      - name: Container logs
+        if: always()
+        run: docker logs javis || true
