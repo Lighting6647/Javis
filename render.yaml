@@ -1,0 +1,37 @@
+# Render Blueprint: เซิร์ฟเวอร์ Javis หนึ่งตัว เสิร์ฟทั้งหน้าเว็บและ API จาก Dockerfile ของโปรเจกต์
+# วิธีใช้และสิ่งที่ต้องกรอกเอง ดูหัวข้อ "Deploy ขึ้น Render" ใน README.md
+# ตรวจรูปแบบกับ https://render.com/schema/render.yaml.json
+
+services:
+  - type: web
+    name: javis
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # ใกล้ผู้ใช้ในไทยที่สุด คำตอบถูกอ่านออกเสียงทันที ความหน่วงจึงสำคัญ
+    region: singapore
+    # แผนฟรี: หยุดพักเมื่อไม่มีผู้ใช้ 15 นาที คำขอแรกหลังพักใช้เวลาราวหนึ่งนาที
+    plan: free
+    branch: main
+    # deploy เฉพาะ commit ที่ผ่าน CI แล้ว (lint, test, build และการรัน container จริง)
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    envVars:
+      # พอร์ตที่ Render ส่งคำขอเข้ามา เซิร์ฟเวอร์อ่านค่านี้ตอนเริ่ม
+      - key: PORT
+        value: 10000
+      # อยู่หลังตัวรับคำขอของ Render หนึ่งชั้น ใช้หา IP จริงของผู้เรียกสำหรับจำกัดความถี่
+      - key: TRUST_PROXY
+        value: 1
+
+      # --- ค่าลับ: กรอกเองในหน้า Render ตอนสร้างบริการ ไม่เก็บใน repo ---
+      # กุญแจ API ของ OpenAI จากบัญชีที่มีเครดิต
+      - key: OPENAI_API_KEY
+        sync: false
+      # ผู้ใช้และรหัสเข้าใช้งาน รูปแบบ ชื่อ:รหัส คั่นด้วยจุลภาค รหัสยาวอย่างน้อย 8 ตัวอักษร
+      # จำเป็นต้องตั้ง: โหมด production ปฏิเสธคำขอสนทนาทั้งหมดถ้าไม่มีค่านี้
+      - key: ACCESS_CODES
+        sync: false
+      # กุญแจลงลายเซ็นโทเค็น Render สุ่มให้ครั้งเดียวตอนสร้าง ผู้ใช้จึงไม่ต้องเข้าสู่ระบบใหม่หลัง deploy
+      - key: SESSION_SECRET
+        generateValue: true
