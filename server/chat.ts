@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
+import { aiAccount } from "./aiAccount.js";
 import { config } from "./config.js";
 import {
   createResponseReducer,
@@ -304,6 +305,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
     const codes = await readRejectedResponse(upstream);
     const failure = describeUpstreamFailure("chat", upstream.status, codes);
     console.error("Chat upstream failed", upstream.status, failure.reason, codes.join(","));
+    aiAccount.reportFailure("chat", failure.reason);
     response.status(failure.status).json({ error: failure.message });
     return;
   }
@@ -368,6 +370,8 @@ export const chatHandler: RequestHandler = async (request, response) => {
     reducer.finish().forEach(send);
     openStream();
     response.end();
+    // ต้นทางตอบจนจบ: บัญชี AI ใช้งานได้ (เช่น หลังผู้ดูแลเติมเครดิต สถานะกลับมาปกติเองโดยไม่ต้องรีสตาร์ต)
+    if (reducer.done) aiAccount.reportSuccess("chat");
   } catch (error) {
     if (clientGone.signal.aborted) {
       response.destroy();
@@ -381,6 +385,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
       error instanceof Error ? error.message : "unknown",
       reducer.failed ? `${failure.reason} ${codes.join(",")}` : ""
     );
+    if (reducer.failed) aiAccount.reportFailure("chat", failure.reason);
 
     if (streaming) {
       // ส่งคำตอบไปบางส่วนแล้ว: ตัดการเชื่อมต่อแทนการจบปกติ เพื่อให้ฝั่งผู้ใช้รู้ว่าคำตอบมาไม่ครบ

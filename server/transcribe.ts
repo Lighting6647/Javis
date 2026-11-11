@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { aiAccount } from "./aiAccount.js";
 import { config } from "./config.js";
 import { describeUpstreamFailure, readRejectedResponse } from "./upstreamError.js";
 
@@ -71,12 +72,14 @@ export const transcribeHandler: RequestHandler = async (request, response) => {
     const codes = await readRejectedResponse(upstream);
     const failure = describeUpstreamFailure("transcribe", upstream.status, codes);
     console.error("Transcribe upstream failed", upstream.status, failure.reason, codes.join(","));
+    aiAccount.reportFailure("transcribe", failure.reason);
     response.status(failure.status).json({ error: failure.message });
     return;
   }
 
   try {
     const payload = (await upstream.json()) as { text?: unknown };
+    aiAccount.reportSuccess("transcribe");
     response.json({ text: typeof payload.text === "string" ? payload.text.trim() : "" });
   } catch {
     response.status(502).json({ error: "แปลงเสียงเป็นข้อความไม่สำเร็จ กรุณาลองใหม่" });
