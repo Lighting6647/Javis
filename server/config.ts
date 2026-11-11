@@ -98,6 +98,8 @@ export const config = {
   aiStartupCheck: process.env.AI_STARTUP_CHECK?.trim().toLowerCase() !== "false",
   /** ตรวจเครดิตตอนเริ่มเซิร์ฟเวอร์ด้วยคำขอสั้นที่สุดหนึ่งครั้ง (ใช้โทเค็นเล็กน้อย) ปิดได้ด้วย AI_CREDIT_CHECK=false */
   aiCreditCheck: process.env.AI_CREDIT_CHECK?.trim().toLowerCase() !== "false",
+  /** ระหว่างที่บัญชี AI ยังมีปัญหา ตรวจซ้ำทุกกี่วินาที เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข */
+  aiRecheckSeconds: readInteger("AI_RECHECK_SECONDS", 300, 5),
   /** จำนวน reverse proxy ที่อยู่หน้าเซิร์ฟเวอร์ (0 = ต่อตรง) ใช้หา IP จริงของผู้เรียก */
   trustProxyHops: readInteger("TRUST_PROXY", 0, 0),
   /** จำนวนข้อความสูงสุดที่ผู้ใช้หนึ่งคน (หรือ IP เดียวเมื่อไม่บังคับเข้าสู่ระบบ) ส่งได้ภายใน 10 นาที */

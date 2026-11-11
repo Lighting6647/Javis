@@ -1,4 +1,5 @@
 import { ChatError, type StreamChat } from "../conversation/types";
+import { aiStatusStore } from "./aiStatusStore";
 import { parseChatEventLine } from "./chatEvents";
 import { API_BASE } from "./http";
 import { sessionStore } from "./sessionStore";
@@ -37,7 +38,11 @@ export const streamChatReply: StreamChat = async (messages, { signal, onEvent, p
     sessionStore.clear();
     throw new ChatError("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");
   }
-  if (!response.ok) throw new ChatError(await readErrorMessage(response));
+  if (!response.ok) {
+    // อาจเป็นปัญหาของบัญชี AI: ให้แถบแจ้งเตือนอัปเดตทันที
+    aiStatusStore.noteRequest(false);
+    throw new ChatError(await readErrorMessage(response));
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!response.body || !contentType.startsWith("application/x-ndjson")) {
@@ -71,5 +76,6 @@ export const streamChatReply: StreamChat = async (messages, { signal, onEvent, p
     throw new ChatError("การเชื่อมต่อขาดระหว่างรับคำตอบ กรุณาลองใหม่อีกครั้ง");
   }
 
+  aiStatusStore.noteRequest(true);
   return reply;
 };

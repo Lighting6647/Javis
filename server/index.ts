@@ -38,6 +38,10 @@ app.get("/health", (_request, response) => {
 });
 
 app.use("/api", originGuard, corsMiddleware, express.json({ limit: "200kb" }));
+// สถานะบัญชี AI สำหรับแอป: ข้อมูลหมวดกว้างชุดเดียวกับ /health แต่อยู่ใต้ /api เพื่อให้แอปมือถือเรียกข้ามต้นทางได้
+app.get("/api/status", (_request, response) => {
+  response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot() });
+});
 app.get("/api/auth/session", sessionHandler);
 app.post("/api/auth/login", loginRateLimiter, loginHandler);
 app.post("/api/chat", requireAuth, chatRateLimiter, chatHandler);
@@ -62,22 +66,40 @@ app.get("/{*splat}", (request, response) => {
 
 app.use(errorHandler);
 
+let aiCheckRunning = false;
+
 /**
  * ตรวจบัญชี AI หลังเซิร์ฟเวอร์เปิดรับคำขอแล้ว เพื่อให้ผู้ดูแลรู้ปัญหาก่อนผู้ใช้เจอ
  * ทำงานเบื้องหลังและไม่ทำให้เซิร์ฟเวอร์ล้ม ไม่ว่าผลจะเป็นอย่างไร
+ * @param announce เขียนผลลง log เสมอ (ตอนเริ่ม) ถ้าเป็น false จะเขียนเฉพาะเมื่อสถานะเปลี่ยน
  */
-async function checkAiAccount(): Promise<void> {
-  const result = await runAccountCheck({
-    baseUrl: config.openaiBaseUrl,
-    apiKey: config.apiKey,
-    chatModel: config.chatModel,
-    transcribeModel: config.transcribeModel,
-    creditCheck: config.aiCreditCheck
-  });
-  aiAccount.apply(result);
+async function checkAiAccount(announce: boolean): Promise<void> {
+  if (aiCheckRunning) return;
+  aiCheckRunning = true;
 
-  const settings = { hasApiKey: Boolean(config.apiKey), chatModel: config.chatModel, transcribeModel: config.transcribeModel };
-  for (const { level, message } of describeAccountCheck(result, settings)) console[level](message);
+  try {
+    const before = aiAccount.snapshot();
+    const result = await runAccountCheck({
+      baseUrl: config.openaiBaseUrl,
+      apiKey: config.apiKey,
+      chatModel: config.chatModel,
+      transcribeModel: config.transcribeModel,
+      creditCheck: config.aiCreditCheck
+    });
+    aiAccount.apply(result);
+
+    const after = aiAccount.snapshot();
+    if (!announce && before.chat === after.chat && before.transcribe === after.transcribe) return;
+
+    const settings = { hasApiKey: Boolean(config.apiKey), chatModel: config.chatModel, transcribeModel: config.transcribeModel };
+    for (const { level, message } of describeAccountCheck(result, settings)) console[level](message);
+  } finally {
+    aiCheckRunning = false;
+  }
+}
+
+function reportAiCheckError(error: unknown): void {
+  console.warn("ตรวจบัญชี AI ไม่สำเร็จ", error instanceof Error ? error.message : "unknown");
 }
 
 app.listen(config.port, "0.0.0.0", () => {
@@ -89,8 +111,14 @@ app.listen(config.port, "0.0.0.0", () => {
   }
 
   if (config.aiStartupCheck) {
-    checkAiAccount().catch((error: unknown) => {
-      console.warn("ตรวจบัญชี AI ไม่สำเร็จ", error instanceof Error ? error.message : "unknown");
-    });
+    checkAiAccount(true).catch(reportAiCheckError);
+
+    // ระหว่างที่ยังมีปัญหา ตรวจซ้ำเป็นระยะ เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข
+    // ตรวจเฉพาะตอนที่ยังไม่ปกติ จึงไม่มีค่าใช้จ่ายระหว่างใช้งานตามปกติ
+    const recheck = setInterval(() => {
+      if (aiAccount.snapshot().status !== "ok") checkAiAccount(false).catch(reportAiCheckError);
+    }, config.aiRecheckSeconds * 1000);
+    // ไม่ให้ตัวจับเวลานี้ค้างกระบวนการไว้ตอนปิดเซิร์ฟเวอร์
+    recheck.unref();
   }
 });

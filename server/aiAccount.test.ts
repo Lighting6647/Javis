@@ -151,41 +151,41 @@ describe("createAiAccountStatus", () => {
 
   it("บันทึกผลการตรวจตอนเริ่มเซิร์ฟเวอร์", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "ok", transcribe: "ok" });
+    account.apply({ chat: "ok", transcribe: "ok", credits: "ok" });
     expect(account.snapshot()).toEqual({ status: "ok", chat: "ok", transcribe: "ok", checkedAt: "2026-11-11T10:00:00.000Z" });
   });
 
   it("ปัญหาที่ผู้ดูแลต้องแก้ทำให้สถานะรวมเป็น degraded", () => {
     for (const state of ["quota", "auth", "model"] as const) {
       const account = createAiAccountStatus(clock);
-      account.apply({ chat: "ok", transcribe: state });
+      account.apply({ chat: "ok", transcribe: state, credits: "ok" });
       expect(account.snapshot().status).toBe("degraded");
     }
   });
 
   it("ติดต่อต้นทางไม่ได้คือยังไม่รู้ ไม่ใช่ degraded", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "unreachable", transcribe: "unreachable" });
+    account.apply({ chat: "unreachable", transcribe: "unreachable", credits: "unverified" });
     expect(account.snapshot().status).toBe("unknown");
   });
 
   it("เครดิตหมดระหว่างใช้งานจริงกระทบทุกบริการ", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "ok", transcribe: "ok" });
+    account.apply({ chat: "ok", transcribe: "ok", credits: "ok" });
     account.reportFailure("chat", "quota");
     expect(account.snapshot()).toMatchObject({ status: "degraded", chat: "quota", transcribe: "quota" });
   });
 
   it("เครดิตหมดไม่เขียนทับโมเดลที่หาไม่เจอ", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "ok", transcribe: "model" });
+    account.apply({ chat: "ok", transcribe: "model", credits: "ok" });
     account.reportFailure("chat", "quota");
     expect(account.snapshot()).toMatchObject({ chat: "quota", transcribe: "model" });
   });
 
   it("ปัญหาชั่วคราวไม่เปลี่ยนสถานะ", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "ok", transcribe: "ok" });
+    account.apply({ chat: "ok", transcribe: "ok", credits: "ok" });
     account.reportFailure("chat", "busy");
     account.reportFailure("transcribe", "unknown");
     expect(account.snapshot()).toMatchObject({ status: "ok", chat: "ok", transcribe: "ok" });
@@ -193,14 +193,38 @@ describe("createAiAccountStatus", () => {
 
   it("คำขอสำเร็จหลังเติมเครดิต: กลับมาพร้อมใช้งานโดยไม่ต้องรีสตาร์ต", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "quota", transcribe: "quota" });
+    account.apply({ chat: "quota", transcribe: "quota", credits: "exhausted" });
     account.reportSuccess("chat");
     expect(account.snapshot()).toMatchObject({ status: "ok", chat: "ok", transcribe: "unchecked" });
   });
 
+  it("ตรวจซ้ำหลังเติมเครดิต: กลับมาพร้อมใช้งานโดยไม่ต้องรอคำขอของผู้ใช้", () => {
+    const account = createAiAccountStatus(clock);
+    account.apply({ chat: "quota", transcribe: "quota", credits: "exhausted" });
+    account.apply({ chat: "ok", transcribe: "ok", credits: "ok" });
+    expect(account.snapshot()).toMatchObject({ status: "ok", chat: "ok", transcribe: "ok" });
+  });
+
+  it("ตรวจซ้ำโดยไม่ได้ตรวจเครดิต: ไม่ลบปัญหาเครดิตหมดที่รู้จากคำขอจริง", () => {
+    for (const credits of ["skipped", "unverified"] as const) {
+      const account = createAiAccountStatus(clock);
+      account.apply({ chat: "ok", transcribe: "ok", credits });
+      account.reportFailure("chat", "quota");
+      account.apply({ chat: "ok", transcribe: "ok", credits });
+      expect(account.snapshot()).toMatchObject({ status: "degraded", chat: "quota", transcribe: "quota" });
+    }
+  });
+
+  it("ตรวจซ้ำแล้วติดต่อต้นทางไม่ได้: ปัญหาเดิมยังอยู่ ไม่กลายเป็นไม่รู้สถานะ", () => {
+    const account = createAiAccountStatus(clock);
+    account.apply({ chat: "auth", transcribe: "auth", credits: "unverified" });
+    account.apply({ chat: "unreachable", transcribe: "unreachable", credits: "unverified" });
+    expect(account.snapshot()).toMatchObject({ status: "degraded", chat: "auth", transcribe: "auth" });
+  });
+
   it("คำขอสำเร็จไม่ล้างปัญหาโมเดลของอีกบริการ", () => {
     const account = createAiAccountStatus(clock);
-    account.apply({ chat: "ok", transcribe: "model" });
+    account.apply({ chat: "ok", transcribe: "model", credits: "ok" });
     account.reportSuccess("chat");
     expect(account.snapshot()).toMatchObject({ status: "degraded", transcribe: "model" });
   });

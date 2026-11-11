@@ -50,9 +50,22 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
   };
 
   return {
-    /** บันทึกผลการตรวจตอนเริ่มเซิร์ฟเวอร์ */
-    apply(result: Pick<AccountCheckResult, UpstreamService>) {
-      SERVICES.forEach((service) => set(service, result[service]));
+    /**
+     * บันทึกผลการตรวจบัญชี (ตอนเริ่มเซิร์ฟเวอร์ และการตรวจซ้ำระหว่างที่ยังมีปัญหา)
+     * ผลตรวจที่ไม่ได้ข้อมูลใหม่จะไม่ลบปัญหาที่รู้อยู่แล้วจากคำขอจริงของผู้ใช้
+     */
+    apply(result: Pick<AccountCheckResult, UpstreamService | "credits">) {
+      const creditsChecked = result.credits === "ok" || result.credits === "exhausted";
+
+      for (const service of SERVICES) {
+        const next = result[service];
+        const current = states[service];
+        // ไม่ได้ตรวจเครดิตรอบนี้: โมเดลยังอยู่ไม่ได้แปลว่าเครดิตกลับมาแล้ว
+        if (current === "quota" && next === "ok" && !creditsChecked) continue;
+        // ติดต่อต้นทางไม่ได้รอบนี้: ยังไม่รู้อะไรเพิ่ม ปัญหาเดิมจึงยังอยู่
+        if (next === "unreachable" && BLOCKING.has(current)) continue;
+        set(service, next);
+      }
       checkedAt = now().toISOString();
     },
 

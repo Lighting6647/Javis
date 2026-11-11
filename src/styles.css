@@ -272,6 +272,23 @@ a { color: inherit; }
 .toast.error { border-color: var(--danger); background: var(--danger-soft); box-shadow: inset 3px 0 0 var(--danger); }
 .toast.info { box-shadow: inset 3px 0 0 var(--accent); }
 
+/* ---------- แถบแจ้งสถานะบริการ AI: อยู่ใต้หัวจอเต็มความกว้าง เนื้อหาเรียงตรงกับบทสนทนา ---------- */
+.service-banner { flex: none; padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) var(--space-3) max(var(--space-4), env(safe-area-inset-left)); border-bottom: 1px solid var(--danger); background: var(--danger-soft); font-size: 13px; line-height: 1.55; animation: toast-in .25s var(--ease); }
+.service-banner.voice { border-bottom-color: var(--warning); background: rgba(251, 191, 36, .1); }
+.service-banner-inner { width: min(var(--content-width), 100%); margin-inline: auto; display: flex; align-items: flex-start; gap: var(--space-3); }
+.service-banner-icon { flex: none; margin-top: 1px; color: var(--danger); }
+.service-banner.voice .service-banner-icon { color: var(--warning); }
+.service-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.service-banner-text strong { font-weight: 600; }
+.service-banner-text span { color: var(--text-muted); }
+.service-banner-text small { color: var(--text-faint); font-size: 12px; }
+.service-banner-action { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--surface); font-size: 12px; font-weight: 500; white-space: nowrap; transition: background .15s, border-color .15s, transform .1s; }
+.service-banner-action:hover:not(:disabled) { border-color: var(--text-faint); background: var(--surface-raised); }
+.service-banner-action:active:not(:disabled) { transform: translateY(1px); }
+.service-banner-action:disabled { cursor: progress; color: var(--text-muted); }
+.status-pill.offline { color: var(--danger); border-color: var(--danger); }
+.status-pill.offline .status-dot { background: var(--danger); }
+
 /* ---------- Panels: sign-in, loading, server unreachable ---------- */
 .panel { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); text-align: center; }
 .panel-icon { width: 56px; height: 56px; display: grid; place-items: center; margin-bottom: var(--space-2); border-radius: var(--radius-lg); color: var(--accent); background: var(--accent-soft); }
@@ -346,6 +363,11 @@ a { color: inherit; }
   .scroll-area > * { padding: var(--space-4) var(--space-3); }
   .message { max-width: 92%; }
   .status-pill { padding-inline: 9px; }
+  /* จอแคบ: ปุ่มตรวจอีกครั้งลงไปอยู่ใต้ข้อความ ตรงแนวเดียวกับข้อความ */
+  .service-banner { padding-block: 10px; }
+  .service-banner-inner { flex-wrap: wrap; row-gap: var(--space-2); }
+  .service-banner-text { flex-basis: calc(100% - 18px - var(--space-3)); }
+  .service-banner-action { margin-left: calc(18px + var(--space-3)); }
   .user-chip span { max-width: 64px; }
   .dock-row { gap: var(--space-2); }
 }
@@ -484,6 +506,12 @@ html[data-theme="holo"] .btn-secondary { color: var(--accent); background: var(-
 html[data-theme="holo"] .btn-secondary:hover:not(:disabled) { background: rgba(34, 211, 238, .2); box-shadow: var(--glow); }
 
 /* ---------- แผงลอย: ทึบพอให้อ่านง่าย มีขีดมุม ---------- */
+html[data-theme="holo"] .service-banner { background: linear-gradient(rgba(255, 122, 107, .14), rgba(255, 122, 107, .14)), var(--surface-solid); }
+html[data-theme="holo"] .service-banner.voice { background: linear-gradient(rgba(251, 191, 36, .12), rgba(251, 191, 36, .12)), var(--surface-solid); }
+html[data-theme="holo"] .service-banner-text strong { letter-spacing: .02em; }
+html[data-theme="holo"] .service-banner-action { background: rgba(2, 11, 20, .55); }
+html[data-theme="holo"] .service-banner-action:hover:not(:disabled) { border-color: var(--border-strong); background: rgba(34, 211, 238, .16); box-shadow: var(--glow); }
+html[data-theme="holo"] .status-pill.offline { background: rgba(255, 122, 107, .12); }
 html[data-theme="holo"] .toast { background: var(--surface-solid); }
 html[data-theme="holo"] .toast.error { background: linear-gradient(rgba(255, 122, 107, .12), rgba(255, 122, 107, .12)), var(--surface-solid); }
 html[data-theme="holo"] .fill-card { background: var(--corners), var(--surface-solid); }

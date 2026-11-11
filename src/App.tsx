@@ -5,11 +5,13 @@ import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { BrowserView } from "./components/BrowserView";
 import { FillCard } from "./components/FillCard";
+import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { Transcript } from "./components/Transcript";
 import { VoiceDock } from "./components/VoiceDock";
 import { VoiceSettingsDialog } from "./components/VoiceSettingsDialog";
 import { PHASE_LABEL } from "./conversation/messages";
+import { useAiStatus } from "./hooks/useAiStatus";
 import { useConversation } from "./hooks/useConversation";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useSession } from "./hooks/useSession";
@@ -44,7 +46,10 @@ export default function App() {
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;
-  const statusLabel = phase === "thinking" && searching ? "กำลังค้นเว็บ" : PHASE_LABEL[phase];
+  const ai = useAiStatus(ready, desktop);
+  // บอกสถานะจริงตอนว่างอยู่ ระหว่างฟังหรือคิดยังแสดงจังหวะการสนทนาตามปกติ
+  const aiDown = ai.problem?.scope === "chat" && phase === "idle";
+  const statusLabel = phase === "thinking" && searching ? "กำลังค้นเว็บ" : aiDown ? "AI ใช้งานไม่ได้" : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
 
@@ -82,7 +87,7 @@ export default function App() {
 
         <div className="header-actions">
           {ready && (
-            <div className={`status-pill ${phase}`} role="status">
+            <div className={`status-pill ${phase}${aiDown ? " offline" : ""}`} role="status">
               <span className="status-dot" />
               {statusLabel}
             </div>
@@ -104,6 +109,9 @@ export default function App() {
       </header>
 
       <main className="app-main">
+        {ai.problem && (
+          <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
+        )}
         <div className="scroll-area" hidden={showingWeb}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}

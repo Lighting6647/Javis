@@ -1,5 +1,6 @@
 import type { Transcribe } from "../speech/recorderRecognizer";
 import { SpeechError } from "../speech/types";
+import { aiStatusStore } from "./aiStatusStore";
 import { fetchWithTimeout } from "./http";
 import { sessionStore } from "./sessionStore";
 
@@ -25,10 +26,15 @@ export const transcribeAudio: Transcribe = async (audio, signal) => {
     sessionStore.clear();
     throw new SpeechError("network");
   }
-  if (!response.ok) throw new SpeechError("network");
+  if (!response.ok) {
+    // อาจเป็นปัญหาของบัญชี AI: ให้แถบแจ้งเตือนอัปเดตทันที
+    aiStatusStore.noteRequest(false);
+    throw new SpeechError("network");
+  }
 
   try {
     const payload = (await response.json()) as { text?: unknown };
+    aiStatusStore.noteRequest(true);
     return typeof payload.text === "string" ? payload.text : "";
   } catch {
     throw new SpeechError("network");
