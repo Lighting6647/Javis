@@ -1,7 +1,7 @@
 import { fetchWithTimeout } from "./http";
 
 /** สถานะของบริการ AI หนึ่งอย่าง ตามที่เซิร์ฟเวอร์รายงานใน /api/status */
-export type AiServiceState = "unchecked" | "ok" | "quota" | "auth" | "model" | "unreachable";
+export type AiServiceState = "unchecked" | "ok" | "quota" | "auth" | "model" | "unreachable" | "unsupported";
 
 export interface AiStatus {
   /** การคิดคำตอบ */
@@ -16,12 +16,13 @@ type BlockingReason = "quota" | "auth" | "model";
 export interface AiProblem {
   /** chat: Javis ตอบไม่ได้เลย · voice: ตอบได้แต่ฟังเสียงพูดไม่ได้ */
   scope: "chat" | "voice";
-  reason: BlockingReason;
+  /** unsupported: บริการ AI ที่เซิร์ฟเวอร์ใช้อยู่ไม่มีการแปลงเสียง ไม่ใช่ปัญหาที่ผู้ดูแลต้องแก้ */
+  reason: BlockingReason | "unsupported";
   title: string;
   detail: string;
 }
 
-const STATES: readonly AiServiceState[] = ["unchecked", "ok", "quota", "auth", "model", "unreachable"];
+const STATES: readonly AiServiceState[] = ["unchecked", "ok", "quota", "auth", "model", "unreachable", "unsupported"];
 const STATUS_TIMEOUT_MS = 8_000;
 /** ระหว่างที่ยังมีปัญหา ถามเซิร์ฟเวอร์ซ้ำเป็นระยะ เพื่อให้แถบแจ้งเตือนหายเองเมื่อผู้ดูแลแก้แล้ว */
 const POLL_WHILE_BROKEN_MS = 60_000;
@@ -84,6 +85,14 @@ export function describeAiProblem(status: AiStatus | null, usesServerTranscripti
   }
 
   // บนเว็บและมือถือ อุปกรณ์แปลงเสียงเอง ปัญหาการแปลงเสียงบนเซิร์ฟเวอร์จึงไม่กระทบผู้ใช้
+  if (usesServerTranscription && status.transcribe === "unsupported") {
+    return {
+      scope: "voice",
+      reason: "unsupported",
+      title: "แอปเดสก์ท็อปยังฟังเสียงพูดไม่ได้",
+      detail: "บริการ AI ที่ใช้อยู่ไม่มีการแปลงเสียง พิมพ์ข้อความคุยกับ Javis แทนได้ หรือใช้ผ่านเว็บเบราว์เซอร์เพื่อพูดได้ตามปกติ"
+    };
+  }
   if (usesServerTranscription && isBlocking(status.transcribe)) {
     return {
       scope: "voice",

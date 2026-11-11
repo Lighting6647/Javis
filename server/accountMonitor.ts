@@ -10,20 +10,29 @@ let running: Promise<void> | null = null;
  */
 export function checkAiAccount(announce: boolean): Promise<void> {
   running ??= (async () => {
+    const ai = config.ai;
     const before = aiAccount.snapshot();
     const result = await runAccountCheck({
-      baseUrl: config.openaiBaseUrl,
-      apiKey: config.apiKey,
-      chatModel: config.chatModel,
-      transcribeModel: config.transcribeModel,
-      creditCheck: config.aiCreditCheck
+      baseUrl: ai.baseUrl,
+      apiKey: ai.apiKey,
+      chatModel: ai.chatModel,
+      transcribeModel: ai.transcribeModel,
+      creditCheck: ai.creditCheck,
+      apiStyle: ai.apiStyle
     });
     aiAccount.apply(result);
 
     const after = aiAccount.snapshot();
     if (!announce && before.chat === after.chat && before.transcribe === after.transcribe) return;
 
-    const settings = { hasApiKey: Boolean(config.apiKey), chatModel: config.chatModel, transcribeModel: config.transcribeModel };
+    const settings = {
+      hasApiKey: Boolean(ai.apiKey),
+      chatModel: ai.chatModel,
+      transcribeModel: ai.transcribeModel,
+      keyVariable: ai.keyVariable,
+      chatModelVariable: ai.chatModelVariable,
+      providerLabel: ai.label
+    };
     for (const { level, message } of describeAccountCheck(result, settings)) console[level](message);
   })().finally(() => {
     running = null;

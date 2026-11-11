@@ -12,8 +12,9 @@ import {
  * - ok: ใช้งานได้
  * - quota / auth / model: ใช้งานไม่ได้จนกว่าผู้ดูแลจะแก้ (เครดิตหมด กุญแจ API ใช้ไม่ได้ ไม่พบโมเดล)
  * - unreachable: ตรวจไม่ได้เพราะติดต่อบริการ AI ไม่สำเร็จ
+ * - unsupported: ผู้ให้บริการ AI ที่ตั้งค่าไว้ไม่มีบริการนี้ (เช่น การแปลงเสียง) ไม่ใช่ความผิดพลาดที่ต้องแก้
  */
-export type AiServiceState = "unchecked" | "ok" | "quota" | "auth" | "model" | "unreachable";
+export type AiServiceState = "unchecked" | "ok" | "quota" | "auth" | "model" | "unreachable" | "unsupported";
 export type AiOverallStatus = "ok" | "degraded" | "unknown";
 export type CreditState = "ok" | "exhausted" | "unverified" | "skipped";
 
@@ -73,6 +74,7 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
     reportSuccess(service: UpstreamService) {
       set(service, "ok");
       const other = otherService(service);
+      // unsupported ไม่ถูกแตะ: ผู้ให้บริการไม่มีบริการนั้นไม่ว่าบัญชีจะเป็นอย่างไร
       if (ACCOUNT_WIDE.has(states[other]) || states[other] === "unreachable") set(other, "unchecked");
     },
 
@@ -80,7 +82,9 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
     reportFailure(service: UpstreamService, reason: UpstreamFailureReason) {
       if (reason === "quota" || reason === "auth") {
         // โมเดลที่หาไม่เจอยังคงหาไม่เจอ ไม่ว่าเครดิตจะเหลือหรือไม่
-        SERVICES.filter((each) => each === service || states[each] !== "model").forEach((each) => set(each, reason));
+        SERVICES.filter((each) => each === service || (states[each] !== "model" && states[each] !== "unsupported")).forEach((each) =>
+          set(each, reason)
+        );
       } else if (reason === "model") {
         set(service, "model");
       }
@@ -90,7 +94,7 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
       const values = SERVICES.map((service) => states[service]);
       const status: AiOverallStatus = values.some((state) => BLOCKING.has(state))
         ? "degraded"
-        : values.includes("ok") && values.every((state) => state === "ok" || state === "unchecked")
+        : values.includes("ok") && values.every((state) => state === "ok" || state === "unchecked" || state === "unsupported")
           ? "ok"
           : "unknown";
       return { status, chat: states.chat, transcribe: states.transcribe, checkedAt };
@@ -105,9 +109,12 @@ export interface AccountCheckOptions {
   baseUrl: string;
   apiKey: string | undefined;
   chatModel: string;
-  transcribeModel: string;
+  /** โมเดลแปลงเสียง หรือ null ถ้าผู้ให้บริการรายนี้ไม่มีการแปลงเสียง */
+  transcribeModel: string | null;
   /** ส่งคำขอสั้นที่สุดหนึ่งครั้งเพื่อดูว่าเครดิตยังเหลือ (ใช้โทเค็นเล็กน้อย) */
   creditCheck: boolean;
+  /** รูปแบบ API ของผู้ให้บริการ ใช้เลือกรูปแบบของคำขอตรวจเครดิต (ค่าเริ่มต้น responses) */
+  apiStyle?: "responses" | "chat";
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -146,7 +153,10 @@ export async function runAccountCheck(options: AccountCheckOptions): Promise<Acc
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retiring: RetiringModel[] = [];
 
-  if (!apiKey) return { chat: "auth", transcribe: "auth", credits: "unverified", retiring };
+  /** สถานะของการแปลงเสียงเมื่อกุญแจหรือบัญชีมีปัญหา: ถ้าผู้ให้บริการไม่มีบริการนี้ก็ยังคงเป็นไม่รองรับ */
+  const transcribeWhen = (state: AiServiceState): AiServiceState => (transcribeModel ? state : "unsupported");
+
+  if (!apiKey) return { chat: "auth", transcribe: transcribeWhen("auth"), credits: "unverified", retiring };
 
   const headers = { Authorization: `Bearer ${apiKey}` };
 
@@ -170,21 +180,28 @@ export async function runAccountCheck(options: AccountCheckOptions): Promise<Acc
 
   let [chat, transcribe] = await Promise.all([
     lookUpModel("chat", chatModel),
-    lookUpModel("transcribe", transcribeModel)
+    transcribeModel ? lookUpModel("transcribe", transcribeModel) : Promise.resolve<AiServiceState>("unsupported")
   ]);
 
   // กุญแจ API ถูกปฏิเสธ: ทุกบริการใช้ไม่ได้ ไม่ต้องตรวจต่อ
-  if (chat === "auth" || transcribe === "auth") return { chat: "auth", transcribe: "auth", credits: "unverified", retiring };
+  if (chat === "auth" || transcribe === "auth") {
+    return { chat: "auth", transcribe: transcribeWhen("auth"), credits: "unverified", retiring };
+  }
   if (!creditCheck) return { chat, transcribe, credits: "skipped", retiring };
   if (chat !== "ok") return { chat, transcribe, credits: "unverified", retiring };
 
   let credits: CreditState = "unverified";
   try {
-    const response = await fetchImpl(`${baseUrl}/responses`, {
+    const chatStyle = options.apiStyle === "chat";
+    const response = await fetchImpl(`${baseUrl}/${chatStyle ? "chat/completions" : "responses"}`, {
       method: "POST",
       signal: AbortSignal.timeout(timeoutMs),
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: chatModel, input: "ping", max_output_tokens: CREDIT_PROBE_TOKENS, store: false })
+      body: JSON.stringify(
+        chatStyle
+          ? { model: chatModel, messages: [{ role: "user", content: "ping" }], max_tokens: CREDIT_PROBE_TOKENS }
+          : { model: chatModel, input: "ping", max_output_tokens: CREDIT_PROBE_TOKENS, store: false }
+      )
     });
 
     let failure: AiServiceState | null = null;
@@ -199,7 +216,7 @@ export async function runAccountCheck(options: AccountCheckOptions): Promise<Acc
 
     if (failure === "quota" || failure === "auth") {
       chat = failure;
-      if (transcribe !== "model") transcribe = failure;
+      if (transcribe !== "model" && transcribe !== "unsupported") transcribe = failure;
       if (failure === "quota") credits = "exhausted";
     } else if (failure === "model") {
       chat = "model";
@@ -221,30 +238,43 @@ const MS_PER_DAY = 86_400_000;
 /** แปลงผลการตรวจเป็นข้อความสำหรับ log ของผู้ดูแล บอกผลกระทบและสิ่งที่ต้องแก้ */
 export function describeAccountCheck(
   result: AccountCheckResult,
-  settings: { hasApiKey: boolean; chatModel: string; transcribeModel: string },
+  settings: {
+    hasApiKey: boolean;
+    chatModel: string;
+    transcribeModel: string | null;
+    /** ชื่อตัวแปรของกุญแจและโมเดลสนทนาของผู้ให้บริการที่ใช้อยู่ (ค่าเริ่มต้นเป็นของ OpenAI) */
+    keyVariable?: string;
+    chatModelVariable?: string;
+    /** ชื่อผู้ให้บริการสำหรับแสดงใน log */
+    providerLabel?: string;
+  },
   now: Date = new Date()
 ): AccountCheckReport[] {
   const reports: AccountCheckReport[] = [];
   const { chat, transcribe } = result;
+  const keyVariable = settings.keyVariable ?? "OPENAI_API_KEY";
+  const chatModelVariable = settings.chatModelVariable ?? "OPENAI_CHAT_MODEL";
+  /** สิ่งที่ผู้ใช้ทำไม่ได้เมื่อบัญชีมีปัญหา ถ้าผู้ให้บริการไม่มีการแปลงเสียงก็ไม่ต้องพูดถึง */
+  const affected = transcribe === "unsupported" ? "ตอบ" : "ตอบและแปลงเสียง";
 
   if (chat === "auth" || transcribe === "auth") {
     reports.push({
       level: "error",
       message: settings.hasApiKey
-        ? "ตรวจบัญชี AI: OPENAI_API_KEY ถูกปฏิเสธ Javis จะตอบและแปลงเสียงไม่ได้จนกว่าจะแก้ค่านี้"
-        : "ตรวจบัญชี AI: ยังไม่ได้ตั้ง OPENAI_API_KEY Javis จะตอบและแปลงเสียงไม่ได้"
+        ? `ตรวจบัญชี AI: ${keyVariable} ถูกปฏิเสธ Javis จะ${affected}ไม่ได้จนกว่าจะแก้ค่านี้`
+        : `ตรวจบัญชี AI: ยังไม่ได้ตั้ง ${keyVariable} Javis จะ${affected}ไม่ได้`
     });
   } else if (chat === "quota" || transcribe === "quota") {
     reports.push({
       level: "error",
-      message: "ตรวจบัญชี AI: เครดิตของบัญชีหมด Javis จะตอบและแปลงเสียงไม่ได้จนกว่าจะเติมเครดิต"
+      message: `ตรวจบัญชี AI: เครดิตของบัญชีหมด Javis จะ${affected}ไม่ได้จนกว่าจะเติมเครดิต`
     });
   }
 
   if (chat === "model") {
     reports.push({
       level: "error",
-      message: `ตรวจบัญชี AI: ไม่พบโมเดลสนทนา "${settings.chatModel}" (OPENAI_CHAT_MODEL) Javis จะตอบไม่ได้`
+      message: `ตรวจบัญชี AI: ไม่พบโมเดลสนทนา "${settings.chatModel}" (${chatModelVariable}) Javis จะตอบไม่ได้`
     });
   }
   if (transcribe === "model") {
@@ -262,7 +292,7 @@ export function describeAccountCheck(
 
   for (const { service, model, date } of result.retiring) {
     const days = Math.ceil((Date.parse(`${date}T00:00:00Z`) - now.getTime()) / MS_PER_DAY);
-    const variable = service === "chat" ? "OPENAI_CHAT_MODEL" : "OPENAI_TRANSCRIBE_MODEL";
+    const variable = service === "chat" ? chatModelVariable : "OPENAI_TRANSCRIBE_MODEL";
     reports.push({
       level: "warn",
       message:
@@ -272,16 +302,17 @@ export function describeAccountCheck(
     });
   }
 
-  if (chat === "ok" && transcribe === "ok") {
+  if (chat === "ok" && (transcribe === "ok" || transcribe === "unsupported")) {
     const creditNote =
-      result.credits === "ok"
-        ? "เครดิตยังเหลือ"
-        : result.credits === "skipped"
-          ? "ไม่ได้ตรวจเครดิตเพราะตั้ง AI_CREDIT_CHECK=false"
-          : "ยังตรวจเครดิตไม่ได้";
+      result.credits === "ok" ? "เครดิตยังเหลือ" : result.credits === "skipped" ? "ไม่ได้ตรวจเครดิต" : "ยังตรวจเครดิตไม่ได้";
+    const speechNote =
+      transcribe === "ok"
+        ? `โมเดลแปลงเสียง ${settings.transcribeModel}`
+        : "ไม่มีการแปลงเสียง แอปเดสก์ท็อปต้องพิมพ์แทนการพูด";
+    const provider = settings.providerLabel ? `${settings.providerLabel}, ` : "";
     reports.unshift({
       level: "info",
-      message: `ตรวจบัญชี AI: พร้อมใช้งาน (โมเดลสนทนา ${settings.chatModel}, โมเดลแปลงเสียง ${settings.transcribeModel}, ${creditNote})`
+      message: `ตรวจบัญชี AI: พร้อมใช้งาน (${provider}โมเดลสนทนา ${settings.chatModel}, ${speechNote}, ${creditNote})`
     });
   }
 

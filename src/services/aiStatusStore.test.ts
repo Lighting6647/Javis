@@ -46,6 +46,19 @@ describe("describeAiProblem", () => {
     expect(describeAiProblem(status, true)?.detail).toContain("พิมพ์ข้อความ");
   });
 
+  it("บริการ AI ของเซิร์ฟเวอร์ไม่มีการแปลงเสียง: บอกแอปเดสก์ท็อปให้พิมพ์แทน โดยไม่บอกให้แจ้งผู้ดูแล", () => {
+    const status: AiStatus = { chat: "ok", transcribe: "unsupported" };
+    expect(parseAiStatus({ ai: status })).toEqual(status);
+    expect(describeAiProblem(status, false)).toBeNull();
+
+    const problem = describeAiProblem(status, true);
+    expect(problem).toMatchObject({ scope: "voice", reason: "unsupported" });
+    expect(problem?.detail).toContain("พิมพ์ข้อความ");
+    expect(problem?.detail).not.toContain("ผู้ดูแล");
+    // ไม่ใช่ปัญหาที่จะหายเอง จึงไม่ต้องถามเซิร์ฟเวอร์ซ้ำทุกนาที
+    expect(hasAiProblem(status)).toBe(false);
+  });
+
   it("ถ้าตอบไม่ได้ด้วย ให้แจ้งเรื่องตอบไม่ได้ก่อนเรื่องเสียง", () => {
     expect(describeAiProblem({ chat: "quota", transcribe: "model" }, true)?.scope).toBe("chat");
   });

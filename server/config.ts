@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { resolveAiProvider } from "./aiProvider.js";
 import { MIN_SESSION_SECRET_LENGTH, parseAccessCodes } from "./auth.js";
 
 // quiet: ไม่ให้ dotenv พิมพ์บรรทัดแนะนำของตัวเองลง log ทุกครั้งที่เริ่ม ซึ่งกลบข้อความที่ผู้ดูแลต้องอ่าน
@@ -12,10 +13,6 @@ const NATIVE_APP_ORIGINS = ["https://localhost", "capacitor://localhost"];
 /** ต้นทางของ Vite dev server ใช้เฉพาะตอนพัฒนา */
 const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
-const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_CHAT_MODEL = "gpt-4.1-mini";
-const DEFAULT_TRANSCRIBE_MODEL = "gpt-transcribe";
-
 function readInteger(name: string, fallback: number, minimum: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
@@ -26,17 +23,6 @@ function readInteger(name: string, fallback: number, minimum: number): number {
     return fallback;
   }
   return value;
-}
-
-function readBaseUrl(name: string, fallback: string): string {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-
-  if (!URL.canParse(raw) || !/^https?:$/.test(new URL(raw).protocol)) {
-    console.warn(`ค่า ${name} ไม่ใช่ URL ที่ถูกต้อง ใช้ค่าเริ่มต้นแทน`);
-    return fallback;
-  }
-  return raw.replace(/\/+$/, "");
 }
 
 export function normalizeOrigin(origin: string): string {
@@ -82,6 +68,7 @@ const isProduction = process.env.NODE_ENV === "production";
 /** รันเป็นฟังก์ชันบน Vercel: ไม่มีกระบวนการค้าง หลาย instance ทำงานพร้อมกัน และอยู่หลังตัวรับคำขอของ Vercel เสมอ */
 const isServerless = Boolean(process.env.VERCEL);
 const accessUsers = parseAccessCodes(process.env.ACCESS_CODES);
+const ai = resolveAiProvider(process.env);
 
 export const config = {
   isProduction,
@@ -94,18 +81,13 @@ export const config = {
   accessUsers,
   sessionSecret: readSessionSecret(accessUsers.length > 0),
   port: readInteger("PORT", 8787, 1),
-  apiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
-  /** โมเดลข้อความที่ใช้คิดคำตอบ ควรเป็นโมเดลที่ตอบเร็วเพราะคำตอบถูกอ่านออกเสียงทันที */
-  chatModel: process.env.OPENAI_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL,
-  openaiBaseUrl: readBaseUrl("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
-  /** โมเดลแปลงเสียงเป็นข้อความ ใช้เฉพาะแอปเดสก์ท็อปที่ต้องอัดเสียงส่งมา */
-  transcribeModel: process.env.OPENAI_TRANSCRIBE_MODEL?.trim() || DEFAULT_TRANSCRIBE_MODEL,
-  /** ให้ AI ค้นเว็บเองเมื่อคำถามต้องใช้ข้อมูลล่าสุด (มีค่าใช้จ่ายต่อการค้นหนึ่งครั้ง) ปิดได้ด้วย WEB_SEARCH_ENABLED=false */
-  webSearchEnabled: process.env.WEB_SEARCH_ENABLED?.trim().toLowerCase() !== "false",
+  /**
+   * ผู้ให้บริการ AI ที่ใช้อยู่ พร้อมกุญแจ ที่อยู่ โมเดล และความสามารถของรายนั้น
+   * เลือกจากกุญแจที่ตั้งไว้ (GEMINI_API_KEY หรือ OPENAI_API_KEY) หรือบังคับด้วย AI_PROVIDER
+   */
+  ai,
   /** ตรวจกุญแจ API และโมเดลตอนเริ่มเซิร์ฟเวอร์ (ไม่มีค่าใช้จ่าย) ปิดได้ด้วย AI_STARTUP_CHECK=false */
   aiStartupCheck: process.env.AI_STARTUP_CHECK?.trim().toLowerCase() !== "false",
-  /** ตรวจเครดิตตอนเริ่มเซิร์ฟเวอร์ด้วยคำขอสั้นที่สุดหนึ่งครั้ง (ใช้โทเค็นเล็กน้อย) ปิดได้ด้วย AI_CREDIT_CHECK=false */
-  aiCreditCheck: process.env.AI_CREDIT_CHECK?.trim().toLowerCase() !== "false",
   /** ระหว่างที่บัญชี AI ยังมีปัญหา ตรวจซ้ำทุกกี่วินาที เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข */
   aiRecheckSeconds: readInteger("AI_RECHECK_SECONDS", 300, 5),
   /** จำนวน reverse proxy ที่อยู่หน้าเซิร์ฟเวอร์ (0 = ต่อตรง) ใช้หา IP จริงของผู้เรียก บน Vercel มีหนึ่งชั้นเสมอ */

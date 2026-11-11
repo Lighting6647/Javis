@@ -29,6 +29,43 @@ describe("readUpstreamErrorCodes", () => {
     ]);
   });
 
+  describe("รูปแบบของ Google (Gemini)", () => {
+    // รูปแบบจริงที่ได้จากการเรียกด้วยกุญแจที่ไม่ถูกต้อง
+    const BAD_KEY = { code: 400, message: "Please pass a valid API key", status: "INVALID_ARGUMENT" };
+
+    it("อ่านสถานะจากคำตอบ ทั้งแบบปกติและแบบที่ห่อในรายการ", () => {
+      const quota = { error: { code: 429, message: "Quota exceeded for metric", status: "RESOURCE_EXHAUSTED" } };
+      expect(readUpstreamErrorCodes(quota)).toEqual(["RESOURCE_EXHAUSTED"]);
+      expect(readUpstreamErrorCodes([quota])).toEqual(["RESOURCE_EXHAUSTED"]);
+    });
+
+    it("กุญแจผิดถูกจัดเป็นปัญหากุญแจ แม้รหัสจะเป็น 400 กลาง ๆ", () => {
+      const codes = readUpstreamErrorCodes([{ error: BAD_KEY }]);
+      expect(codes).toContain("invalid_api_key");
+      expect(describeUpstreamFailure("chat", 400, codes)).toMatchObject({ reason: "auth", status: 502 });
+    });
+
+    it("คำขอผิดรูปแบบที่ไม่เกี่ยวกับกุญแจ ไม่ถูกเข้าใจว่าเป็นปัญหากุญแจ", () => {
+      const codes = readUpstreamErrorCodes({ error: { code: 400, message: "Invalid JSON payload received", status: "INVALID_ARGUMENT" } });
+      expect(describeUpstreamFailure("chat", 400, codes)).toMatchObject({ reason: "unknown" });
+    });
+
+    it("โควตาฟรีเต็มคือให้ลองใหม่ภายหลัง ไม่ใช่ให้เติมเครดิต", () => {
+      const failure = describeUpstreamFailure("chat", 429, ["RESOURCE_EXHAUSTED"]);
+      expect(failure).toMatchObject({ reason: "busy", status: 503 });
+      expect(failure.message).not.toContain("เครดิต");
+    });
+
+    it("ไม่พบโมเดล และไม่มีสิทธิ์ใช้", () => {
+      expect(describeUpstreamFailure("chat", 404, ["NOT_FOUND"])).toMatchObject({ reason: "model" });
+      expect(describeUpstreamFailure("chat", 403, ["PERMISSION_DENIED"])).toMatchObject({ reason: "auth" });
+    });
+
+    it("ไม่คืนข้อความของต้นทาง แม้จะใช้ข้อความในการจัดกลุ่ม", () => {
+      expect(readUpstreamErrorCodes({ error: BAD_KEY }).join(" ")).not.toContain("Please pass");
+    });
+  });
+
   it("ไม่นับชนิดของเหตุการณ์เป็นรหัสข้อผิดพลาด", () => {
     expect(readUpstreamErrorCodes({ type: "response.failed", response: { error: null } })).toEqual([]);
     expect(readUpstreamErrorCodes({ type: "error" })).toEqual([]);

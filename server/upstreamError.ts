@@ -21,9 +21,20 @@ const QUOTA_CODES = new Set([
   "billing_hard_limit_reached",
   "billing_not_active"
 ]);
-const AUTH_CODES = new Set(["invalid_api_key", "invalid_authentication", "account_deactivated", "invalid_organization"]);
-const MODEL_CODES = new Set(["model_not_found", "unsupported_model"]);
-const BUSY_CODES = new Set(["rate_limit_exceeded", "server_is_overloaded", "overloaded"]);
+// รหัสตัวพิมพ์ใหญ่คือสถานะของ Google (Gemini) ซึ่งใช้ชุดรหัสคนละแบบกับ OpenAI
+const AUTH_CODES = new Set([
+  "invalid_api_key",
+  "invalid_authentication",
+  "account_deactivated",
+  "invalid_organization",
+  "UNAUTHENTICATED",
+  "PERMISSION_DENIED"
+]);
+const MODEL_CODES = new Set(["model_not_found", "unsupported_model", "NOT_FOUND"]);
+// RESOURCE_EXHAUSTED คือโควตาต่อนาทีหรือต่อวันเต็ม ซึ่งกลับมาใช้ได้เองโดยไม่ต้องให้ผู้ดูแลทำอะไร
+const BUSY_CODES = new Set(["rate_limit_exceeded", "server_is_overloaded", "overloaded", "RESOURCE_EXHAUSTED", "UNAVAILABLE"]);
+/** Google ตอบกุญแจผิดด้วยรหัสกลาง ๆ (400 INVALID_ARGUMENT) จึงต้องดูจากข้อความ ใช้เพื่อจัดกลุ่มเท่านั้น ไม่ส่งต่อให้ใคร */
+const API_KEY_MESSAGE = /api key/i;
 
 function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,16 +42,22 @@ function isObject(value: unknown): value is Json {
 
 function codesOf(error: unknown): string[] {
   if (!isObject(error)) return [];
-  return [error.code, error.type].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const codes = [error.code, error.type, error.status].filter(
+    (value): value is string => typeof value === "string" && value.length > 0
+  );
+  if (typeof error.message === "string" && API_KEY_MESSAGE.test(error.message)) codes.push("invalid_api_key");
+  return codes;
 }
 
 /**
  * อ่านรหัสข้อผิดพลาดจากคำตอบของต้นทาง รองรับทั้งสามรูปแบบที่พบจริง:
  * เนื้อหาของคำตอบที่ถูกปฏิเสธ `{ error }` เหตุการณ์ `error` ในสตรีม `{ type: "error", error }`
- * และเหตุการณ์ `response.failed` ที่มี `{ response: { error } }`
+ * และเหตุการณ์ `response.failed` ที่มี `{ response: { error } }` รวมถึงแบบที่ Google ห่อไว้ในรายการ `[{ error }]`
  * คืนรายการว่างถ้าไม่พบ และไม่คืนข้อความของต้นทาง เพราะอาจมีข้อมูลบัญชีปนมา
  */
-export function readUpstreamErrorCodes(payload: unknown): string[] {
+export function readUpstreamErrorCodes(input: unknown): string[] {
+  const payload: unknown = Array.isArray(input) ? input[0] : input;
   if (!isObject(payload)) return [];
 
   const codes = [...codesOf(payload.error), ...(isObject(payload.response) ? codesOf(payload.response.error) : [])];

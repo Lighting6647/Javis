@@ -30,8 +30,14 @@ export function audioExtension(contentType: string | undefined): string | null {
 export const transcribeHandler: RequestHandler = async (request, response) => {
   response.setHeader("Cache-Control", "no-store");
 
-  if (!config.apiKey) {
-    response.status(500).json({ error: "ยังไม่ได้ตั้งค่า OPENAI_API_KEY บนเซิร์ฟเวอร์" });
+  const ai = config.ai;
+  if (!ai.transcribeModel) {
+    // ผู้ให้บริการ AI ที่ตั้งค่าไว้ไม่มีการแปลงเสียง แอปจะแจ้งให้ผู้ใช้พิมพ์แทน
+    response.status(503).json({ error: "บริการ AI ที่ใช้อยู่ยังไม่รองรับการแปลงเสียง กรุณาพิมพ์ข้อความแทน" });
+    return;
+  }
+  if (!ai.apiKey) {
+    response.status(500).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
     return;
   }
 
@@ -49,17 +55,17 @@ export const transcribeHandler: RequestHandler = async (request, response) => {
   const mediaType = `audio/${extension === "mp3" ? "mpeg" : extension}`;
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(audio)], { type: mediaType }), `speech.${extension}`);
-  form.append("model", config.transcribeModel);
+  form.append("model", ai.transcribeModel);
   // โมเดลรุ่นใหม่รับคำใบ้ภาษาเป็นรายการ ส่วนรุ่นเดิมรับภาษาเดียว และห้ามส่งทั้งสองแบบพร้อมกัน
-  if (config.transcribeModel.startsWith("gpt-transcribe")) form.append("languages[]", SPEECH_LANGUAGE);
+  if (ai.transcribeModel.startsWith("gpt-transcribe")) form.append("languages[]", SPEECH_LANGUAGE);
   else form.append("language", SPEECH_LANGUAGE);
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${config.openaiBaseUrl}/audio/transcriptions`, {
+    upstream = await fetch(`${ai.baseUrl}/audio/transcriptions`, {
       method: "POST",
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      headers: { Authorization: `Bearer ${config.apiKey}` },
+      headers: { Authorization: `Bearer ${ai.apiKey}` },
       body: form
     });
   } catch (error) {

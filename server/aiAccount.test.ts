@@ -130,6 +130,42 @@ describe("runAccountCheck", () => {
     expect((await result).retiring).toEqual([{ service: "chat", model: "chat-model", date: "2027-01-14" }]);
   });
 
+  describe("ผู้ให้บริการแบบ Chat Completions ที่ไม่มีการแปลงเสียง (Gemini)", () => {
+    const gemini = { transcribeModel: null, apiStyle: "chat" as const };
+    // รูปแบบจริงที่ Google ตอบเมื่อกุญแจผิด: รหัส 400 กลาง ๆ และบอกสาเหตุในข้อความเท่านั้น
+    const BAD_KEY = { status: 400, body: { error: { code: 400, message: "Please pass a valid API key", status: "INVALID_ARGUMENT" } } };
+
+    it("ตรวจเฉพาะโมเดลสนทนา และรายงานการแปลงเสียงว่าไม่รองรับ", async () => {
+      const { result, calls } = check(HEALTHY, { ...gemini, creditCheck: false });
+      expect(await result).toEqual({ chat: "ok", transcribe: "unsupported", credits: "skipped", retiring: [] });
+      expect(calls.map((call) => call.url)).toEqual([`${BASE}/models/chat-model`]);
+    });
+
+    it("กุญแจถูกปฏิเสธ: รู้ว่าเป็นปัญหากุญแจ แม้ต้นทางจะตอบด้วยรหัส 400", async () => {
+      const { result } = check({ "/models/chat-model": BAD_KEY }, { ...gemini, creditCheck: false });
+      expect(await result).toMatchObject({ chat: "auth", transcribe: "unsupported" });
+    });
+
+    it("ไม่ได้ตั้งกุญแจ: การแปลงเสียงยังคงเป็นไม่รองรับ ไม่ใช่ปัญหากุญแจ", async () => {
+      const { result } = check(HEALTHY, { ...gemini, apiKey: undefined });
+      expect(await result).toMatchObject({ chat: "auth", transcribe: "unsupported" });
+    });
+
+    it("ตรวจเครดิตด้วยคำขอรูปแบบ Chat Completions เมื่อสั่งให้ตรวจ", async () => {
+      const { result, calls } = check({ ...HEALTHY, "/chat/completions": { status: 200, body: { choices: [] } } }, gemini);
+      expect(await result).toMatchObject({ chat: "ok", credits: "ok" });
+      const probe = calls.find((call) => call.method === "POST");
+      expect(probe?.url).toBe(`${BASE}/chat/completions`);
+      expect(probe?.body).toEqual({ model: "chat-model", messages: [{ role: "user", content: "ping" }], max_tokens: 16 });
+    });
+
+    it("โควตาฟรีเต็มตอนตรวจ: ไม่ถือว่าเครดิตหมดหรือบัญชีมีปัญหา", async () => {
+      const full = { status: 429, body: [{ error: { code: 429, message: "Quota exceeded", status: "RESOURCE_EXHAUSTED" } }] };
+      const { result } = check({ ...HEALTHY, "/chat/completions": full }, gemini);
+      expect(await result).toMatchObject({ chat: "ok", transcribe: "unsupported", credits: "unverified" });
+    });
+  });
+
   it("เข้ารหัสชื่อโมเดลก่อนใส่ในที่อยู่", async () => {
     const { result, calls } = check({}, { chatModel: "org/model?x=1", creditCheck: false });
     await result;
@@ -229,6 +265,18 @@ describe("createAiAccountStatus", () => {
     expect(account.snapshot()).toMatchObject({ status: "degraded", transcribe: "model" });
   });
 
+  it("บริการที่ผู้ให้บริการไม่มี ไม่นับเป็นปัญหา และไม่ถูกเขียนทับด้วยปัญหาของบัญชี", () => {
+    const account = createAiAccountStatus(clock);
+    account.apply({ chat: "ok", transcribe: "unsupported", credits: "skipped" });
+    expect(account.snapshot()).toMatchObject({ status: "ok", chat: "ok", transcribe: "unsupported" });
+
+    account.reportFailure("chat", "auth");
+    expect(account.snapshot()).toMatchObject({ status: "degraded", chat: "auth", transcribe: "unsupported" });
+
+    account.reportSuccess("chat");
+    expect(account.snapshot()).toMatchObject({ status: "ok", chat: "ok", transcribe: "unsupported" });
+  });
+
   it("ไม่ได้ตรวจตอนเริ่ม แต่คำขอจริงสำเร็จ: ถือว่าพร้อมใช้งาน", () => {
     const account = createAiAccountStatus(clock);
     account.reportSuccess("chat");
@@ -256,7 +304,7 @@ describe("describeAccountCheck", () => {
   });
 
   it("บอกชัดเมื่อไม่ได้ตรวจเครดิต", () => {
-    expect(describeAccountCheck(result({ credits: "skipped" }), settings, now)[0]?.message).toContain("AI_CREDIT_CHECK=false");
+    expect(describeAccountCheck(result({ credits: "skipped" }), settings, now)[0]?.message).toContain("ไม่ได้ตรวจเครดิต");
     expect(describeAccountCheck(result({ credits: "unverified" }), settings, now)[0]?.message).toContain("ยังตรวจเครดิตไม่ได้");
   });
 
@@ -289,6 +337,28 @@ describe("describeAccountCheck", () => {
     expect(reports.map((report) => report.level)).toEqual(["info", "warn"]);
     expect(reports[1]?.message).toContain("2027-01-14 (อีก 64 วัน)");
     expect(reports[1]?.message).toContain("OPENAI_CHAT_MODEL");
+  });
+
+  it("ผู้ให้บริการที่ไม่มีการแปลงเสียง: ยังนับว่าพร้อมใช้งาน และบอกว่าแอปเดสก์ท็อปต้องพิมพ์แทน", () => {
+    const gemini = { hasApiKey: true, chatModel: "gemini-test", transcribeModel: null, keyVariable: "GEMINI_API_KEY", chatModelVariable: "GEMINI_CHAT_MODEL", providerLabel: "Google Gemini" };
+    const reports = describeAccountCheck(result({ transcribe: "unsupported", credits: "skipped" }), gemini, now);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ level: "info" });
+    expect(reports[0]?.message).toContain("Google Gemini");
+    expect(reports[0]?.message).toContain("gemini-test");
+    expect(reports[0]?.message).toContain("พิมพ์แทน");
+    expect(reports[0]?.message).not.toContain("null");
+  });
+
+  it("ใช้ชื่อตัวแปรของผู้ให้บริการที่ตั้งค่าไว้ในข้อความแนะนำ", () => {
+    const gemini = { hasApiKey: true, chatModel: "gemini-test", transcribeModel: null, keyVariable: "GEMINI_API_KEY", chatModelVariable: "GEMINI_CHAT_MODEL" };
+    const rejected = describeAccountCheck(result({ chat: "auth", transcribe: "unsupported", credits: "unverified" }), gemini, now);
+    expect(rejected[0]?.message).toContain("GEMINI_API_KEY ถูกปฏิเสธ");
+    expect(rejected[0]?.message).not.toContain("OPENAI");
+    expect(rejected[0]?.message).not.toContain("แปลงเสียง");
+
+    const missing = describeAccountCheck(result({ chat: "model", transcribe: "unsupported", credits: "unverified" }), gemini, now);
+    expect(missing[0]?.message).toContain("(GEMINI_CHAT_MODEL)");
   });
 
   it("โมเดลที่เลยกำหนดปิดแล้วให้เปลี่ยนทันที", () => {
