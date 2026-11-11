@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    # thai-voice-agent คือ branch ของโปรเจกต์นี้ใน repo Lighting6647/Javis
+    branches: [main, master, thai-voice-agent]
   pull_request:
 
 permissions:
