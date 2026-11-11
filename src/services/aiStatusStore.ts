@@ -27,6 +27,8 @@ const STATUS_TIMEOUT_MS = 8_000;
 const POLL_WHILE_BROKEN_MS = 60_000;
 /** กลับมาที่แอปหลังไม่ได้ถามนานเท่านี้ ให้ถามใหม่ */
 const STALE_AFTER_MS = 30_000;
+/** เปิดแอปแล้วเซิร์ฟเวอร์ยังไม่รู้ผล (เพิ่งเริ่ม): ถามซ้ำถี่ ๆ ช่วงแรก การตรวจบัญชีปกติจบภายในไม่กี่วินาที */
+const SETTLE_RETRY_MS: readonly number[] = [2_000, 5_000, 15_000];
 
 function isBlocking(state: AiServiceState): state is BlockingReason {
   return state === "quota" || state === "auth" || state === "model";
@@ -49,6 +51,14 @@ export function parseAiStatus(payload: unknown): AiStatus | null {
 
 export function hasAiProblem(status: AiStatus | null): boolean {
   return status !== null && (isBlocking(status.chat) || isBlocking(status.transcribe));
+}
+
+/**
+ * ยังไม่รู้ว่า Javis ตอบได้ไหม เช่น เปิดแอปตอนเซิร์ฟเวอร์เพิ่งเริ่มและยังตรวจบัญชี AI ไม่เสร็จ
+ * ต้องถามซ้ำ ไม่เช่นนั้นคำเตือนจะไม่ขึ้นจนกว่าผู้ใช้จะส่งข้อความแล้วล้มเหลว
+ */
+export function isAiStatusUnsettled(status: AiStatus | null): boolean {
+  return status === null || status.chat === "unchecked" || status.chat === "unreachable";
 }
 
 const CHAT_DETAIL: Record<BlockingReason, string> = {
@@ -135,11 +145,22 @@ export function createAiStatusStore(load: LoadAiStatus, now: () => number = Date
 
     /** เริ่มติดตามสถานะ คืนฟังก์ชันสำหรับหยุด */
     watch: (): (() => void) => {
-      void refresh();
+      let stopped = false;
+      let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+      /** ยังไม่รู้ผล: ถามซ้ำตามช่วงเวลาที่กำหนด แล้วหยุดทันทีที่รู้ผล */
+      const settle = (attempt: number) => {
+        const delay = SETTLE_RETRY_MS[attempt];
+        if (stopped || delay === undefined || !isAiStatusUnsettled(status)) return;
+        settleTimer = setTimeout(() => {
+          void refresh().then(() => settle(attempt + 1));
+        }, delay);
+      };
+      void refresh().then(() => settle(0));
 
       const visible = () => typeof document === "undefined" || document.visibilityState === "visible";
       const poll = setInterval(() => {
-        if (visible() && hasAiProblem(status)) void refresh();
+        if (visible() && (hasAiProblem(status) || isAiStatusUnsettled(status))) void refresh();
       }, POLL_WHILE_BROKEN_MS);
       const onVisible = () => {
         if (visible() && now() - loadedAt > STALE_AFTER_MS) void refresh();
@@ -147,6 +168,8 @@ export function createAiStatusStore(load: LoadAiStatus, now: () => number = Date
 
       if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
       return () => {
+        stopped = true;
+        clearTimeout(settleTimer);
         clearInterval(poll);
         if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
       };

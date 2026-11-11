@@ -173,6 +173,64 @@ describe("createAiStatusStore", () => {
     stop();
   });
 
+  it("เปิดแอปตอนเซิร์ฟเวอร์เพิ่งเริ่มและยังตรวจไม่เสร็จ: ถามซ้ำเร็ว ๆ จนรู้ผล", async () => {
+    vi.useFakeTimers();
+    const unchecked: AiStatus = { chat: "unchecked", transcribe: "unchecked" };
+    const server = fakeServer(unchecked, unchecked, NO_CREDIT);
+    const store = createAiStatusStore(server.load);
+
+    const stop = store.watch();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(describeAiProblem(store.get(), false)).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(server.calls()).toBe(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(store.get()).toEqual(NO_CREDIT);
+
+    stop();
+  });
+
+  it("รู้ผลตั้งแต่ครั้งแรก: ไม่ถามซ้ำช่วงเริ่มต้น", async () => {
+    vi.useFakeTimers();
+    const server = fakeServer(OK);
+    const store = createAiStatusStore(server.load);
+
+    const stop = store.watch();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(server.calls()).toBe(1);
+
+    stop();
+  });
+
+  it("ถามเซิร์ฟเวอร์ไม่ได้ตอนเปิดแอป: ลองซ้ำช่วงแรก แล้วเหลือนาทีละครั้ง", async () => {
+    vi.useFakeTimers();
+    const server = fakeServer(new Error("offline"));
+    const store = createAiStatusStore(server.load);
+
+    const stop = store.watch();
+    await vi.advanceTimersByTimeAsync(22_000);
+    expect(server.calls()).toBe(4);
+    await vi.advanceTimersByTimeAsync(38_000);
+    expect(server.calls()).toBe(5);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(server.calls()).toBe(6);
+
+    stop();
+  });
+
+  it("หยุดติดตามระหว่างรอถามซ้ำ: ไม่ถามเซิร์ฟเวอร์อีก", async () => {
+    vi.useFakeTimers();
+    const server = fakeServer({ chat: "unchecked", transcribe: "unchecked" });
+    const store = createAiStatusStore(server.load);
+
+    const stop = store.watch();
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(server.calls()).toBe(1);
+  });
+
   it("หยุดติดตามแล้วไม่ถามเซิร์ฟเวอร์อีก", async () => {
     vi.useFakeTimers();
     const server = fakeServer(NO_CREDIT);
