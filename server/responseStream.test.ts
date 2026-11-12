@@ -190,6 +190,47 @@ describe("createResponseReducer", () => {
     expect(long?.type === "open" && long.title).toHaveLength(120);
   });
 
+  describe("หน้าค้นหาที่ไม่มีคำค้น", () => {
+    // เสียงพูดที่ถูกตัดกลางประโยคมักเหลือแค่ "ค้นหา" แล้ว AI สั่งเปิดหน้าค้นหาเปล่า (พบบนเว็บจริง)
+    it.each([
+      "https://www.google.com/search?q=",
+      "https://www.google.com/search?q=%20",
+      "https://www.youtube.com/results?search_query=",
+      "https://www.bing.com/search?q=&form=QBLH",
+      "https://duckduckgo.com/?q="
+    ])("ไม่เปิด %s แต่ถามเรื่องที่จะค้นแทน", (url) => {
+      expect(run([openCall({ url, title: "ผลค้นหา" })])).toEqual([{ type: "delta", text: "ต้องการให้ค้นหาเรื่องอะไรดีครับ" }]);
+    });
+
+    it("AI พูดเองแล้ว: ไม่เปิดหน้าเปล่า และไม่ถามซ้ำ", () => {
+      expect(run([delta("จะให้ค้นเรื่องอะไรดีครับ"), openCall({ url: "https://www.google.com/search?q=", title: "ผลค้นหา" })])).toEqual([
+        { type: "delta", text: "จะให้ค้นเรื่องอะไรดีครับ" }
+      ]);
+    });
+
+    it.each([
+      "https://www.google.com/search?q=%E0%B8%81",
+      "https://www.google.com/",
+      "https://www.youtube.com/results?search_query=%E0%B9%80%E0%B8%9E%E0%B8%A5%E0%B8%87",
+      "https://example.com/page?ref=",
+      "https://www.google.com/maps/search/?api=1&q=&query=%E0%B8%81"
+    ])("ยังเปิด %s ตามปกติ", (url) => {
+      expect(run([openCall({ url, title: "หน้า" })]).map((event) => event.type)).toEqual(["delta", "open"]);
+    });
+
+    it("หน้าค้นหาเปล่ามาก่อนหน้าที่มีคำค้น: เปิดหน้าที่มีคำค้น และไม่ถามเรื่องที่จะค้น", () => {
+      const events = run([
+        openCall({ url: "https://www.google.com/search?q=", title: "ว่าง" }),
+        openCall({ url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก" })
+      ]);
+
+      expect(events).toEqual([
+        { type: "delta", text: "ได้เลยครับ นี่คือหน้า ผลค้นหา ก ครับ" },
+        { type: "open", url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก", auto: true }
+      ]);
+    });
+  });
+
   describe("การเสนอกรอกฟอร์ม", () => {
     const pageFields = [
       { id: "f1", label: "ชื่อ-นามสกุล", type: "text" },

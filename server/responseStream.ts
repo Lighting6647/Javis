@@ -38,6 +38,22 @@ export function safeHttpUrl(value: unknown): string | null {
   return url.href;
 }
 
+/** ชื่อพารามิเตอร์คำค้นของหน้าค้นหาที่ใช้กันทั่วไป (Google, Bing, DuckDuckGo และ YouTube) */
+const SEARCH_QUERY_PARAMS = ["q", "query", "search_query"];
+/** ประโยคที่ใช้ถามเมื่อ AI สั่งเปิดหน้าค้นหาโดยไม่มีคำค้น */
+const ASK_SEARCH_TOPIC_TEXT = "ต้องการให้ค้นหาเรื่องอะไรดีครับ";
+
+/**
+ * ลิงก์เป็นหน้าค้นหาที่ไม่มีคำค้น เช่น https://www.google.com/search?q=
+ * เกิดเมื่อผู้ใช้สั่งค้นหาโดยยังไม่ได้บอกเรื่อง (เสียงพูดที่ถูกตัดกลางประโยคมักเหลือแค่ "ค้นหา")
+ * @param url ลิงก์ที่ผ่าน safeHttpUrl แล้ว
+ */
+function isEmptySearchUrl(url: string): boolean {
+  const params = new URL(url).searchParams;
+  const queries = SEARCH_QUERY_PARAMS.filter((name) => params.has(name)).map((name) => params.get(name) ?? "");
+  return queries.length > 0 && queries.every((query) => !query.trim());
+}
+
 function cleanTitle(value: unknown, url: string): string {
   const title = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
   return (title || new URL(url).hostname).slice(0, MAX_TITLE_LENGTH);
@@ -117,6 +133,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   const failureCodes = new Set<string>();
   let done = false;
   let page: { url: string; title: string } | null = null;
+  /** AI สั่งเปิดหน้าค้นหาที่ไม่มีคำค้น: ไม่เปิด และถามผู้ใช้ว่าจะค้นเรื่องอะไรแทน */
+  let searchTopicMissing = false;
   let fill: FillProposal[] | null = null;
   const sources = new Map<string, WebSource>();
   const suggestionBlocks: string[] = [];
@@ -224,7 +242,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     } else if (item.type === "function_call" && item.name === OPEN_PAGE_TOOL && !page) {
       const args = parseArguments(item.arguments);
       const url = safeHttpUrl(args.url);
-      if (url) page = { url, title: cleanTitle(args.title, url) };
+      if (url && isEmptySearchUrl(url)) searchTopicMissing = true;
+      else if (url) page = { url, title: cleanTitle(args.title, url) };
     } else if (item.type === "function_call" && item.name === FILL_FORM_TOOL && !fill) {
       const proposals = readFill(item.arguments);
       if (proposals.length > 0) fill = proposals;
@@ -282,6 +301,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         if (!text.trim()) events.push({ type: "delta", text: `ได้เลยครับ นี่คือหน้า ${page.title} ครับ` });
         // ถ้ารอบนี้อ่านเนื้อหาจากเว็บมาก่อน ลิงก์อาจถูกเนื้อหานั้นชักนำ จึงให้ผู้ใช้กดเปิดเอง
         events.push({ type: "open", url: page.url, title: page.title, auto: !searched });
+      } else if (searchTopicMissing && !text.trim()) {
+        // ไม่มีอะไรให้เปิดและ AI ไม่ได้พูดอะไร: ถามเรื่องที่จะค้น แทนการส่งคำตอบว่าง
+        events.push({ type: "delta", text: ASK_SEARCH_TOPIC_TEXT });
       }
       if (fill) {
         if (!text.trim() && !page) {

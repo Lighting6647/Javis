@@ -210,11 +210,6 @@ describe("buildInstructionParts", () => {
     expect(buildInstructionParts(undefined, undefined, webSearch).fixed).toContain(`${SEARCH_COMMAND} หรือเมื่อคำถามต้องใช้ข้อมูลปัจจุบัน`);
   });
 
-  it.each([false, "request"] as const)("สั่งให้ค้นหาโดยยังไม่บอกเรื่อง (การค้นแบบ %s): ให้ถามเรื่องที่จะค้นก่อน", (webSearch) => {
-    // เสียงพูดที่ถูกตัดกลางประโยคมักเหลือแค่ "ค้นหา" บนเว็บจริงเคยได้หน้าค้นหาของ Google ที่ไม่มีคำค้น
-    expect(buildInstructionParts(undefined, undefined, webSearch).fixed).toContain("ให้ถามเรื่องที่จะค้นก่อน ห้ามค้นหรือเปิดหน้าค้นหาที่ไม่มีคำค้น");
-  });
-
   it("คำสั่งให้ค้นหารวมคำพูดที่ใช้บ่อย: ค้นหา ช่วยหาข้อมูล และ หา...ให้หน่อย", () => {
     // บนเว็บจริง "หาร้านอาหารญี่ปุ่นแถวสยามให้หน่อย" เคยได้ชื่อร้านที่ AI แต่งขึ้นเองแทนการค้น
     for (const phrase of ['"ค้นหา..."', '"ช่วยหาข้อมูล..."', '"หา...ให้หน่อย"', "เสิร์ช"]) expect(SEARCH_COMMAND).toContain(phrase);
