@@ -1,7 +1,8 @@
 import { Ban, Brain, CircleAlert, CircleCheck, ClipboardPen, ExternalLink, Globe } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
+import { describeLinkStatus, needsPopupHelp } from "../conversation/pageLink";
 import { hostOf, sourceLabel, splitLinks } from "../conversation/richText";
-import type { ConversationMessage, FillRequest, PageLink } from "../conversation/types";
+import type { ConversationMessage, FillRequest } from "../conversation/types";
 import { PopupHelp } from "./PopupHelp";
 import { SearchSuggestions } from "./SearchSuggestions";
 
@@ -47,12 +48,6 @@ const FILL_SUMMARY: Record<FillRequest["status"], { icon: typeof Ban; text: (req
   failed: { icon: CircleAlert, text: () => "กรอกไม่สำเร็จ" }
 };
 
-/** บอกผู้ใช้ว่าหน้าเว็บเปิดแล้ว หรือต้องแตะเอง และเพราะอะไร */
-function linkStatus(link: PageLink): string {
-  if (link.opened) return "เปิดให้แล้ว แตะเพื่อเปิดอีกครั้ง";
-  return link.blocked ? "เบราว์เซอร์บล็อกแท็บใหม่ แตะเพื่อเปิด" : "แตะเพื่อเปิดหน้าเว็บ";
-}
-
 export function MessageBubble({ message, onOpenLink, onLinkOpened, onUndoMemory }: MessageBubbleProps) {
   const fromUser = message.role === "user";
   const fill = message.fill ? FILL_SUMMARY[message.fill.status] : null;
@@ -92,12 +87,12 @@ export function MessageBubble({ message, onOpenLink, onLinkOpened, onUndoMemory 
           <span>
             <strong>{message.link.title}</strong>
             <small>
-              {hostOf(message.link.url)} · {linkStatus(message.link)}
+              {hostOf(message.link.url)} · {describeLinkStatus(message.link)}
             </small>
           </span>
         </WebLink>
       )}
-      {message.link?.blocked && <PopupHelp />}
+      {message.link && needsPopupHelp(message.link) && <PopupHelp />}
 
       {message.fill && fill && (
         <span className={`fill-status ${message.fill.status}`}>

@@ -22,6 +22,7 @@ const DESKTOP_PRIVACY_NOTE =
 
 export default function App() {
   const session = useSession();
+  const ready = session.phase === "signed-in" || session.phase === "open";
   const {
     state,
     synthesizer,
@@ -36,14 +37,13 @@ export default function App() {
     cancelFill,
     undoMemory,
     markLinkOpened
-  } = useConversation();
+  } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
   const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [desktop] = useState(isDesktopApp);
 
-  const ready = session.phase === "signed-in" || session.phase === "open";
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;

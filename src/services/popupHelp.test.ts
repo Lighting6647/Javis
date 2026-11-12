@@ -11,19 +11,33 @@ const FIREFOX_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gec
 
 describe("popupHelpFor", () => {
   it.each([
-    ["Chrome บนคอมพิวเตอร์", CHROME_WINDOWS, "Chrome", "Always allow pop-ups and redirects"],
-    ["Edge บนคอมพิวเตอร์", EDGE_WINDOWS, "Edge", "Always allow pop-ups and redirects"],
+    ["Chrome บนคอมพิวเตอร์", CHROME_WINDOWS, "Chrome", "Site settings"],
+    ["Edge บนคอมพิวเตอร์", EDGE_WINDOWS, "Edge", "Permissions for this site"],
     ["Chrome บน Android", CHROME_ANDROID, "Chrome บน Android", "Pop-ups and redirects"],
     ["Safari บน iPhone", SAFARI_IPHONE, "iPhone และ iPad", "Block Pop-ups"],
     ["Chrome บน iPhone ซึ่งใช้การตั้งค่าของตัวเอง", CHROME_IPHONE, "iPhone และ iPad", "Block Pop-ups"],
     ["Safari บน Mac", SAFARI_MAC, "Safari", "Pop-up Windows"],
-    ["Firefox", FIREFOX_WINDOWS, "Firefox", "Allow pop-ups for this site"]
+    ["Firefox", FIREFOX_WINDOWS, "Firefox", "Block pop-up windows"]
   ])("%s: บอกขั้นตอนของเบราว์เซอร์นั้น", (_name, userAgent, browser, label) => {
     const help = popupHelpFor(userAgent);
 
     expect(help.browser).toBe(browser);
     expect(help.steps.join(" ")).toContain(label);
   });
+
+  it.each([
+    ["Chrome", CHROME_WINDOWS, "Pop-ups and redirects"],
+    ["Edge", EDGE_WINDOWS, "Pop-ups and redirects"],
+    ["Firefox", FIREFOX_WINDOWS, "Exceptions"]
+  ])(
+    "%s: ขั้นตอนไม่พึ่งไอคอนแจ้งบล็อกที่ขึ้นเฉพาะตอนถูกบล็อก เพราะผู้ใช้อ่านคำแนะนำหลังกลับมาจากเว็บที่เปิดไปแล้ว",
+    (_name, userAgent, settingName) => {
+      const steps = popupHelpFor(userAgent).steps.join(" ");
+
+      expect(steps).not.toMatch(/Pop-up blocked|ตอนที่แท็บถูกบล็อก/);
+      expect(steps).toContain(settingName);
+    }
+  );
 
   it("เบราว์เซอร์ที่ไม่รู้จัก: บอกขั้นตอนทั่วไป แทนการเดาชื่อเมนู", () => {
     const help = popupHelpFor("SomeNewBrowser/1.0");

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openExternalPage } from "./openPage";
+import { leaveToPage, openExternalPage } from "./openPage";
 
 const URL_WITH_HIGHLIGHT = "https://www.goldtraders.or.th/#:~:text=62%2C350";
 
@@ -64,5 +64,39 @@ describe("openExternalPage", () => {
     });
 
     expect(openExternalPage("https://example.com/")).toBe(false);
+  });
+});
+
+describe("leaveToPage", () => {
+  /** จำลองแท็บปัจจุบัน: จดว่าถูกพาไปที่ใด */
+  function tab(assign: (url: string) => void = () => undefined) {
+    const spy = vi.fn(assign);
+    vi.stubGlobal("window", { location: { assign: spy } });
+    return spy;
+  }
+
+  it("พาแท็บนี้ไปยังหน้านั้น โดยคงส่วนที่ชี้ข้อความไว้", () => {
+    const assign = tab();
+
+    expect(leaveToPage(URL_WITH_HIGHLIGHT)).toBe(true);
+    expect(assign).toHaveBeenCalledWith(URL_WITH_HIGHLIGHT);
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "not a url", ""])(
+    "ลิงก์ที่ไม่ปลอดภัย (%j): ไม่พาไป",
+    (url) => {
+      const assign = tab();
+
+      expect(leaveToPage(url)).toBe(false);
+      expect(assign).not.toHaveBeenCalled();
+    }
+  );
+
+  it("เบราว์เซอร์ไม่ยอมให้พาไป: บอกว่าไปไม่ได้ ไม่ทำให้แอปล้ม", () => {
+    tab(() => {
+      throw new Error("navigation refused");
+    });
+
+    expect(leaveToPage("https://example.com/")).toBe(false);
   });
 });

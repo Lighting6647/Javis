@@ -12,6 +12,7 @@ import {
   type MemoryEntry,
   type MemoryNote,
   type Notice,
+  type PageLink,
   type StreamChat
 } from "./types";
 
@@ -23,8 +24,13 @@ export interface ConversationDeps {
   recognizer: SpeechRecognizer;
   synthesizer: SpeechSynthesizer;
   chat: StreamChat;
-  /** เปิดหน้าเว็บให้ผู้ใช้ คืน false ถ้าเปิดไม่ได้ (ผู้ใช้ยังกดลิงก์ในบทสนทนาเองได้) */
+  /** เปิดหน้าเว็บให้ผู้ใช้ในแท็บใหม่ เบราว์เซอร์ในตัว หรือเบราว์เซอร์ของระบบ คืน false ถ้าเปิดไม่ได้ */
   openPage: (url: string) => boolean;
+  /**
+   * พาแท็บนี้ไปยังหน้าเว็บนั้น คืน false ถ้าไปไม่ได้ ใช้เมื่อผู้ใช้สั่งให้เปิดแต่ openPage เปิดไม่ได้
+   * ผู้ให้มาต้องเก็บบทสนทนาไว้เองก่อนออกจากหน้า ถ้าไม่ให้มา ผู้ใช้ต้องแตะลิงก์ในบทสนทนาเอง
+   */
+  leaveToPage?: (url: string) => boolean;
   /** อ่านหน้าเว็บที่เปิดอยู่ในเบราว์เซอร์ในตัว มีเฉพาะในแอปเดสก์ท็อป */
   getPageContext?: () => Promise<PageContext | null>;
   /** กรอกค่าลงฟอร์มของหน้าเว็บที่เปิดอยู่ เรียกหลังผู้ใช้ยืนยันแล้วเท่านั้น */
@@ -77,6 +83,8 @@ export class ConversationController {
   private sequence = 0;
   /** กันการกดยืนยันซ้ำระหว่างที่กำลังกรอก */
   private filling = false;
+  /** ลิงก์ที่รอพาแท็บนี้ไปเมื่อคำตอบจบ ถ้าผู้ใช้เปลี่ยนจังหวะหรือแตะเปิดเองก่อนถึงตอนนั้น จะไม่พาไป */
+  private leaving: { messageId: string; url: string } | null = null;
 
   constructor(private readonly deps: ConversationDeps) {}
 
@@ -126,6 +134,18 @@ export class ConversationController {
     this.update(INITIAL_STATE);
   };
 
+  /**
+   * แสดงบทสนทนาที่เก็บไว้ก่อนออกจากหน้าไปยังเว็บอื่น ต่อจากเดิม
+   * รับเฉพาะตอนที่ยังว่างและยังไม่ได้เริ่มอะไร เพื่อไม่ทับหรือแทรกบทสนทนาที่ผู้ใช้เริ่มไปแล้ว
+   */
+  restore = (messages: ConversationMessage[]): void => {
+    if (this.state.phase !== "idle" || this.state.messages.length > 0) return;
+
+    // ออกรหัสใหม่ เพื่อไม่ให้ซ้ำกับข้อความที่จะเกิดในรอบนี้
+    const restored = messages.filter((message) => message.text.trim()).map((message) => ({ ...message, id: this.nextId() }));
+    if (restored.length > 0) this.update({ messages: restored });
+  };
+
   /** หยุดคำตอบที่กำลังคิดหรือพูดอยู่ แล้วกลับมาฟังต่อ */
   interrupt = (): void => {
     const epoch = this.halt();
@@ -168,10 +188,14 @@ export class ConversationController {
     }));
   };
 
-  /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความนั้นเอง: ลิงก์ถือว่าเปิดแล้ว และไม่ต้องบอกว่าถูกบล็อกอีก */
+  /**
+   * ผู้ใช้แตะลิงก์หน้าเว็บของข้อความนั้นเอง: ลิงก์ถือว่าเปิดแล้วในแท็บใหม่ ไม่ต้องบอกว่าถูกบล็อกอีก
+   * และถ้ากำลังรอพาแท็บนี้ไปยังหน้าเดียวกัน ก็ไม่ต้องพาไปแล้ว ไม่เช่นนั้นหน้าเดิมจะเปิดซ้ำสองที่
+   */
   markLinkOpened = (messageId: string): void => {
+    if (this.leaving?.messageId === messageId) this.leaving = null;
     this.patchMessage(messageId, (message) =>
-      message.link ? { ...message, link: { ...message.link, opened: true, blocked: false } } : message
+      message.link ? { ...message, link: { ...message.link, opened: true, blocked: false, inPlace: false } } : message
     );
   };
 
@@ -192,13 +216,42 @@ export class ConversationController {
     this.request = null;
     this.deps.recognizer.cancel();
     this.deps.synthesizer.cancel();
+    // ผู้ใช้เปลี่ยนจังหวะก่อนถึงเวลาออกจากหน้า: ไม่พาไปแล้ว ลิงก์จึงกลับเป็นให้แตะเอง
+    const cancelledLeave = this.leaving?.messageId;
+    this.leaving = null;
     this.update({
       partial: "",
       searching: false,
-      // คำตอบที่ถูกตัดก่อนมีข้อความ ไม่ต้องค้างเป็นกล่องเปล่า
-      messages: this.state.messages.filter((message) => message.text.trim())
+      messages: this.state.messages
+        // คำตอบที่ถูกตัดก่อนมีข้อความ ไม่ต้องค้างเป็นกล่องเปล่า
+        .filter((message) => message.text.trim())
+        .map((message) =>
+          message.id === cancelledLeave && message.link ? { ...message, link: { ...message.link, inPlace: false } } : message
+        )
     });
     return this.epoch;
+  }
+
+  /**
+   * พาแท็บนี้ไปยังหน้าที่รออยู่ คืน false ถ้าไปไม่ได้ ซึ่งลิงก์จะกลับเป็นให้ผู้ใช้แตะเอง
+   * เมื่อไปได้ จะหยุดฟังและหยุดพูดก่อนหน้านี้ถูกแทนที่ ถ้าเบราว์เซอร์คืนหน้าเดิมให้ตอนผู้ใช้กดย้อนกลับ จะอยู่ในสภาพพร้อมใช้
+   */
+  private leave(): boolean {
+    const target = this.leaving;
+    this.leaving = null;
+    if (!target) return false;
+
+    const mark = (state: Pick<PageLink, "opened" | "blocked" | "inPlace">) =>
+      this.patchMessage(target.messageId, (message) => (message.link ? { ...message, link: { ...message.link, ...state } } : message));
+
+    // ทำเครื่องหมายก่อนออก เพราะบทสนทนาในจังหวะนี้คือสิ่งที่ถูกเก็บไว้คืนให้ตอนผู้ใช้กลับมา
+    mark({ opened: true, blocked: false, inPlace: true });
+    if (!this.deps.leaveToPage?.(target.url)) {
+      mark({ opened: false, blocked: true, inPlace: false });
+      return false;
+    }
+    this.stop();
+    return true;
   }
 
   private patchMessage(id: string, patch: (message: ConversationMessage) => ConversationMessage): void {
@@ -385,10 +438,13 @@ export class ConversationController {
             case "open": {
               // เปิดให้เองเฉพาะเมื่อ backend ยืนยันว่าลิงก์มาจากคำสั่งของผู้ใช้โดยตรง
               const opened = event.auto && this.deps.openPage(event.url);
-              const blocked = event.auto && !opened;
+              // เปิดแท็บใหม่ไม่ได้: พาแท็บนี้ไปแทนเมื่อคำตอบจบ ผู้ใช้สั่งให้เปิดแล้ว จึงไม่ควรต้องแตะลิงก์เองอีก
+              const inPlace = event.auto && !opened && Boolean(this.deps.leaveToPage);
+              const blocked = event.auto && !opened && !inPlace;
+              if (inPlace) this.leaving = { messageId: replyId, url: event.url };
               this.patchMessage(replyId, (message) => ({
                 ...message,
-                link: { title: event.title, url: event.url, opened, blocked }
+                link: { title: event.title, url: event.url, opened, blocked, inPlace }
               }));
               // ผู้ใช้ที่สั่งด้วยเสียงไม่ได้มองจอ: ต้องได้ยินว่ายังไม่ได้เปิด ไม่เช่นนั้นจะรอหน้าเว็บที่ไม่มา
               if (blocked && speakReply) chunker.push(`\n${NOTICE_TEXT.popupBlocked}`);
@@ -444,6 +500,21 @@ export class ConversationController {
     if (!reply.trim()) {
       this.fail({ tone: "error", text: NOTICE_TEXT.emptyReply });
       return;
+    }
+
+    const leavingAfterReply = () => this.leaving?.messageId === replyId;
+    if (leavingAfterReply() && speakReply) {
+      // คำตอบที่มีแหล่งที่มาคือเนื้อหาที่ผู้ใช้ขอ จึงอ่านให้จบก่อนออก ส่วนคำตอบของคำสั่งเปิดเว็บเป็นแค่คำรับคำ
+      // จึงไม่รออ่าน แต่ไม่ตัดประโยคที่เริ่มอ่านไปแล้วกลางคัน
+      const answered = this.state.messages.some((message) => message.id === replyId && Boolean(message.sources?.length));
+      if (answered) chunker.flush();
+      await speech;
+      if (epoch !== this.epoch) return;
+    }
+    // ตรวจอีกครั้ง เพราะระหว่างอ่านคำตอบ ผู้ใช้อาจแตะลิงก์เปิดเองไปแล้ว
+    if (leavingAfterReply()) {
+      if (this.leave()) return;
+      if (speakReply) chunker.push(`\n${NOTICE_TEXT.popupBlocked}`);
     }
 
     if (speakReply) {

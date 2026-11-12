@@ -3,7 +3,14 @@ import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
 import { ConversationController, HISTORY_LIMIT, type MemoryPort } from "./controller";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
-import { ChatError, type ChatStreamOptions, type ChatTurn, type MemoryEntry, type StreamChat } from "./types";
+import {
+  ChatError,
+  type ChatStreamOptions,
+  type ChatTurn,
+  type ConversationMessage,
+  type MemoryEntry,
+  type StreamChat
+} from "./types";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -116,7 +123,11 @@ class FakeChat {
 /** ตัวเปิดหน้าเว็บจำลอง: จดไว้ว่าถูกสั่งเปิดอะไร และกำหนดได้ว่าเปิดสำเร็จหรือถูกบล็อก */
 class FakeBrowser {
   succeeds = true;
+  /** การพาแท็บนี้ไปยังหน้าเว็บสำเร็จหรือไม่ */
+  leaveSucceeds = true;
   readonly opened: string[] = [];
+  /** หน้าที่แท็บนี้ถูกพาไป พร้อมบทสนทนาที่เห็นในจังหวะนั้น (สิ่งที่จะถูกเก็บไว้คืนให้ตอนผู้ใช้กลับมา) */
+  readonly left: Array<{ url: string; messages: ConversationMessage[] }> = [];
 
   readonly open = (url: string): boolean => {
     this.opened.push(url);
@@ -124,16 +135,27 @@ class FakeBrowser {
   };
 }
 
-function setup() {
+interface SetupOptions {
+  /** เบราว์เซอร์ทั่วไป: เมื่อเปิดแท็บใหม่ไม่ได้ พาแท็บนี้ไปยังหน้านั้นแทนได้ */
+  canLeave?: boolean;
+}
+
+function setup(options: SetupOptions = {}) {
   const recognizer = new FakeRecognizer();
   const synthesizer = new FakeSynthesizer();
   const chat = new FakeChat();
   const browser = new FakeBrowser();
-  const controller = new ConversationController({
+  const controller: ConversationController = new ConversationController({
     recognizer,
     synthesizer,
     chat: chat.stream,
-    openPage: browser.open
+    openPage: browser.open,
+    leaveToPage: options.canLeave
+      ? (url) => {
+          if (browser.leaveSucceeds) browser.left.push({ url, messages: controller.getState().messages });
+          return browser.leaveSucceeds;
+        }
+      : undefined
   });
   return { recognizer, synthesizer, chat, browser, controller };
 }
@@ -749,7 +771,8 @@ describe("ConversationController", () => {
       title: "กรมอุตุนิยมวิทยา",
       url: "https://www.tmd.go.th/",
       opened: true,
-      blocked: false
+      blocked: false,
+      inPlace: false
     });
   });
 
@@ -784,7 +807,13 @@ describe("ConversationController", () => {
       await settle();
 
       expect(browser.opened).toEqual([OPEN.url]);
-      expect(controller.getState().messages.at(-1)?.link).toEqual({ title: "ผลค้นหา ก", url: OPEN.url, opened: false, blocked: true });
+      expect(controller.getState().messages.at(-1)?.link).toEqual({
+        title: "ผลค้นหา ก",
+        url: OPEN.url,
+        opened: false,
+        blocked: true,
+        inPlace: false
+      });
       // ไม่ได้เปิดโหมดเสียง จึงไม่มีอะไรถูกอ่านออกเสียง
       expect(synthesizer.spoken).toEqual([]);
       expect(controller.getState().notice).toBeNull();
@@ -844,6 +873,255 @@ describe("ConversationController", () => {
       controller.markLinkOpened("message-1");
       controller.markLinkOpened("ไม่มีข้อความนี้");
       expect(controller.getState().messages[0]?.link).toBeUndefined();
+    });
+  });
+
+  describe("เปิดแท็บใหม่ไม่ได้ แต่พาแท็บนี้ไปยังหน้านั้นได้", () => {
+    const OPEN = { type: "open", url: "https://pantip.com/", title: "Pantip", auto: true } as const;
+    const SAID = "ได้เลยครับ นี่คือหน้า Pantip ครับ";
+    const ANSWER = "ราคาทองคำแท่งวันนี้ขายออก 62,350 บาทครับ\n";
+    const SOURCES = [{ title: "สมาคมค้าทองคำ", url: "https://www.goldtraders.or.th/" }];
+
+    it("พิมพ์สั่ง: พาแท็บนี้ไปทันทีที่คำตอบจบ ไม่ทิ้งลิงก์ไว้ให้แตะ", async () => {
+      const { chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+
+      controller.sendText("เข้าเว็บไซต์ pantip");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      // ระหว่างรอคำตอบจบ ลิงก์บอกว่ากำลังจะเปิดในแท็บนี้ ไม่ใช่ให้ผู้ใช้แตะเอง
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: false, inPlace: true });
+      expect(browser.left).toEqual([]);
+
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(browser.opened).toEqual([OPEN.url]);
+      expect(browser.left.map((entry) => entry.url)).toEqual([OPEN.url]);
+      // บทสนทนาในจังหวะที่ออก คือสิ่งที่ถูกเก็บไว้คืนให้ตอนกลับมา: ต้องบอกแล้วว่าหน้านี้เปิดในแท็บนี้
+      expect(browser.left[0]?.messages.at(-1)).toMatchObject({
+        text: SAID,
+        link: { title: "Pantip", url: OPEN.url, opened: true, blocked: false, inPlace: true }
+      });
+      // ถ้าเบราว์เซอร์คืนหน้าเดิมให้ตอนผู้ใช้กดย้อนกลับ ต้องอยู่ในสภาพพร้อมใช้ ไม่ค้างว่ากำลังคิดหรือกำลังฟัง
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false, notice: null });
+    });
+
+    it("สั่งด้วยเสียง: ออกเลยโดยไม่รออ่านคำรับคำ ไม่บอกว่าเบราว์เซอร์บล็อก และไม่กลับไปฟังต่อ", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("เข้าเว็บไซต์ pantip");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(browser.left.map((entry) => entry.url)).toEqual([OPEN.url]);
+      expect(synthesizer.spoken).toEqual([]);
+      expect(recognizer.listens).toHaveLength(1);
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
+    });
+
+    it("คำตอบที่มีแหล่งที่มา: อ่านคำตอบให้จบก่อน แล้วจึงพาไปยังหน้าแหล่งข้อมูล", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+      synthesizer.holdSpeech = true;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("หาข้อมูลราคาทองวันนี้ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: ANSWER });
+      chat.current.options.onEvent({ type: "sources", sources: SOURCES });
+      chat.current.options.onEvent({ ...OPEN, url: SOURCES[0].url, title: SOURCES[0].title });
+      chat.current.result.resolve(ANSWER);
+      await settle();
+
+      // ยังอ่านคำตอบไม่จบ: ยังไม่ออกจากหน้า
+      expect(synthesizer.spoken).toEqual(["ราคาทองคำแท่งวันนี้ขายออก 62,350 บาทครับ"]);
+      expect(browser.left).toEqual([]);
+
+      synthesizer.held[0]?.resolve();
+      await settle();
+      expect(browser.left.map((entry) => entry.url)).toEqual([SOURCES[0].url]);
+    });
+
+    it("ผู้ใช้พูดแทรกก่อนอ่านคำตอบจบ: ไม่ออกจากหน้า และลิงก์กลับเป็นให้แตะเอง", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+      synthesizer.holdSpeech = true;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("หาข้อมูลราคาทองวันนี้ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: ANSWER });
+      chat.current.options.onEvent({ type: "sources", sources: SOURCES });
+      chat.current.options.onEvent({ ...OPEN, url: SOURCES[0].url, title: SOURCES[0].title });
+      chat.current.result.resolve(ANSWER);
+      await settle();
+
+      controller.interrupt();
+      synthesizer.held[0]?.resolve();
+      await settle();
+
+      expect(browser.left).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: false, inPlace: false });
+      expect(controller.getState().phase).toBe("listening");
+    });
+
+    it("พาแท็บนี้ไปไม่สำเร็จ: กลับไปบอกว่าถูกบล็อกและให้ผู้ใช้แตะลิงก์เอง", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+      browser.leaveSucceeds = false;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("เข้าเว็บไซต์ pantip");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(browser.left).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: true, inPlace: false });
+      expect(synthesizer.spoken).toEqual([SAID, NOTICE_TEXT.popupBlocked]);
+      expect(controller.getState().phase).toBe("listening");
+    });
+
+    it("เปิดแท็บใหม่สำเร็จ: แท็บนี้อยู่ที่เดิม", async () => {
+      const { chat, browser, controller } = setup({ canLeave: true });
+
+      controller.sendText("เข้าเว็บไซต์ pantip");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(browser.opened).toEqual([OPEN.url]);
+      expect(browser.left).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: true, blocked: false, inPlace: false });
+    });
+
+    it("ลิงก์ที่ระบบไม่ได้สั่งให้เปิดเอง: ไม่พาแท็บนี้ไป ผู้ใช้เป็นคนแตะเอง", async () => {
+      const { chat, browser, controller } = setup({ canLeave: true });
+
+      controller.sendText("ค้นแล้วเปิดให้ด้วย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "นี่ครับ" });
+      chat.current.options.onEvent({ ...OPEN, auto: false });
+      chat.current.result.resolve("นี่ครับ");
+      await settle();
+
+      expect(browser.opened).toEqual([]);
+      expect(browser.left).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: false, inPlace: false });
+    });
+
+    it("ผู้ใช้แตะลิงก์เปิดเองระหว่างรอ: ถือว่าเปิดในแท็บใหม่แล้ว ไม่ใช่ในแท็บนี้", async () => {
+      const { chat, browser, controller } = setup({ canLeave: true });
+      browser.succeeds = false;
+
+      controller.sendText("เข้าเว็บไซต์ pantip");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      controller.markLinkOpened(controller.getState().messages.at(-1)?.id ?? "");
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: true, blocked: false, inPlace: false });
+      // หน้านั้นเปิดในแท็บใหม่ไปแล้ว ถ้าพาแท็บนี้ไปอีกจะเปิดซ้ำสองที่
+      expect(browser.left).toEqual([]);
+    });
+  });
+
+  describe("กลับมาหลังออกจากหน้าไปยังเว็บอื่น", () => {
+    const BEFORE: ConversationMessage[] = [
+      { id: "message-7", role: "user", text: "เข้าเว็บไซต์ pantip" },
+      {
+        id: "message-8",
+        role: "assistant",
+        text: "ได้เลยครับ นี่คือหน้า Pantip ครับ",
+        link: { title: "Pantip", url: "https://pantip.com/", opened: true, blocked: false, inPlace: true }
+      }
+    ];
+
+    it("แสดงบทสนทนาเดิมต่อ และส่งเป็นประวัติให้คำถามถัดไป", async () => {
+      const { chat, controller } = setup();
+      controller.restore(BEFORE);
+
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
+      expect(controller.getState().messages.map(({ role, text, link }) => ({ role, text, link }))).toEqual(
+        BEFORE.map(({ role, text, link }) => ({ role, text, link }))
+      );
+
+      controller.sendText("ขอบคุณ");
+      await settle();
+      expect(chat.current.messages).toEqual([
+        { role: "user", content: "เข้าเว็บไซต์ pantip" },
+        { role: "assistant", content: "ได้เลยครับ นี่คือหน้า Pantip ครับ" },
+        { role: "user", content: "ขอบคุณ" }
+      ]);
+    });
+
+    it("ข้อความใหม่ได้รหัสที่ไม่ซ้ำกับข้อความเดิม", async () => {
+      const { chat, controller } = setup();
+      controller.restore(BEFORE);
+
+      controller.sendText("ขอบคุณ");
+      await settle();
+      chat.reply("ยินดีครับ");
+      await settle();
+
+      const ids = controller.getState().messages.map((message) => message.id);
+      expect(ids).toHaveLength(4);
+      expect(new Set(ids).size).toBe(4);
+    });
+
+    it("ไม่รับข้อความว่างที่ค้างมา", () => {
+      const { controller } = setup();
+      controller.restore([...BEFORE, { id: "message-9", role: "assistant", text: "  " }]);
+
+      expect(controller.getState().messages).toHaveLength(2);
+    });
+
+    it("ไม่ทับบทสนทนาที่เริ่มไปแล้ว", async () => {
+      const { chat, controller } = setup();
+
+      controller.sendText("สวัสดี");
+      await settle();
+      chat.reply("สวัสดีครับ");
+      await settle();
+      controller.restore(BEFORE);
+
+      expect(controller.getState().messages.map((message) => message.text)).toEqual(["สวัสดี", "สวัสดีครับ"]);
+    });
+
+    it("ไม่แทรกเข้ามาระหว่างที่กำลังฟังหรือรอคำตอบ", async () => {
+      const { controller } = setup();
+
+      void controller.start();
+      await settle();
+      controller.restore(BEFORE);
+
+      expect(controller.getState()).toMatchObject({ phase: "listening", messages: [] });
+    });
+
+    it("ผู้ใช้ออกจากระบบ: บทสนทนาที่รับกลับมาถูกล้างเหมือนบทสนทนาอื่น", () => {
+      const { controller } = setup();
+      controller.restore(BEFORE);
+
+      controller.reset();
+
+      expect(controller.getState().messages).toEqual([]);
     });
   });
 

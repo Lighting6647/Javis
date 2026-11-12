@@ -34,11 +34,15 @@ export function markPopupHelpSeen(storage: SeenStorage = localStorage): void {
 
 const TRY_AGAIN = "สั่ง Javis อีกครั้ง หน้าเว็บจะเปิดในแท็บใหม่เองทันที";
 
-const chromiumDesktop = (browser: string): PopupHelp => ({
+/**
+ * ผู้ใช้อ่านคำแนะนำนี้หลังกลับมาจากเว็บที่ Javis พาแท็บไป ไอคอนแจ้งบล็อกที่ปลายแถบที่อยู่ไม่อยู่แล้วในตอนนั้น
+ * จึงพาไปทางการตั้งค่าของเว็บไซต์ ซึ่งเปิดได้ทุกเมื่อ
+ */
+const chromiumDesktop = (browser: string, siteSettings: string): PopupHelp => ({
   browser,
   steps: [
-    "ดูที่ปลายขวาของแถบที่อยู่ จะมีไอคอนแจ้งว่าป๊อปอัปถูกบล็อก (Pop-up blocked) ให้กดไอคอนนั้น",
-    "เลือก อนุญาตป๊อปอัปและการเปลี่ยนเส้นทางจากเว็บนี้เสมอ (Always allow pop-ups and redirects) แล้วกด เสร็จ",
+    `กดไอคอนซ้ายสุดของแถบที่อยู่ (หน้าที่อยู่เว็บ) แล้วเลือก ${siteSettings}`,
+    "ที่รายการ ป๊อปอัปและการเปลี่ยนเส้นทาง (Pop-ups and redirects) เลือก อนุญาต (Allow) แล้วกลับมาที่หน้านี้",
     TRY_AGAIN
   ]
 });
@@ -61,8 +65,8 @@ export function popupHelpFor(userAgent: string): PopupHelp {
     return {
       browser: "Firefox",
       steps: [
-        "ตอนที่แท็บถูกบล็อก จะมีแถบแจ้งเตือนขึ้นใต้แถบที่อยู่ ให้กดปุ่ม ตัวเลือก (Options)",
-        "เลือก อนุญาตป๊อปอัปสำหรับเว็บนี้ (Allow pop-ups for this site)",
+        "เปิดเมนู > การตั้งค่า (Settings) > ความเป็นส่วนตัวและความปลอดภัย (Privacy & Security) แล้วเลื่อนไปที่ สิทธิ์อนุญาต (Permissions)",
+        "ข้างตัวเลือก ปิดกั้นหน้าต่างป๊อปอัป (Block pop-up windows) กด ข้อยกเว้น (Exceptions) ใส่ที่อยู่ของเว็บนี้ กด อนุญาต (Allow) แล้วบันทึก",
         TRY_AGAIN
       ]
     };
@@ -79,8 +83,8 @@ export function popupHelpFor(userAgent: string): PopupHelp {
     };
   }
 
-  if (/Edg\//.test(userAgent)) return chromiumDesktop("Edge");
-  if (/Chrome\//.test(userAgent)) return chromiumDesktop("Chrome");
+  if (/Edg\//.test(userAgent)) return chromiumDesktop("Edge", "สิทธิ์สำหรับไซต์นี้ (Permissions for this site)");
+  if (/Chrome\//.test(userAgent)) return chromiumDesktop("Chrome", "การตั้งค่าเว็บไซต์ (Site settings)");
 
   if (/Safari\//.test(userAgent) && /Macintosh/.test(userAgent)) {
     return {

@@ -28,3 +28,20 @@ export function openExternalPage(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * พาแท็บนี้ไปยังหน้าเว็บนั้น คืน false ถ้าไปไม่ได้ ใช้เมื่อเบราว์เซอร์ไม่ยอมเปิดแท็บใหม่
+ * หน้าเว็บพาแท็บของตัวเองไปได้โดยไม่ต้องมีการแตะของผู้ใช้ แม้เพิ่งถูกบล็อกแท็บใหม่ (วัดใน Chrome และ Edge)
+ * ผู้เรียกต้องเก็บสิ่งที่อยากให้อยู่ต่อไว้ก่อน เพราะเมื่อผู้ใช้กดย้อนกลับ หน้านี้มักถูกโหลดใหม่ทั้งหน้า
+ */
+export function leaveToPage(url: string): boolean {
+  const safe = safeHttpUrl(url);
+  if (!safe) return false;
+
+  try {
+    window.location.assign(safe);
+    return true;
+  } catch {
+    return false;
+  }
+}
