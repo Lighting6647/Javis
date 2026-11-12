@@ -3,11 +3,13 @@ import {
   buildInstructionParts,
   buildInstructions,
   buildSearchStepInstructions,
+  buildSearchUnavailableInstructions,
   chatRequestSchema,
   describeToday,
   MAX_CHAT_MESSAGES,
   MAX_MEMORIES,
-  MAX_MESSAGE_LENGTH
+  MAX_MESSAGE_LENGTH,
+  SEARCH_COMMAND
 } from "./chat.js";
 
 const user = (content: string) => ({ role: "user", content });
@@ -199,13 +201,18 @@ describe("buildInstructionParts", () => {
     const offline = buildInstructionParts(undefined, undefined, false).fixed;
 
     // ผู้ใช้สั่งค้นหาแล้วถูกถามกลับว่าจะให้เปิดหน้าค้นหาไหม คือสั่งแล้วไม่ได้ผล
-    expect(offline).toContain("เมื่อผู้ใช้สั่งให้ค้นหา หาข้อมูล หรือเสิร์ชเรื่องใด นั่นคือคำสั่งให้เปิดหน้าค้นหาของเรื่องนั้น");
+    expect(offline).toContain(`${SEARCH_COMMAND} นั่นคือคำสั่งให้เปิดหน้าค้นหาของเรื่องนั้น`);
     expect(offline).toContain("ไม่ต้องถามก่อน");
     expect(offline).toContain("ถามผู้ใช้ว่าต้องการให้เปิดหน้าค้นหาให้ดูไหม");
   });
 
   it.each([true, "grounded", "request"] as const)("เมื่อค้นเว็บได้ (%s): คำสั่งให้ค้นหาเรื่องใดต้องค้นเว็บเสมอ ไม่ตอบจากความรู้เดิม", (webSearch) => {
-    expect(buildInstructionParts(undefined, undefined, webSearch).fixed).toContain("เมื่อผู้ใช้สั่งให้ค้นหา หาข้อมูล หรือเสิร์ชเรื่องใด");
+    expect(buildInstructionParts(undefined, undefined, webSearch).fixed).toContain(`${SEARCH_COMMAND} หรือเมื่อคำถามต้องใช้ข้อมูลปัจจุบัน`);
+  });
+
+  it("คำสั่งให้ค้นหารวมคำพูดที่ใช้บ่อย: ค้นหา ช่วยหาข้อมูล และ หา...ให้หน่อย", () => {
+    // บนเว็บจริง "หาร้านอาหารญี่ปุ่นแถวสยามให้หน่อย" เคยได้ชื่อร้านที่ AI แต่งขึ้นเองแทนการค้น
+    for (const phrase of ['"ค้นหา..."', '"ช่วยหาข้อมูล..."', '"หา...ให้หน่อย"', "เสิร์ช"]) expect(SEARCH_COMMAND).toContain(phrase);
   });
 
   it.each([true, false, "grounded", "request"] as const)(
@@ -226,6 +233,31 @@ describe("buildInstructionParts", () => {
     expect(grounded).not.toContain("](URL)");
     // ผู้ให้บริการที่ส่งที่อยู่จริงของแหล่งที่มาให้ AI ยังอ้างเป็นลิงก์ตามเดิม
     expect(buildInstructionParts(undefined, undefined, true).fixed).toContain("[ชื่อเว็บ](URL)");
+  });
+});
+
+describe("buildSearchUnavailableInstructions", () => {
+  const memories = [{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }];
+  const today = "วันพุธที่ 11 พฤศจิกายน ค.ศ. 2026 (พ.ศ. 2569) ตามเวลาประเทศไทย";
+
+  it("บอกว่าค้นเว็บไม่สำเร็จและห้ามแต่งข้อมูล พร้อมวันที่และความจำของผู้ใช้", () => {
+    const instructions = buildSearchUnavailableInstructions(memories, today);
+
+    expect(instructions).toContain("คุณคือ Javis");
+    expect(instructions).toContain("ค้นเว็บไม่สำเร็จ");
+    expect(instructions).toContain("ห้ามเดาหรือแต่งข้อมูลขึ้นเอง");
+    expect(instructions).toContain("ถามผู้ใช้ว่าต้องการให้เปิดหน้าค้นหาให้ดูไหม");
+    expect(instructions).toContain(`วันนี้คือ${today}`);
+    expect(instructions).toContain("- [m1] ผู้ใช้ชื่อไลท์");
+  });
+
+  it("ไม่สั่งให้เรียกเครื่องมือที่ขั้นนี้ไม่มี ไม่เช่นนั้น AI จะบอกว่าเปิดหน้าค้นหาให้แล้วทั้งที่เปิดไม่ได้", () => {
+    const instructions = buildSearchUnavailableInstructions(undefined, today);
+
+    for (const tool of ["open_web_page", "remember", "forget_memory", "fill_form_fields", "search_web"]) {
+      expect(instructions).not.toContain(tool);
+    }
+    expect(instructions).toContain("ห้ามบอกว่าค้น เปิดหน้าเว็บ หรือจำอะไรให้แล้ว");
   });
 });
 

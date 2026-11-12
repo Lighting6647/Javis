@@ -489,7 +489,11 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     const first = await app.ask("ราคาทองวันนี้เท่าไหร่");
     expect(first.status).toBe(200);
     expect(first.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
-    expect(chatSystemOf(app.calls[2])).toContain("ค้นข้อมูลจากเว็บเองไม่ได้");
+    // ขั้นตอบแทนไม่มีเครื่องมือ จึงต้องไม่ถูกสั่งให้เปิดหน้าค้นหา ไม่เช่นนั้นจะบอกว่าเปิดให้แล้วทั้งที่เปิดไม่ได้
+    const fallback = app.calls[2];
+    expect(chatToolNames(fallback)).toEqual([]);
+    expect(chatSystemOf(fallback)).toContain("ค้นเว็บไม่สำเร็จ");
+    expect(chatSystemOf(fallback)).not.toContain("open_web_page");
 
     await app.ask("แล้วราคาน้ำมันล่ะ");
     expect(app.apis()).toEqual(["chat", "tavily", "chat", "chat"]);
@@ -663,8 +667,9 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
     // ไม่ได้ค้นจริง จึงไม่บอกผู้ใช้ว่ากำลังค้น
     expect(eventOf(first, "status")).toBeUndefined();
     expect(app.apis()).toEqual(["chat", "interactions", "chat"]);
-    // คำขอสำรองบอกโมเดลว่าค้นไม่ได้ และไม่ให้เครื่องมือ เพราะเครื่องมือของขั้นแรกถูกทำไปแล้ว
-    expect(chatSystemOf(app.calls[2])).toContain("ค้นข้อมูลจากเว็บเองไม่ได้");
+    // คำขอสำรองบอกโมเดลว่าค้นไม่สำเร็จ ไม่ให้เครื่องมือ เพราะเครื่องมือของขั้นแรกถูกทำไปแล้ว และไม่สั่งให้เรียกเครื่องมือที่ไม่มี
+    expect(chatSystemOf(app.calls[2])).toContain("ค้นเว็บไม่สำเร็จ");
+    expect(chatSystemOf(app.calls[2])).not.toContain("open_web_page");
     expect(chatToolNames(app.calls[2])).toEqual([]);
 
     await app.ask("แล้วราคาน้ำมันล่ะ");
