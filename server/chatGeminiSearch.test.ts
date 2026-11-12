@@ -571,13 +571,17 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
       const app = await boot(refusedSearch, withToken);
       const reply = await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN });
 
-      const diagnostic = eventOf(reply, "diagnostic") as { attempts: Array<{ target: string; status: number; detail?: string }> } | undefined;
+      const diagnostic = eventOf(reply, "diagnostic") as
+        | { attempts: Array<{ target: string; status: number; detail?: string }>; calls: Array<{ name: string; arguments: string }> }
+        | undefined;
       expect(diagnostic?.attempts.map((attempt) => [attempt.target.split(" ")[0], attempt.status])).toEqual([
         ["chat", 200],
         ["interactions", 403],
         ["chat", 200]
       ]);
       expect(diagnostic?.attempts[1]?.detail).toBe("Grounding with Google Search is not enabled for this project.");
+      // เครื่องมือที่โมเดลเรียกพร้อมอาร์กิวเมนต์ดิบ ใช้ดูว่าทำไมคำสั่งหนึ่งไม่เกิดผล
+      expect(diagnostic?.calls).toEqual([{ name: "search_web", arguments: '{"query":"ราคาทองคำวันนี้"}' }]);
       // ผู้ใช้ยังได้คำตอบตามปกติ
       expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
     });

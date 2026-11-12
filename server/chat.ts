@@ -508,6 +508,8 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const diagnosing = isDiagnosticToken(diagnose);
   const requestStarted = Date.now();
   const attempts: UpstreamAttempt[] = [];
+  /** เครื่องมือที่โมเดลเรียกในคำขอนี้ พร้อมอาร์กิวเมนต์ดิบ สำหรับช่องวินิจฉัย */
+  const toolCallsSeen: Array<{ name: string; arguments: string }> = [];
   /** ส่งคำขอไปยังผู้ให้บริการ พร้อมจดสถานะและเวลาไว้สำหรับช่องวินิจฉัย */
   const tracked = async (target: string, start: () => Promise<ReplyStart>): Promise<ReplyStart> => {
     const began = Date.now();
@@ -819,6 +821,10 @@ export const chatHandler: RequestHandler = async (request, response) => {
    * throw เมื่อต้นทางแจ้งว่าการตอบล้มเหลว
    */
   const forward = (event: unknown): boolean => {
+    if (diagnosing && eventTypeOf(event) === "response.output_item.done") {
+      const { item } = event as { item?: { type?: unknown; name?: unknown; arguments?: unknown } };
+      if (item?.type === "function_call") toolCallsSeen.push({ name: String(item.name), arguments: String(item.arguments) });
+    }
     const sent = reducer.push(event);
     sent.forEach(send);
     if (reducer.failed) throw new Error("upstream reported a failed response");
@@ -902,6 +908,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
         type: "diagnostic",
         totalMs: Date.now() - requestStarted,
         attempts,
+        calls: toolCallsSeen,
         state: {
           searchModel,
           separateSearch,
