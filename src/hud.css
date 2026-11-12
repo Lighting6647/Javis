@@ -72,6 +72,8 @@ html[data-theme="holo"] .core.hero .core-heart { width: 22%; height: 22%; backgr
 
 /* จังหวะสนทนา: ฟังหมุนเร็วและคลื่นขยับ คิดเป็นสีอำพันวิ่งรอบวง ตอบคลื่นสว่างและแกนเต้น */
 .core.hero.listening .arc-bars rect { opacity: .95; animation: bar-voice .95s ease-in-out infinite; animation-delay: calc(var(--i) * -137ms); }
+/* วัดเสียงไมโครโฟนได้จริง (src/hooks/useMicBars.ts): ความสูงของแต่ละแท่งมาจากค่าที่วัด จึงปิดการขยับตามจังหวะ */
+.core.hero .arc-bars.live rect, .core.hero.listening .arc-bars.live rect { animation: none; transition: none; }
 .core.hero.speaking .arc-bars rect { fill: #e6fbff; opacity: 1; animation: bar-voice .62s ease-in-out infinite; animation-delay: calc(var(--i) * -211ms); }
 .core.hero.starting .arc-bars rect, .core.hero.thinking .arc-bars rect { animation: bar-chase 1.4s linear infinite; animation-delay: calc(var(--i) * -23.33ms); }
 .core.hero.listening .arc-sweep { animation-duration: 3.2s; }
@@ -83,6 +85,10 @@ html[data-theme="holo"] .core.hero .core-heart { width: 22%; height: 22%; backgr
 html[data-theme="holo"] .core.hero.listening .core-heart { animation-duration: 1.1s; }
 html[data-theme="holo"] .core.hero.speaking .core-heart { animation: heartbeat .62s ease-in-out infinite; }
 html[data-theme="holo"] .stage.offline .core-heart { background: radial-gradient(circle, #fff1ee 0 14%, #ff9d91 34%, #b3372a 62%, rgba(179, 55, 42, 0) 74%); box-shadow: 0 0 36px 8px rgba(255, 122, 107, .35); }
+
+/* ตัวเลือกวงคลื่นเสียงในหน้าตั้งค่า อยู่ใต้ตัวเลือกธีมซึ่งเรียงเป็นสองช่อง เว้นให้ห่างกว่าปกติเพราะเป็นตัวเลือกคนละเรื่อง
+   เจาะจงเฉพาะตัวที่ตามหลังตารางตัวเลือก เพื่อไม่ให้กระทบรายการเสียงพูดซึ่งเป็นลูกของกลุ่มโดยตรงเหมือนกัน */
+.settings-body .option-grid + .voice-option { margin-top: var(--space-2); }
 
 /* ---------- หน้าเริ่มต้น บทสนทนา และช่องสั่งงาน ---------- */
 html[data-theme="holo"] .welcome-kicker { display: inline-flex; align-items: center; gap: 10px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: .24em; }

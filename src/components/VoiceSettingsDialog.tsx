@@ -1,5 +1,7 @@
 import { Check, Download, Play, RotateCcw, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { micLevelsAvailable } from "../hooks/useMicBars";
+import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { MemorySection } from "./MemorySection";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
@@ -154,6 +156,8 @@ const THEME_OPTIONS: Array<{ value: Theme; name: string; hint: string }> = [
 
 function ThemeSection() {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
+  const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
+  const [canShowMicLevels] = useState(micLevelsAvailable);
 
   return (
     <fieldset>
@@ -171,6 +175,16 @@ function ThemeSection() {
           </label>
         ))}
       </div>
+      {/* มีเฉพาะที่ที่วัดได้ (เบราว์เซอร์บนคอมพิวเตอร์) และเฉพาะธีมที่มีวงคลื่นเสียง */}
+      {canShowMicLevels && theme === "holo" && (
+        <label className="voice-option">
+          <input type="checkbox" checked={micLevels} onChange={(event) => micLevelStore.set(event.target.checked)} />
+          <span>
+            วงคลื่นเสียงขยับตามเสียงไมโครโฟนจริง
+            <small>วัดในอุปกรณ์นี้ระหว่างฟังเท่านั้น ไม่อัดและไม่ส่งเสียงไปที่ใด ปิดได้ถ้าการฟังมีปัญหา</small>
+          </span>
+        </label>
+      )}
     </fieldset>
   );
 }
