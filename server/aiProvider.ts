@@ -50,11 +50,6 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai
 const GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite";
 /** คิดให้น้อยที่สุด เพราะคำตอบถูกอ่านออกเสียงทันที ความเร็วสำคัญกว่าการคิดลึก */
 const GEMINI_REASONING_EFFORT = "minimal";
-/**
- * โมเดลของขั้นค้นเว็บ: รุ่นที่โควตาฟรีของ Google รวมการค้นด้วย Google Search ไว้ด้วย (รุ่น 3 ขึ้นไปต้องเปิดการเรียกเก็บเงิน)
- * เปลี่ยนได้ด้วย GEMINI_SEARCH_MODEL
- */
-const GEMINI_SEARCH_MODEL = "gemini-2.5-flash-lite";
 
 const CLAUDE_BASE_URL = "https://api.anthropic.com";
 /**
@@ -162,6 +157,9 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
 
   if (provider === "gemini") {
     const effort = read(env, "GEMINI_REASONING_EFFORT")?.toLowerCase();
+    const chatModel = readModel(env, "GEMINI_CHAT_MODEL", GEMINI_CHAT_MODEL, "GEMINI_API_KEY", warn);
+    // การตั้งกุญแจของบริการค้นเว็บภายนอก (Tavily) คือเจตนาให้ค้นเว็บ จึงไม่ต้องสั่งเปิดซ้ำ
+    const hasSearchService = Boolean(read(env, "TAVILY_API_KEY"));
 
     return {
       name: "gemini",
@@ -170,16 +168,17 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
       apiKey: read(env, "GEMINI_API_KEY"),
       keyVariable: "GEMINI_API_KEY",
       baseUrl: readBaseUrl(env, "GEMINI_BASE_URL", GEMINI_BASE_URL, warn),
-      chatModel: readModel(env, "GEMINI_CHAT_MODEL", GEMINI_CHAT_MODEL, "GEMINI_API_KEY", warn),
+      chatModel,
       chatModelVariable: "GEMINI_CHAT_MODEL",
       // การแปลงเสียงผ่านทางที่เข้ากันได้กับ OpenAI ยังไม่มี แอปเดสก์ท็อปจึงต้องพิมพ์แทน
       transcribeModel: null,
-      // การค้นด้วย Google ส่งคำถามของผู้ใช้ไปค้น และมีโควตาต่อวันของตัวเอง จึงเปิดเฉพาะเมื่อสั่งชัดเจน
-      webSearch: isOn(env, "WEB_SEARCH_ENABLED"),
+      // การค้นด้วย Google ต้องเปิดการเรียกเก็บเงินของโปรเจกต์ (กุญแจฟรีที่สร้างใหม่ค้นไม่ได้) จึงเปิดเฉพาะเมื่อสั่งชัดเจน
+      webSearch: isOn(env, "WEB_SEARCH_ENABLED") || (hasSearchService && !isOff(env, "WEB_SEARCH_ENABLED")),
       // คำขอตรวจเครดิตกินโควตาฟรีต่อวันซึ่งมีจำกัด จึงตรวจเฉพาะเมื่อสั่งชัดเจน
       creditCheck: isOn(env, "AI_CREDIT_CHECK"),
       reasoningEffort: effort === "default" ? undefined : (effort ?? GEMINI_REASONING_EFFORT),
-      searchModel: readModel(env, "GEMINI_SEARCH_MODEL", GEMINI_SEARCH_MODEL, "GEMINI_API_KEY", warn)
+      // ไม่ตั้ง = ค้นด้วย Google โดยใช้โมเดลสนทนา ในคำขอเดียวกับคำตอบ
+      ...(read(env, "GEMINI_SEARCH_MODEL") ? { searchModel: readModel(env, "GEMINI_SEARCH_MODEL", chatModel, "GEMINI_API_KEY", warn) } : {})
     };
   }
 

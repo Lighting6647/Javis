@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { resolveAiProvider } from "./aiProvider.js";
 import { MIN_SESSION_SECRET_LENGTH, parseAccessCodes } from "./auth.js";
+import { resolveWebSearchProvider } from "./webSearch.js";
 
 // quiet: ไม่ให้ dotenv พิมพ์บรรทัดแนะนำของตัวเองลง log ทุกครั้งที่เริ่ม ซึ่งกลบข้อความที่ผู้ดูแลต้องอ่าน
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), quiet: true });
@@ -86,6 +87,11 @@ export const config = {
    * เลือกจากกุญแจที่ตั้งไว้ (GEMINI_API_KEY หรือ OPENAI_API_KEY) หรือบังคับด้วย AI_PROVIDER
    */
   ai,
+  /**
+   * บริการค้นเว็บภายนอก (Tavily) สำหรับผู้ให้บริการ AI ที่ค้นเว็บเองไม่ได้ หรือค้นได้เฉพาะแบบเสียเงิน
+   * null = ไม่ได้ตั้งกุญแจ TAVILY_API_KEY
+   */
+  webSearch: resolveWebSearchProvider(process.env),
   /** ตรวจกุญแจ API และโมเดลตอนเริ่มเซิร์ฟเวอร์ (ไม่มีค่าใช้จ่าย) ปิดได้ด้วย AI_STARTUP_CHECK=false */
   aiStartupCheck: process.env.AI_STARTUP_CHECK?.trim().toLowerCase() !== "false",
   /** ระหว่างที่บัญชี AI ยังมีปัญหา ตรวจซ้ำทุกกี่วินาที เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข */

@@ -151,8 +151,8 @@ export interface UpstreamRejection {
 }
 
 const MAX_LOG_DETAIL_LENGTH = 240;
-/** สิ่งที่ดูเหมือนกุญแจหรือโทเค็น: กุญแจของ OpenAI และ Google และค่าที่ตามหลังคำว่า Bearer */
-const SECRET_LIKE = /sk-[A-Za-z0-9_*.-]{6,}|AIza[0-9A-Za-z_-]{10,}|Bearer\s+\S+/g;
+/** สิ่งที่ดูเหมือนกุญแจหรือโทเค็น: กุญแจของ OpenAI, Google และ Tavily และค่าที่ตามหลังคำว่า Bearer */
+const SECRET_LIKE = /sk-[A-Za-z0-9_*.-]{6,}|AIza[0-9A-Za-z_-]{10,}|tvly-[A-Za-z0-9_-]{6,}|Bearer\s+\S+/g;
 
 /** ทำข้อความของต้นทางให้ปลอดภัยพอจะเขียนลง log: บรรทัดเดียว ไม่มีสิ่งที่ดูเหมือนกุญแจ และไม่ยาวเกินกำหนด */
 export function sanitizeUpstreamMessage(message: unknown): string {

@@ -190,11 +190,22 @@ describe("resolveAiProvider", () => {
     const warnings: string[] = [];
     const guarded = resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, GEMINI_SEARCH_MODEL: keyLike }, (message) => warnings.push(message));
 
-    // ชื่อโมเดลถูกใส่ในเนื้อหาคำขอและใน log ถ้าปล่อยผ่าน กุญแจจะรั่ว จึงกลับไปใช้โมเดลที่โควตาฟรีค้นด้วย Google ได้
-    expect(guarded.searchModel).toBe("gemini-2.5-flash-lite");
+    // ชื่อโมเดลถูกใส่ในเนื้อหาคำขอและใน log ถ้าปล่อยผ่าน กุญแจจะรั่ว จึงกลับไปค้นด้วยโมเดลสนทนา
+    expect(guarded.searchModel).toBe("gemini-3.5-flash-lite");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("GEMINI_SEARCH_MODEL");
     expect(warnings[0]).not.toContain(keyLike);
+
+    // ไม่ได้ตั้ง: ไม่มีโมเดลค้นแยก การค้นด้วย Google จึงใช้โมเดลสนทนา
+    expect(resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY }, quiet).searchModel).toBeUndefined();
+  });
+
+  it("Gemini: ตั้งกุญแจของ Tavily คือเจตนาให้ค้นเว็บ จึงเปิดการค้นให้เอง เว้นแต่สั่งปิดไว้", () => {
+    const tavily = { GEMINI_API_KEY: GEMINI_KEY, TAVILY_API_KEY: "tvly-test-only-not-a-real-key" };
+
+    expect(resolveAiProvider(tavily, quiet).webSearch).toBe(true);
+    expect(resolveAiProvider({ ...tavily, WEB_SEARCH_ENABLED: "false" }, quiet).webSearch).toBe(false);
+    expect(resolveAiProvider({ ...tavily, TAVILY_API_KEY: "  " }, quiet).webSearch).toBe(false);
   });
 
   it("ที่อยู่ที่ไม่ถูกต้องถูกแทนด้วยค่าเริ่มต้นพร้อมคำเตือน", () => {
