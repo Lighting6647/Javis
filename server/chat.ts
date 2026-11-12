@@ -334,17 +334,11 @@ const textDelta = (text: string) => ({ type: "response.output_text.delta", delta
 const SEARCH_FAILED_TEXT = "ขออภัยครับ ผมค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ";
 
 /**
- * รหัสชั่วคราวของช่องวินิจฉัย (เก็บเฉพาะค่าแฮช) ใช้ระหว่างตรวจการค้นเว็บของ Gemini บนเว็บจริง
- * จะถูกลบออกเมื่อตรวจเสร็จ เหลือเฉพาะค่าที่ผู้ดูแลตั้งเองผ่าน DIAGNOSTIC_TOKEN_SHA256
- */
-const TEMPORARY_DIAGNOSTIC_TOKEN_SHA256 = "016d80acd794cabcc00c2853fab4907be58606bd3f9d8df6f5ea7f12b326d55e";
-
-/**
  * ช่องวินิจฉัยของผู้ดูแล: คำขอที่แนบรหัส (diagnose) ซึ่งค่าแฮช SHA-256 ตรงกับค่านี้ จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
  * บอกว่าเซิร์ฟเวอร์เรียกผู้ให้บริการกี่ครั้ง ได้สถานะอะไร ใช้เวลาเท่าไร และเหตุผลที่ถูกปฏิเสธ (ข้อความที่ปิดบังสิ่งที่ดูเหมือนกุญแจแล้ว)
- * โค้ดเก็บเฉพาะค่าแฮช จึงอ่านรหัสจากโค้ดหรือจากการตั้งค่าไม่ได้
+ * ค่านี้มาจากการตั้งค่าของผู้ดูแลเท่านั้น ถ้าไม่ได้ตั้ง ช่องนี้ปิดสำหรับทุกคำขอ และการตั้งค่าเก็บเฉพาะค่าแฮช จึงอ่านรหัสจากการตั้งค่าไม่ได้
  */
-const DIAGNOSTIC_TOKEN_SHA256 = process.env.DIAGNOSTIC_TOKEN_SHA256?.trim().toLowerCase() || TEMPORARY_DIAGNOSTIC_TOKEN_SHA256;
+const DIAGNOSTIC_TOKEN_SHA256 = process.env.DIAGNOSTIC_TOKEN_SHA256?.trim().toLowerCase() ?? "";
 
 function isDiagnosticToken(token: string | undefined): boolean {
   if (!token || !/^[0-9a-f]{64}$/.test(DIAGNOSTIC_TOKEN_SHA256)) return false;
