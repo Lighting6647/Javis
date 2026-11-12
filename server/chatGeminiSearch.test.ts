@@ -138,6 +138,7 @@ async function boot(respond: Responder, env: Record<string, string> = SEPARATE_S
     TAVILY_API_KEY: "",
     TAVILY_BASE_URL: "",
     DIAGNOSTIC_TOKEN_SHA256: "",
+    VERCEL_GIT_COMMIT_SHA: "",
     // ค่าว่างกันไม่ให้ค่าจริงใน .env.local ของเครื่องนักพัฒนาถูกโหลดเข้ามาในการทดสอบ
     OPENAI_API_KEY: "",
     ANTHROPIC_API_KEY: "",
@@ -761,6 +762,17 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
       // มีแต่รูปร่าง: ข้อความ ชื่อเครื่องมือ ชิ้นของอาร์กิวเมนต์ และเหตุผลการจบ ไม่มีเนื้อหาของคำตอบ
       expect(diagnostic?.attempts.map((attempt) => attempt.stream)).toEqual([["text call:open_web_page", "args ×2", "finish:tool_calls"]]);
       expect(eventOf(reply, "open")).toMatchObject({ url: "https://www.youtube.com/" });
+    });
+
+    it.each([
+      ["0123456789abcdef0123456789abcdef01234567", "0123456"],
+      ["", null],
+      ["not a commit", null]
+    ])("บอกรุ่นของโค้ดที่ตอบคำขอ เพื่อรู้ว่าเว็บจริงใช้รุ่นใหม่แล้วหรือยัง (ค่าจากโฮสต์ %j)", async (fromHost, shown) => {
+      const app = await boot(plainAnswer, { DIAGNOSTIC_TOKEN_SHA256: withToken.DIAGNOSTIC_TOKEN_SHA256, VERCEL_GIT_COMMIT_SHA: fromHost });
+      const reply = await app.ask("สวัสดี", [], { diagnose: TOKEN });
+
+      expect((eventOf(reply, "diagnostic") as { state: { commit: string | null } } | undefined)?.state.commit).toBe(shown);
     });
 
     it.each([

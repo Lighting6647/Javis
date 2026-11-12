@@ -195,6 +195,30 @@ describe("buildInstructionParts", () => {
     expect(personal).toContain("ความรู้ที่คุณเรียนมาสิ้นสุดก่อนวันนี้");
   });
 
+  it("เมื่อค้นเว็บไม่ได้: คำสั่งให้ค้นหาคือคำสั่งให้เปิดหน้าค้นหาทันที ส่วนคำถามที่ต้องใช้ข้อมูลล่าสุดยังถามผู้ใช้ก่อนเปิด", () => {
+    const offline = buildInstructionParts(undefined, undefined, false).fixed;
+
+    // ผู้ใช้สั่งค้นหาแล้วถูกถามกลับว่าจะให้เปิดหน้าค้นหาไหม คือสั่งแล้วไม่ได้ผล
+    expect(offline).toContain("เมื่อผู้ใช้สั่งให้ค้นหา หาข้อมูล หรือเสิร์ชเรื่องใด นั่นคือคำสั่งให้เปิดหน้าค้นหาของเรื่องนั้น");
+    expect(offline).toContain("ไม่ต้องถามก่อน");
+    expect(offline).toContain("ถามผู้ใช้ว่าต้องการให้เปิดหน้าค้นหาให้ดูไหม");
+  });
+
+  it.each([true, "grounded", "request"] as const)("เมื่อค้นเว็บได้ (%s): คำสั่งให้ค้นหาเรื่องใดต้องค้นเว็บเสมอ ไม่ตอบจากความรู้เดิม", (webSearch) => {
+    expect(buildInstructionParts(undefined, undefined, webSearch).fixed).toContain("เมื่อผู้ใช้สั่งให้ค้นหา หาข้อมูล หรือเสิร์ชเรื่องใด");
+  });
+
+  it.each([true, false, "grounded", "request"] as const)(
+    "การเปิดหน้าเว็บ (การค้นแบบ %s): ให้เรียกเครื่องมือก่อนโดยไม่พูดนำ และห้ามบอกว่าเปิดแล้วถ้าไม่ได้เรียก",
+    (webSearch) => {
+      const { fixed } = buildInstructionParts(undefined, undefined, webSearch);
+
+      // โมเดลที่พูดว่าเปิดให้แล้วก่อน มักจบคำตอบโดยไม่เรียกเครื่องมือ ผู้ใช้จึงได้ยินว่าเปิดแล้วทั้งที่ไม่มีอะไรเปิด
+      expect(fixed).toContain("เรียกเป็นอย่างแรกทันที ไม่ต้องพูดอะไรก่อน ระบบจะบอกผู้ใช้เองว่าเปิดแล้ว");
+      expect(fixed).toContain("ห้ามบอกว่าเปิดแล้วหรือกำลังเปิด ถ้าไม่ได้เรียกเครื่องมือ open_web_page");
+    }
+  );
+
   it("การค้นด้วย Google: ไม่ให้ AI เขียนลิงก์เอง เพราะระบบแสดงแหล่งที่มาจากข้อมูลของ Google ให้แล้ว", () => {
     const grounded = buildInstructionParts(undefined, undefined, "grounded").fixed;
 
