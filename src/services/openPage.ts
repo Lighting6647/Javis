@@ -3,12 +3,22 @@ import { safeHttpUrl } from "../conversation/richText";
 /**
  * เปิดหน้าเว็บในแท็บใหม่หรือเบราว์เซอร์ของระบบ คืน false ถ้าเปิดไม่ได้
  * (เช่นถูกตัวกันป๊อปอัปของเบราว์เซอร์บล็อก) ซึ่งผู้ใช้ยังกดลิงก์ในบทสนทนาเองได้
+ *
+ * เบราว์เซอร์จะเลื่อนไปยังข้อความที่ลิงก์ชี้ (text fragment) ก็ต่อเมื่อแท็บใหม่ถูกเปิดแบบ noopener
+ * ในจังหวะที่ยังมีการแตะของผู้ใช้ แต่การเปิดแบบ noopener ทำให้ window.open คืน null เสมอ จึงตรวจไม่ได้ว่าถูกบล็อกไหม
+ * - ยังมีการแตะของผู้ใช้ค้างอยู่ (พิมพ์สั่งแล้วได้คำตอบเร็ว): เบราว์เซอร์ยอมเปิดแน่ จึงเปิดแบบ noopener ได้ข้อความที่ไฮไลต์
+ * - ไม่มีการแตะ (คำสั่งเสียง): เบราว์เซอร์ไม่ไฮไลต์ให้อยู่แล้วไม่ว่าเปิดแบบใด จึงเปิดแบบที่ตรวจได้ว่าถูกบล็อกไหม
  */
 export function openExternalPage(url: string): boolean {
   const safe = safeHttpUrl(url);
   if (!safe) return false;
 
   try {
+    if (navigator.userActivation?.isActive) {
+      window.open(safe, "_blank", "noopener,noreferrer");
+      return true;
+    }
+
     // ไม่ใส่ noopener ในตัวเลือก เพราะจะทำให้ตรวจไม่ได้ว่าเปิดสำเร็จหรือไม่ จึงตัดการเชื่อมกลับเองทีหลัง
     const opened = window.open(safe, "_blank");
     if (!opened) return false;

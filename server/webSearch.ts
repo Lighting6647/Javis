@@ -44,7 +44,7 @@ const TAVILY_BASE_URL = "https://api.tavily.com";
 /** จำนวนผลค้นที่ส่งต่อให้ AI: พอให้ตอบได้ และไม่ทำให้คำขอยาวจนตอบช้า */
 export const MAX_SEARCH_RESULTS = 5;
 const MAX_RESULT_TITLE_LENGTH = 120;
-const MAX_RESULT_CONTENT_LENGTH = 700;
+export const MAX_RESULT_CONTENT_LENGTH = 700;
 const MAX_DATE_LENGTH = 40;
 /** การค้นแบบพื้นฐานของ Tavily ปกติตอบภายในหนึ่งถึงสองวินาที */
 const SEARCH_TIMEOUT_MS = 15_000;

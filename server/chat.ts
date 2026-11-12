@@ -27,6 +27,7 @@ import {
   REMEMBER_TOOL,
   SEARCH_WEB_TOOL
 } from "./responseStream.js";
+import { isFindCommand, pointToSource } from "./sourcePointer.js";
 import { describeUpstreamFailure } from "./upstreamError.js";
 import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
 
@@ -966,10 +967,13 @@ export const chatHandler: RequestHandler = async (request, response) => {
    */
   const answerFromSearch = async (query: string, spokeBefore: boolean) => {
     let answered = false;
+    /** ข้อความของคำตอบจากขั้นนี้ ใช้หาว่าแหล่งใดในผลค้นคือที่มาของสิ่งที่ตอบ */
+    let answerText = "";
     const streamAnswer = (events: ReplyStart & { ok: true }) =>
       events.events.read((event) => {
         // คำพูดของขั้นแรกกับคำตอบที่ตามมาต้องไม่ติดกันเป็นคำเดียว
         if (spokeBefore && !answered && hasAnswerText(event)) forward(textDelta(" "));
+        if (hasAnswerText(event)) answerText += String((event as { delta: unknown }).delta);
         answered = forward(event) || answered;
         return endsReply(event);
       });
@@ -1015,6 +1019,14 @@ export const chatHandler: RequestHandler = async (request, response) => {
         if (answered) {
           for (const result of outcome.results) {
             forward({ type: "response.output_text.annotation.added", annotation: { type: "url_citation", url: result.url, title: result.title } });
+          }
+          // พาผู้ใช้ไปยังหน้าที่มีคำตอบ พร้อมชี้ข้อความที่ตอบ: เปิดให้เองเมื่อผู้ใช้สั่งให้หา ไม่เช่นนั้นแนบลิงก์ไว้ให้แตะ
+          // เป็นส่วนเสริมของคำตอบ ถ้าเลือกหน้าไม่ได้ (เช่นเครื่องไม่มีตัวตัดคำ) คำตอบและแหล่งที่มายังต้องไปถึงผู้ใช้ครบ
+          try {
+            const pointer = pointToSource(answerText, outcome.results);
+            if (pointer) reducer.suggestPage(pointer, isFindCommand(messages.at(-1)?.content ?? ""));
+          } catch (error) {
+            console.warn("เลือกหน้าแหล่งข้อมูลไม่สำเร็จ จึงตอบโดยไม่มีหน้าให้เปิด", error instanceof Error ? error.message : "unknown");
           }
         }
       } else {

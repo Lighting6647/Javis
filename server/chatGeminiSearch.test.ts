@@ -457,6 +457,91 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     expect(request?.headers.get("authorization")).toBe("Bearer test-gemini-key");
   });
 
+  describe("พาไปยังหน้าแหล่งข้อมูล", () => {
+    interface OpenEvent {
+      url: string;
+      title: string;
+      auto: boolean;
+    }
+    const GOLD_ANSWER = "ทองคำแท่งขายออกบาทละ 62,350 บาทครับ";
+
+    it("สั่งให้หาข้อมูล: ตอบจากผลค้น แล้วเปิดหน้าแหล่งที่ตรงกับคำตอบให้เอง พร้อมชี้ข้อความที่ตอบ", async () => {
+      const app = await boot(chatModel(GOLD_ANSWER), TAVILY_SEARCH);
+      const reply = await app.ask("ช่วยหาราคาทองวันนี้ให้หน่อย");
+
+      expect(reply.text).toBe(GOLD_ANSWER);
+      const open = eventOf(reply, "open") as OpenEvent | undefined;
+      expect(open?.auto).toBe(true);
+      expect(open?.title).toBe("ราคาทองคำวันนี้ | สมาคมค้าทองคำ");
+      // ที่อยู่ของแหล่งข้อมูล ตามด้วยคำสั่งให้เบราว์เซอร์เลื่อนไปยังข้อความที่ตอบ
+      expect(open?.url.startsWith("https://www.goldtraders.or.th/#:~:text=")).toBe(true);
+      expect(decodeURIComponent(open?.url ?? "")).toContain("62,350");
+      // แหล่งที่มาทั้งหมดยังแสดงตามเดิม
+      expect((eventOf(reply, "sources") as { sources: unknown[] } | undefined)?.sources).toHaveLength(2);
+    });
+
+    it("ถามคำถามเฉย ๆ: แนบลิงก์แหล่งข้อมูลให้แตะเอง ไม่เปิดแท็บเอง", async () => {
+      const app = await boot(chatModel(GOLD_ANSWER), TAVILY_SEARCH);
+      const open = eventOf(await app.ask("ราคาทองวันนี้เท่าไหร่"), "open") as OpenEvent | undefined;
+
+      expect(open?.auto).toBe(false);
+      expect(open?.url.startsWith("https://www.goldtraders.or.th/#:~:text=")).toBe(true);
+    });
+
+    it("คำตอบตรงกับแหล่งอันดับสอง: พาไปแหล่งนั้น ไม่ใช่อันดับแรกเสมอ", async () => {
+      const app = await boot(chatModel("ราคาทองคำเปิดตลาดปรับขึ้น 100 บาทครับ"), TAVILY_SEARCH);
+      const open = eventOf(await app.ask("ค้นหาราคาทองวันนี้"), "open") as OpenEvent | undefined;
+
+      expect(open?.title).toBe("ราคาทองวันนี้ล่าสุด");
+      expect(open?.url.startsWith("https://www.thairath.co.th/money/gold#:~:text=")).toBe(true);
+    });
+
+    it("ผู้ใช้สั่งเปิดหน้าเว็บเองในคำขอเดียวกัน: ใช้หน้าที่ผู้ใช้สั่ง ไม่แทนด้วยแหล่งข้อมูล", async () => {
+      const app = await boot((call) => {
+        if (call.api === "tavily") return tavilyResults(GOLD_RESULTS);
+        if (!chatToolNames(call).includes("search_web")) return spokenAnswer(GOLD_ANSWER);
+        return toolCalls([
+          { name: "search_web", args: { query: "ราคาทองคำวันนี้" } },
+          { name: "open_web_page", args: { url: "https://www.goldtraders.or.th/updatepricelist", title: "ตารางราคาทอง" } }
+        ]);
+      }, TAVILY_SEARCH);
+      const reply = await app.ask("ค้นหาราคาทองแล้วเปิดตารางราคาของสมาคมให้ด้วย");
+
+      const opens = reply.events.filter((event) => event.type === "open");
+      // หน้าที่ AI สั่งเปิดหลังเริ่มค้นเว็บ ผู้ใช้ต้องแตะเอง ตามกติกาเดิม
+      expect(opens).toEqual([{ type: "open", url: "https://www.goldtraders.or.th/updatepricelist", title: "ตารางราคาทอง", auto: false }]);
+    });
+
+    it("เลือกหน้าแหล่งข้อมูลไม่สำเร็จ: ผู้ใช้ยังได้คำตอบและแหล่งที่มาครบ แค่ไม่มีหน้าให้เปิด", async () => {
+      const app = await boot(chatModel(GOLD_ANSWER), TAVILY_SEARCH);
+      // เครื่องที่ไม่มีตัวตัดคำ: ส่วนเสริมนี้ต้องไม่ทำให้คำตอบหลักล้ม
+      vi.spyOn(Intl, "Segmenter").mockImplementation(() => {
+        throw new Error("Intl.Segmenter is not available");
+      });
+      const reply = await app.ask("ช่วยหาราคาทองวันนี้ให้หน่อย");
+
+      expect(reply.status).toBe(200);
+      expect(reply.text).toBe(GOLD_ANSWER);
+      expect(eventOf(reply, "sources")).toBeDefined();
+      expect(eventOf(reply, "open")).toBeUndefined();
+      expect(app.warnings.join("\n")).toContain("เลือกหน้าแหล่งข้อมูลไม่สำเร็จ");
+    });
+
+    it("ค้นแล้วไม่พบอะไร หรือค้นไม่สำเร็จ: ไม่มีหน้าให้เปิด", async () => {
+      const empty = await boot((call) => {
+        if (call.api === "tavily") return tavilyResults([]);
+        return chatToolNames(call).includes("search_web") ? searchRequest("คำที่ไม่มีใครเขียนถึง") : spokenAnswer("ผมค้นแล้วแต่ไม่พบข้อมูลเรื่องนี้ครับ");
+      }, TAVILY_SEARCH);
+      expect(eventOf(await empty.ask("ช่วยหาเรื่องนี้ให้หน่อย"), "open")).toBeUndefined();
+
+      const failing = await boot((call) => {
+        if (call.api === "tavily") return tavilyError(500, "Internal Server Error");
+        return chatToolNames(call).includes("search_web") ? searchRequest("ราคาทองคำวันนี้") : plainAnswer();
+      }, TAVILY_SEARCH);
+      expect(eventOf(await failing.ask("ช่วยหาราคาทองวันนี้ให้หน่อย"), "open")).toBeUndefined();
+    });
+  });
+
   it("คำถามทั่วไป: ไม่ใช้โควตาค้น", async () => {
     const app = await boot((call) => {
       if (call.api !== "chat") throw new Error("ไม่ควรค้นเว็บสำหรับคำทักทาย");

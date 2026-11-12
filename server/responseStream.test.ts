@@ -231,6 +231,62 @@ describe("createResponseReducer", () => {
     });
   });
 
+  describe("หน้าแหล่งข้อมูลที่เซิร์ฟเวอร์เสนอหลังค้นเว็บ", () => {
+    const SOURCE = { url: "https://www.goldtraders.or.th/#:~:text=62%2C350", title: "ราคาทองคำวันนี้ | สมาคมค้าทองคำ" };
+    /** คำตอบที่ได้หลังค้นเว็บ: บอกว่ากำลังค้น แล้วตอบ */
+    const searchedAnswer = () => {
+      const reducer = createResponseReducer();
+      reducer.push({ type: "response.web_search_call.in_progress" });
+      reducer.push(delta("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ"));
+      return reducer;
+    };
+
+    it("ผู้ใช้สั่งให้หา: เปิดให้เองได้ แม้รอบนั้นมีการค้นเว็บ เพราะเซิร์ฟเวอร์เป็นผู้เลือกหน้าจากผลค้น ไม่ใช่ AI", () => {
+      const reducer = searchedAnswer();
+      reducer.suggestPage(SOURCE, true);
+
+      // ไม่เติมประโยค "นี่คือหน้า..." เพราะคำตอบพูดเนื้อหาไปแล้ว
+      expect(reducer.finish()).toEqual([{ type: "open", url: SOURCE.url, title: SOURCE.title, auto: true }]);
+    });
+
+    it("ผู้ใช้แค่ถามคำถาม: แนบลิงก์ให้แตะเอง ไม่เปิดแท็บเอง", () => {
+      const reducer = searchedAnswer();
+      reducer.suggestPage(SOURCE, false);
+
+      expect(reducer.finish()).toEqual([{ type: "open", url: SOURCE.url, title: SOURCE.title, auto: false }]);
+    });
+
+    it("AI สั่งเปิดหน้าเว็บตามคำสั่งของผู้ใช้ไว้แล้ว: ใช้หน้านั้น ไม่แทนด้วยแหล่งข้อมูล", () => {
+      const reducer = searchedAnswer();
+      reducer.push(openCall({ url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา" }));
+      reducer.suggestPage(SOURCE, true);
+
+      expect(reducer.finish()).toEqual([{ type: "open", url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา", auto: false }]);
+    });
+
+    it("แหล่งที่ไม่ใช่ https: แนบลิงก์ได้ แต่ไม่เปิดเอง", () => {
+      const reducer = searchedAnswer();
+      reducer.suggestPage({ url: "http://old.example.com/gold", title: "เว็บเก่า" }, true);
+
+      expect(reducer.finish()).toEqual([{ type: "open", url: "http://old.example.com/gold", title: "เว็บเก่า", auto: false }]);
+    });
+
+    it.each(["javascript:alert(1)", "https://user:pass@example.com/", "not a url"])("ลิงก์ที่ไม่ปลอดภัย (%s): ไม่เสนอ", (url) => {
+      const reducer = searchedAnswer();
+      reducer.suggestPage({ url, title: "x" }, true);
+
+      expect(reducer.finish()).toEqual([]);
+    });
+
+    it("เสนอได้หน้าเดียวต่อคำตอบ และใช้ชื่อเว็บแทนเมื่อไม่มีชื่อหน้า", () => {
+      const reducer = searchedAnswer();
+      reducer.suggestPage({ url: "https://first.example.com/a", title: "  " }, false);
+      reducer.suggestPage(SOURCE, true);
+
+      expect(reducer.finish()).toEqual([{ type: "open", url: "https://first.example.com/a", title: "first.example.com", auto: false }]);
+    });
+  });
+
   describe("การเสนอกรอกฟอร์ม", () => {
     const pageFields = [
       { id: "f1", label: "ชื่อ-นามสกุล", type: "text" },

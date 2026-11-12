@@ -90,6 +90,13 @@ export interface MemoryToolCall {
 export interface ResponseReducer {
   /** รับเหตุการณ์หนึ่งรายการจากต้นทาง คืนเหตุการณ์ที่ต้องส่งให้หน้าเว็บทันที */
   push(event: unknown): ChatEvent[];
+  /**
+   * เซิร์ฟเวอร์เสนอหน้าแหล่งข้อมูลของคำตอบที่ได้จากการค้นเว็บ ให้ผู้ใช้เปิดดู
+   * ต่างจากหน้าที่ AI สั่งเปิด: หน้านี้เซิร์ฟเวอร์เลือกจากผลค้นเอง เนื้อหาเว็บจึงชักนำไปหน้าอื่นไม่ได้ และเปิดให้เองได้แม้รอบนั้นอ่านเว็บมา
+   * ไม่มีผลถ้า AI สั่งเปิดหน้าเว็บตามคำสั่งของผู้ใช้ไว้แล้ว หรือเคยเสนอไปแล้ว
+   * @param auto เปิดให้เองเมื่อผู้ใช้สั่งให้หา (เฉพาะลิงก์ https) ไม่เช่นนั้นแนบเป็นลิงก์ให้แตะ
+   */
+  suggestPage(candidate: { url: string; title: string }, auto: boolean): void;
   /** เรียกเมื่อสตรีมจบ คืนเหตุการณ์ปิดท้าย (ลิงก์ที่สั่งเปิด รายการกรอกฟอร์ม ความจำ และแหล่งที่มา) */
   finish(): ChatEvent[];
   /** ต้นทางแจ้งว่าการตอบล้มเหลว */
@@ -133,6 +140,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   const failureCodes = new Set<string>();
   let done = false;
   let page: { url: string; title: string } | null = null;
+  /** หน้าแหล่งข้อมูลที่เซิร์ฟเวอร์เสนอหลังค้นเว็บ ใช้เมื่อ AI ไม่ได้สั่งเปิดหน้าใดเอง */
+  let suggested: { url: string; title: string; auto: boolean } | null = null;
   /** AI สั่งเปิดหน้าค้นหาที่ไม่มีคำค้น: ไม่เปิด และถามผู้ใช้ว่าจะค้นเรื่องอะไรแทน */
   let searchTopicMissing = false;
   let fill: FillProposal[] | null = null;
@@ -293,6 +302,13 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       return [];
     },
 
+    suggestPage(candidate, auto) {
+      if (suggested) return;
+      const url = safeHttpUrl(candidate.url);
+      if (!url) return;
+      suggested = { url, title: cleanTitle(candidate.title, url), auto: auto && url.startsWith("https://") };
+    },
+
     finish() {
       const events: ChatEvent[] = [];
 
@@ -301,6 +317,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         if (!text.trim()) events.push({ type: "delta", text: `ได้เลยครับ นี่คือหน้า ${page.title} ครับ` });
         // ถ้ารอบนี้อ่านเนื้อหาจากเว็บมาก่อน ลิงก์อาจถูกเนื้อหานั้นชักนำ จึงให้ผู้ใช้กดเปิดเอง
         events.push({ type: "open", url: page.url, title: page.title, auto: !searched });
+      } else if (suggested) {
+        events.push({ type: "open", url: suggested.url, title: suggested.title, auto: suggested.auto });
       } else if (searchTopicMissing && !text.trim()) {
         // ไม่มีอะไรให้เปิดและ AI ไม่ได้พูดอะไร: ถามเรื่องที่จะค้น แทนการส่งคำตอบว่าง
         events.push({ type: "delta", text: ASK_SEARCH_TOPIC_TEXT });
