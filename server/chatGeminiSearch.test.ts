@@ -752,6 +752,17 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
       expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
     });
 
+    it("คำขอที่แนบรหัสเห็นรูปร่างของสตรีมจากโมเดลสนทนา ใช้ดูว่าการเรียกเครื่องมือหายไปที่ขั้นใด", async () => {
+      const openYoutube = () => toolCalls([{ name: "open_web_page", args: { url: "https://www.youtube.com/", title: "ยูทูบ" } }], "ได้เลยครับ");
+      const app = await boot(openYoutube, { DIAGNOSTIC_TOKEN_SHA256: withToken.DIAGNOSTIC_TOKEN_SHA256 });
+      const reply = await app.ask("เปิดยูทูบให้หน่อย", [], { diagnose: TOKEN });
+
+      const diagnostic = eventOf(reply, "diagnostic") as { attempts: Array<{ stream?: string[] }> } | undefined;
+      // มีแต่รูปร่าง: ข้อความ ชื่อเครื่องมือ ชิ้นของอาร์กิวเมนต์ และเหตุผลการจบ ไม่มีเนื้อหาของคำตอบ
+      expect(diagnostic?.attempts.map((attempt) => attempt.stream)).toEqual([["text call:open_web_page", "args ×2", "finish:tool_calls"]]);
+      expect(eventOf(reply, "open")).toMatchObject({ url: "https://www.youtube.com/" });
+    });
+
     it.each([
       ["ไม่แนบรหัส", {}],
       ["รหัสผิด", { diagnose: "not-the-token" }]

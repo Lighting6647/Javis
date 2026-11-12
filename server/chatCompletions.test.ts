@@ -4,7 +4,8 @@ import {
   memoryFollowUpNote,
   toAlternatingTurns,
   toChatCompletionsRequest,
-  toChatTools
+  toChatTools,
+  traceChatStream
 } from "./chatCompletions.js";
 import { createResponseReducer } from "./responseStream.js";
 
@@ -253,6 +254,58 @@ describe("createChatCompletionsTranslator", () => {
       .push({ error: { code: 429, message: "quota", status: "RESOURCE_EXHAUSTED" } })
       .forEach((event) => reducer.push(event));
     expect(reducer.failed).toBe(true);
+  });
+});
+
+describe("traceChatStream", () => {
+  it("จดรูปร่างของสตรีมตามลำดับที่มาถึงโดยไม่เก็บเนื้อหา และยังส่งต่อให้ตัวแปลงตามเดิม", () => {
+    const entries: string[] = [];
+    const translator = traceChatStream(createChatCompletionsTranslator(), entries);
+
+    expect(translator.push(chunk({ role: "assistant", content: "ได้เลยครับ" }))).toEqual([{ type: "response.output_text.delta", delta: "ได้เลยครับ" }]);
+    translator.push(chunk({ content: " เปิดให้แล้ว" }));
+    translator.push(chunk({ tool_calls: [{ index: 0, id: "c1", function: { name: "open_web_page", arguments: '{"url":' } }] }));
+    translator.push(chunk({ tool_calls: [{ index: 0, function: { arguments: '"https://example.com","title":"ตัวอย่าง"}' } }] }));
+    const closing = translator.push(chunk({}, "tool_calls"));
+
+    expect(closing).toMatchObject([{ item: { name: "open_web_page" } }, { type: "response.completed" }]);
+    expect(entries).toEqual(["text ×2", "call:open_web_page args", "args", "finish:tool_calls"]);
+    expect(entries.join(" ")).not.toContain("example.com");
+  });
+
+  it("เห็นสิ่งที่ตัวแปลงทิ้ง: ข้อมูลที่มาหลังเหตุผลการจบ ช่องที่ไม่รู้จัก คำตอบหลายตัวเลือก และข้อผิดพลาด", () => {
+    const entries: string[] = [];
+    const translator = traceChatStream(createChatCompletionsTranslator(), entries);
+
+    translator.push(chunk({ content: "เปิดให้แล้วครับ", extra_content: { google: {} } }, "stop"));
+    translator.push(chunk({ tool_calls: [{ index: 0, function: { name: "open_web_page", arguments: "{}" } }] }));
+    translator.push({ id: "chatcmpl-1", usage: { total_tokens: 3 } });
+    translator.push({ choices: [{ delta: {} }, { delta: {} }] });
+    translator.push({ error: { message: "quota" } });
+    translator.push("ไม่ใช่ JSON");
+
+    expect(entries).toEqual(["text other:extra_content finish:stop", "call:open_web_page args", "no-choice", "empty choices:2", "error", "unreadable"]);
+  });
+
+  it("จำกัดจำนวนรายการ เพื่อไม่ให้คำตอบยาวทำให้ข้อมูลวินิจฉัยใหญ่เกิน", () => {
+    const entries: string[] = [];
+    const translator = traceChatStream(createChatCompletionsTranslator(), entries);
+    for (let index = 0; index < 100; index += 1) {
+      translator.push(chunk({ content: "ก" }));
+      translator.push(chunk({ tool_calls: [{ index, function: { arguments: "x" } }] }));
+    }
+
+    expect(entries).toHaveLength(41);
+    expect(entries.at(-1)).toBe("more:160");
+  });
+
+  it("ส่งต่อการปิดท้ายของตัวแปลงเมื่อสตรีมจบโดยไม่บอกเหตุผล", () => {
+    const entries: string[] = [];
+    const translator = traceChatStream(createChatCompletionsTranslator(), entries);
+    translator.push(chunk({ content: "สวัสดีครับ" }));
+
+    expect(translator.finish()).toEqual([{ type: "response.completed", response: { status: "completed", output: [] } }]);
+    expect(entries).toEqual(["text"]);
   });
 });
 

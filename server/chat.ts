@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { aiAccount } from "./aiAccount.js";
 import { CLAUDE_EFFORTS } from "./aiProvider.js";
-import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsRequest } from "./chatCompletions.js";
+import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsRequest, traceChatStream } from "./chatCompletions.js";
 import { startClaudeReply } from "./claudeClient.js";
 import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
@@ -335,6 +335,8 @@ interface UpstreamAttempt {
   status: number;
   codes?: string[];
   detail?: string;
+  /** รูปร่างของสตรีมที่ต้นทางส่งกลับมา ตามลำดับที่มาถึง (เฉพาะคำขอแบบ Chat Completions) ไม่มีเนื้อหาของคำตอบ */
+  stream?: string[];
 }
 
 const pageFieldSchema = z.object({
@@ -545,15 +547,18 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const attempts: UpstreamAttempt[] = [];
   /** เครื่องมือที่โมเดลเรียกในคำขอนี้ พร้อมอาร์กิวเมนต์ดิบ สำหรับช่องวินิจฉัย */
   const toolCallsSeen: Array<{ name: string; arguments: string }> = [];
-  /** ส่งคำขอไปยังผู้ให้บริการ พร้อมจดสถานะและเวลาไว้สำหรับช่องวินิจฉัย */
-  const tracked = async (target: string, start: () => Promise<ReplyStart>): Promise<ReplyStart> => {
+  /**
+   * ส่งคำขอไปยังผู้ให้บริการ พร้อมจดสถานะและเวลาไว้สำหรับช่องวินิจฉัย
+   * @param stream รายการรูปร่างของสตรีม ซึ่งจะถูกเติมระหว่างอ่านคำตอบ
+   */
+  const tracked = async (target: string, start: () => Promise<ReplyStart>, stream?: string[]): Promise<ReplyStart> => {
     const began = Date.now();
     const result = await start();
     attempts.push({
       target,
       at: began - requestStarted,
       ms: Date.now() - began,
-      ...(result.ok ? { status: 200 } : { status: result.status, codes: result.rejection.codes, detail: result.rejection.logDetail })
+      ...(result.ok ? { status: 200, ...(stream ? { stream } : {}) } : { status: result.status, codes: result.rejection.codes, detail: result.rejection.logDetail })
     });
     return result;
   };
@@ -688,21 +693,27 @@ export const chatHandler: RequestHandler = async (request, response) => {
       options.instructions ??
       (searchTool === "request" ? buildInstructions(page, memories, "request", describeToday()) : buildInstructions(page, memories, options.webSearch));
     if (ai.apiStyle === "chat") {
-      return tracked(target, () =>
-        startHttpReply({
-          url: `${ai.baseUrl}/chat/completions`,
-          headers: bearerHeaders(apiKey),
-          signal,
-          translator: createChatCompletionsTranslator(),
-          body: toChatCompletionsRequest({
-            model: ai.chatModel,
-            instructions,
-            messages: turns,
-            tools: options.tools ? tools : [],
-            maxTokens: MAX_CHAT_STYLE_TOKENS,
-            reasoningEffort: options.extras ? ai.reasoningEffort : undefined
-          })
-        })
+      const translator = createChatCompletionsTranslator();
+      // ช่องวินิจฉัย: จดรูปร่างของสตรีมไว้ดูว่าการเรียกเครื่องมือมาถึงหรือไม่
+      const stream: string[] | undefined = diagnosing ? [] : undefined;
+      return tracked(
+        target,
+        () =>
+          startHttpReply({
+            url: `${ai.baseUrl}/chat/completions`,
+            headers: bearerHeaders(apiKey),
+            signal,
+            translator: stream ? traceChatStream(translator, stream) : translator,
+            body: toChatCompletionsRequest({
+              model: ai.chatModel,
+              instructions,
+              messages: turns,
+              tools: options.tools ? tools : [],
+              maxTokens: MAX_CHAT_STYLE_TOKENS,
+              reasoningEffort: options.extras ? ai.reasoningEffort : undefined
+            })
+          }),
+        stream
       );
     }
 

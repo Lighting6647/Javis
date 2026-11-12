@@ -178,6 +178,76 @@ export function createChatCompletionsTranslator(): ChatCompletionsTranslator {
   };
 }
 
+/** จำนวนรายการสูงสุดของรูปร่างสตรีมที่จดไว้ต่อคำขอ คำตอบยาวจึงไม่ทำให้ข้อมูลวินิจฉัยใหญ่เกิน */
+const MAX_TRACE_ENTRIES = 40;
+const KNOWN_DELTA_KEYS = new Set(["role", "content", "tool_calls"]);
+
+/** ชื่อจากต้นทาง (ชื่อเครื่องมือ เหตุผลการจบ ชื่อช่อง) ในรูปที่แสดงได้ปลอดภัย */
+const traceLabel = (value: string) => value.replace(/[^A-Za-z0-9_.-]/g, "?").slice(0, 40);
+
+/** อธิบายรูปร่างของข้อมูลหนึ่งก้อนจากสตรีมโดยไม่เก็บเนื้อหา: มีข้อความ เรียกเครื่องมือชื่ออะไร และจบด้วยเหตุผลใด */
+function describeChunk(chunk: unknown): string {
+  const payload = Array.isArray(chunk) ? chunk[0] : chunk;
+  if (!isObject(payload)) return "unreadable";
+  if (isObject(payload.error)) return "error";
+
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const choice = choices[0];
+  if (!isObject(choice)) return "no-choice";
+
+  const delta = isObject(choice.delta) ? choice.delta : {};
+  const parts: string[] = [];
+  if (typeof delta.content === "string" && delta.content) parts.push("text");
+  for (const call of Array.isArray(delta.tool_calls) ? delta.tool_calls : []) {
+    const fn = isObject(call) && isObject(call.function) ? call.function : {};
+    if (typeof fn.name === "string" && fn.name) parts.push(`call:${traceLabel(fn.name)}`);
+    if (typeof fn.arguments === "string" && fn.arguments) parts.push("args");
+  }
+
+  // ช่องที่ตัวแปลงไม่ได้อ่าน: ถ้าการเรียกเครื่องมือมาในช่องอื่น จะเห็นที่นี่
+  const other = Object.keys(delta).filter((key) => !KNOWN_DELTA_KEYS.has(key));
+  if (other.length > 0) parts.push(`other:${other.map(traceLabel).join("+")}`);
+  if (typeof choice.finish_reason === "string" && choice.finish_reason) parts.push(`finish:${traceLabel(choice.finish_reason)}`);
+  if (parts.length === 0) parts.push("empty");
+  // ตัวแปลงอ่านเฉพาะตัวเลือกแรก
+  if (choices.length > 1) parts.push(`choices:${choices.length}`);
+  return parts.join(" ");
+}
+
+/**
+ * ครอบตัวแปลงเพื่อจดรูปร่างของสตรีมตามลำดับที่มาถึง สำหรับช่องวินิจฉัยของผู้ดูแล
+ * ใช้ดูว่าการเรียกเครื่องมือที่ไม่เกิดผลนั้น ต้นทางไม่ได้ส่งมา หรือส่งมาในรูปที่ตัวแปลงทิ้ง (เช่น มาหลังเหตุผลการจบ)
+ * ข้อมูลที่ติดกันและมีรูปร่างเดียวกันถูกนับรวมเป็นรายการเดียว
+ * @param entries รายการที่จะถูกเติมระหว่างอ่านสตรีม
+ */
+export function traceChatStream(translator: ChatCompletionsTranslator, entries: string[]): ChatCompletionsTranslator {
+  let previous = "";
+  let repeats = 0;
+  let overflow = 0;
+
+  const record = (entry: string) => {
+    if (overflow === 0 && entry === previous) {
+      repeats += 1;
+      entries[entries.length - 1] = `${entry} ×${repeats}`;
+    } else if (overflow === 0 && entries.length < MAX_TRACE_ENTRIES) {
+      entries.push(entry);
+      previous = entry;
+      repeats = 1;
+    } else {
+      overflow += 1;
+      entries[MAX_TRACE_ENTRIES] = `more:${overflow}`;
+    }
+  };
+
+  return {
+    push(chunk) {
+      record(describeChunk(chunk));
+      return translator.push(chunk);
+    },
+    finish: () => translator.finish()
+  };
+}
+
 /**
  * ข้อความแจ้งผลของเครื่องมือความจำ สำหรับขอให้ AI ตอบผู้ใช้ต่อ
  * ใช้แทนการส่งรายการเรียกเครื่องมือกลับไป เพราะโมเดลที่มีขั้นคิดของผู้ให้บริการบางราย
