@@ -1,4 +1,5 @@
 import { aiAccount, describeAccountCheck, runAccountCheck } from "./aiAccount.js";
+import { createClaudeAccountProbe } from "./claudeClient.js";
 import { config } from "./config.js";
 
 let running: Promise<void> | null = null;
@@ -18,7 +19,12 @@ export function checkAiAccount(announce: boolean): Promise<void> {
       chatModel: ai.chatModel,
       transcribeModel: ai.transcribeModel,
       creditCheck: ai.creditCheck,
-      apiStyle: ai.apiStyle
+      // Claude ถูกเรียกผ่าน SDK ของ Anthropic จึงมีตัวตรวจของตัวเอง รายอื่นตรวจด้วย HTTP ตามรูปแบบของรายนั้น
+      ...(ai.apiStyle === "claude"
+        ? ai.apiKey
+          ? { probe: createClaudeAccountProbe({ apiKey: ai.apiKey, baseUrl: ai.baseUrl }) }
+          : {}
+        : { apiStyle: ai.apiStyle })
     });
     aiAccount.apply(result);
 

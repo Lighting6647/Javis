@@ -19,6 +19,7 @@
     "desktop:app": "electron desktop/main.cjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",

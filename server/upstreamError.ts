@@ -15,11 +15,13 @@ export type UpstreamService = "chat" | "transcribe";
 type Json = Record<string, unknown>;
 
 const MAX_CODE_LENGTH = 80;
+// รหัสที่ลงท้ายด้วย _error คือกลุ่มข้อผิดพลาดของ Anthropic (Claude)
 const QUOTA_CODES = new Set([
   "insufficient_quota",
   "credit_balance_exhausted",
   "billing_hard_limit_reached",
-  "billing_not_active"
+  "billing_not_active",
+  "billing_error"
 ]);
 // รหัสตัวพิมพ์ใหญ่คือสถานะของ Google (Gemini) ซึ่งใช้ชุดรหัสคนละแบบกับ OpenAI
 const AUTH_CODES = new Set([
@@ -28,11 +30,22 @@ const AUTH_CODES = new Set([
   "account_deactivated",
   "invalid_organization",
   "UNAUTHENTICATED",
-  "PERMISSION_DENIED"
+  "PERMISSION_DENIED",
+  "authentication_error",
+  "permission_error"
 ]);
-const MODEL_CODES = new Set(["model_not_found", "unsupported_model", "NOT_FOUND"]);
+// Anthropic ตอบ not_found_error ทั้งกรณีไม่มีโมเดลนั้น และกรณีบัญชีไม่มีสิทธิ์ใช้โมเดลนั้น
+const MODEL_CODES = new Set(["model_not_found", "unsupported_model", "NOT_FOUND", "not_found_error"]);
 // RESOURCE_EXHAUSTED คือโควตาต่อนาทีหรือต่อวันเต็ม ซึ่งกลับมาใช้ได้เองโดยไม่ต้องให้ผู้ดูแลทำอะไร
-const BUSY_CODES = new Set(["rate_limit_exceeded", "server_is_overloaded", "overloaded", "RESOURCE_EXHAUSTED", "UNAVAILABLE"]);
+const BUSY_CODES = new Set([
+  "rate_limit_exceeded",
+  "server_is_overloaded",
+  "overloaded",
+  "RESOURCE_EXHAUSTED",
+  "UNAVAILABLE",
+  "rate_limit_error",
+  "overloaded_error"
+]);
 /** Google ตอบกุญแจผิดด้วยรหัสกลาง ๆ (400 INVALID_ARGUMENT) จึงต้องดูจากข้อความ ใช้เพื่อจัดกลุ่มเท่านั้น ไม่ส่งต่อให้ใคร */
 const API_KEY_MESSAGE = /api key/i;
 
@@ -71,10 +84,11 @@ function reasonOf(httpStatus: number | null, codes: readonly string[]): Upstream
   const has = (known: Set<string>) => codes.some((code) => known.has(code));
 
   // เครดิตหมดมาพร้อมรหัสสถานะ 429 เหมือนตอนผู้ใช้หนาแน่น จึงต้องดูรหัสข้อผิดพลาดก่อนรหัสสถานะ
-  if (has(QUOTA_CODES)) return "quota";
+  // 402 คือปัญหาการชำระเงิน และ 529 คือบริการรับภาระเกิน (รหัสที่ Anthropic ใช้)
+  if (has(QUOTA_CODES) || httpStatus === 402) return "quota";
   if (has(AUTH_CODES) || httpStatus === 401) return "auth";
   if (has(MODEL_CODES) || httpStatus === 404) return "model";
-  if (has(BUSY_CODES) || httpStatus === 429 || httpStatus === 503) return "busy";
+  if (has(BUSY_CODES) || httpStatus === 429 || httpStatus === 503 || httpStatus === 529) return "busy";
   return "unknown";
 }
 

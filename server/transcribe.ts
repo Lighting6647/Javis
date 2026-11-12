@@ -37,7 +37,7 @@ export const transcribeHandler: RequestHandler = async (request, response) => {
     return;
   }
   if (!ai.apiKey) {
-    response.status(500).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
+    response.status(503).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
     return;
   }
 

@@ -1,8 +1,11 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
 import { aiAccount } from "./aiAccount.js";
-import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsRequest } from "./chatCompletions.js";
+import { CLAUDE_EFFORTS } from "./aiProvider.js";
+import { memoryFollowUpNote, toChatCompletionsRequest } from "./chatCompletions.js";
+import { startClaudeReply } from "./claudeClient.js";
 import { config } from "./config.js";
+import { type ReplyStart, startHttpReply } from "./replySource.js";
 import {
   createResponseReducer,
   FILL_FORM_TOOL,
@@ -12,8 +15,7 @@ import {
   OPEN_PAGE_TOOL,
   REMEMBER_TOOL
 } from "./responseStream.js";
-import { parseSseChunk } from "./sse.js";
-import { describeUpstreamFailure, readRejection, type UpstreamRejection } from "./upstreamError.js";
+import { describeUpstreamFailure } from "./upstreamError.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -24,6 +26,11 @@ const UPSTREAM_TIMEOUT_MS = 90_000;
 const MAX_REPLY_TOKENS = 1000;
 /** โมเดลที่มีขั้นคิดนับโทเค็นที่ใช้คิดรวมในเพดานนี้ด้วย จึงเผื่อไว้ให้คำตอบไม่ถูกตัดกลางประโยค */
 const MAX_CHAT_STYLE_TOKENS = 2000;
+/**
+ * Claude รุ่นปัจจุบันปิดขั้นคิดไม่ได้ และตอนค้นเว็บยังเขียนโค้ดกรองผลค้นหาเองด้วย ทั้งหมดนับรวมในเพดานนี้
+ * ค่าใช้จ่ายคิดตามโทเค็นที่ใช้จริง เพดานนี้จึงเป็นแค่ตัวกันคำตอบยาวผิดปกติ
+ */
+const MAX_CLAUDE_TOKENS = 8000;
 
 const CORE_INSTRUCTIONS = [
   "คุณคือ Javis ผู้ช่วย AI ภาษาไทยที่สุภาพ อบอุ่น และเป็นธรรมชาติ",
@@ -38,6 +45,13 @@ const WEB_SEARCH_INSTRUCTIONS = [
   "เมื่อคำถามต้องใช้ข้อมูลปัจจุบัน ข่าว ราคา สภาพอากาศ หรือข้อเท็จจริงที่คุณไม่แน่ใจ ให้ค้นเว็บก่อนตอบ",
   "เมื่อใช้ข้อมูลจากเว็บ ให้อ้างอิงแหล่งที่มาเป็นลิงก์รูปแบบ [ชื่อเว็บ](URL) ต่อท้ายประโยคที่เกี่ยวข้อง ซึ่งเป็น Markdown อย่างเดียวที่อนุญาต"
 ];
+
+/**
+ * ใช้คู่กับวันที่ปัจจุบัน เมื่อ AI ค้นเว็บได้: โมเดลมักเชื่อความรู้เดิมของตัวเองเกินไปถ้าไม่รู้ว่าเวลาผ่านมานานแค่ไหน
+ * การบอกว่าเรื่องแบบใดเปลี่ยนได้ ทำให้ค้นเฉพาะคำถามที่ควรค้น
+ */
+const STALE_KNOWLEDGE_NOTE =
+  "ความรู้ที่คุณเรียนมาสิ้นสุดก่อนวันนี้นานพอสมควร เรื่องที่เปลี่ยนได้ เช่น ผู้ดำรงตำแหน่ง ราคา รุ่นของสินค้า กฎระเบียบ สถิติ และอะไรก็ตามที่เป็นล่าสุด อาจเปลี่ยนไปแล้ว ให้ค้นเว็บก่อนตอบเรื่องเหล่านี้แม้จะมั่นใจ ส่วนข้อเท็จจริงที่ไม่เปลี่ยนไม่ต้องค้น";
 
 /** ใช้เมื่อค้นเว็บไม่ได้: ต้องไม่แต่งข้อมูลล่าสุดขึ้นเอง และเสนอทางที่ยังทำได้ */
 const NO_WEB_SEARCH_INSTRUCTIONS = [
@@ -159,10 +173,11 @@ const MEMORY_TOOL_DEFINITIONS = [
 let webSearchUsable = config.ai.webSearch;
 
 /**
- * เปลี่ยนเป็น false เมื่อพบว่าโมเดลที่ตั้งไว้ไม่รับการกำหนดระดับการคิด
- * คำขอถัดไปจะปล่อยให้โมเดลใช้ระดับการคิดของตัวเอง (ตอบช้าลงบ้าง) แทนที่ทุกคำถามจะล้มเหลว
+ * เปลี่ยนเป็น false เมื่อพบว่าโมเดลที่ตั้งไว้ไม่รับตัวเลือกเสริมของคำขอ
+ * (ระดับการคิด และสำหรับ Claude รวมถึงการสลับไปโมเดลสำรองกับการสตรีมอาร์กิวเมนต์ของเครื่องมือ)
+ * คำขอถัดไปจะส่งแบบพื้นฐาน โมเดลใช้ค่าเริ่มต้นของตัวเอง (ตอบช้าลงบ้าง) แทนที่ทุกคำถามจะล้มเหลว
  */
-let reasoningEffortUsable = true;
+let optionalSettingsUsable = true;
 
 function buildTools(withWebSearch: boolean, withFormFill: boolean): unknown[] {
   return [
@@ -210,64 +225,66 @@ export const chatRequestSchema = z.object({
 
 type ChatRequest = z.infer<typeof chatRequestSchema>;
 
+const THAI_WEEKDAYS = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const THAI_MONTHS = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม"
+];
+/** ประเทศไทยใช้เวลา UTC+7 ตลอดปี */
+const THAILAND_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** วันที่ปัจจุบันตามเวลาประเทศไทย เขียนให้ AI อ่าน บอกทั้งสองศักราชเพื่อไม่ให้สับสนเมื่อผู้ใช้พูดถึงปี */
+export function describeToday(now: Date = new Date()): string {
+  const local = new Date(now.getTime() + THAILAND_OFFSET_MS);
+  const year = local.getUTCFullYear();
+  return `วัน${THAI_WEEKDAYS[local.getUTCDay()]}ที่ ${local.getUTCDate()} ${THAI_MONTHS[local.getUTCMonth()]} ค.ศ. ${year} (พ.ศ. ${year + 543}) ตามเวลาประเทศไทย`;
+}
+
+export interface InstructionParts {
+  /** ส่วนที่เหมือนกันทุกคำขอของการตั้งค่าเดียวกัน ผู้ให้บริการที่แคชคำสั่งได้จะแคชส่วนนี้ */
+  fixed: string;
+  /** ส่วนที่เปลี่ยนตามผู้ใช้และเวลา: วันที่ ความจำ และหน้าเว็บที่เปิดอยู่ */
+  personal: string;
+}
+
 /**
  * @param webSearch AI ค้นเว็บเองได้หรือไม่ในคำขอนี้ ถ้าไม่ได้ต้องบอกให้ชัด ไม่เช่นนั้นจะแต่งข้อมูลล่าสุดขึ้นเอง
+ * @param today วันที่ปัจจุบันที่จะบอก AI (จาก describeToday) ไม่กำหนด = ไม่บอก
  */
-export function buildInstructions(page: ChatRequest["page"], memories: ChatRequest["memories"], webSearch = true): string {
+export function buildInstructionParts(
+  page: ChatRequest["page"],
+  memories: ChatRequest["memories"],
+  webSearch = true,
+  today?: string
+): InstructionParts {
   const system = [...CORE_INSTRUCTIONS, ...(webSearch ? WEB_SEARCH_INSTRUCTIONS : NO_WEB_SEARCH_INSTRUCTIONS), ...OPEN_PAGE_INSTRUCTIONS];
-  const sections = [system.join(" "), MEMORY_INSTRUCTIONS];
+  const personal: string[] = [];
+
+  if (today) personal.push(webSearch ? `วันนี้คือ${today} ${STALE_KNOWLEDGE_NOTE}` : `วันนี้คือ${today}`);
 
   const memoryLines = (memories ?? []).map((memory) => `- [${memory.id}] ${memory.text}`);
-  sections.push(memoryLines.length > 0 ? `ความจำเกี่ยวกับผู้ใช้:\n${memoryLines.join("\n")}` : "ยังไม่มีความจำเกี่ยวกับผู้ใช้");
+  personal.push(memoryLines.length > 0 ? `ความจำเกี่ยวกับผู้ใช้:\n${memoryLines.join("\n")}` : "ยังไม่มีความจำเกี่ยวกับผู้ใช้");
 
   if (page && page.fields.length > 0) {
-    sections.push(`${FORM_FILL_INSTRUCTIONS}\n\`\`\`json\n${JSON.stringify(page)}\n\`\`\``);
+    personal.push(`${FORM_FILL_INSTRUCTIONS}\n\`\`\`json\n${JSON.stringify(page)}\n\`\`\``);
   }
-  return sections.join("\n\n");
+  return { fixed: `${system.join(" ")}\n\n${MEMORY_INSTRUCTIONS}`, personal: personal.join("\n\n") };
 }
 
-/** อ่านสตรีม SSE จากต้นทางทีละเหตุการณ์ หยุดเมื่อ onEvent คืน true */
-async function readUpstreamEvents(body: ReadableStream<Uint8Array>, onEvent: (event: unknown) => boolean): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return;
-
-      const chunk = parseSseChunk(buffer + decoder.decode(value, { stream: true }));
-      buffer = chunk.rest;
-      for (const event of chunk.events) {
-        if (onEvent(event)) return;
-      }
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-  }
-}
-
-/**
- * อ่านคำตอบจากต้นทางเป็นเหตุการณ์แบบ Responses ไม่ว่าผู้ให้บริการจะใช้รูปแบบใด
- * ส่วนที่ประมวลผลคำตอบจึงเขียนไว้ชุดเดียว
- */
-async function readReplyEvents(body: ReadableStream<Uint8Array>, onEvent: (event: unknown) => boolean): Promise<void> {
-  if (config.ai.apiStyle === "responses") {
-    await readUpstreamEvents(body, onEvent);
-    return;
-  }
-
-  const translator = createChatCompletionsTranslator();
-  let stopped = false;
-  const forward = (events: unknown[]) => {
-    stopped = events.some((event) => onEvent(event));
-    return stopped;
-  };
-
-  await readUpstreamEvents(body, (chunk) => forward(translator.push(chunk)));
-  // ต้นทางบางรายปิดสตรีมโดยไม่บอกเหตุผลการจบ ต้องปิดท้ายให้เอง
-  if (!stopped) forward(translator.finish());
+/** คำสั่งถึง AI ทั้งหมดเป็นข้อความเดียว สำหรับผู้ให้บริการที่รับคำสั่งระบบเป็นก้อนเดียว */
+export function buildInstructions(page: ChatRequest["page"], memories: ChatRequest["memories"], webSearch = true): string {
+  const { fixed, personal } = buildInstructionParts(page, memories, webSearch);
+  return `${fixed}\n\n${personal}`;
 }
 
 /** รายการที่ต้องส่งกลับให้ AI เพื่อบอกผลของการเรียกเครื่องมือความจำ */
@@ -278,14 +295,26 @@ function toolResultItems(calls: MemoryToolCall[]): unknown[] {
   ]);
 }
 
+/** ตัวเลือกของการขอคำตอบหนึ่งรอบ */
+interface ReplyOptions {
+  /** ให้ AI ค้นเว็บเองได้ */
+  webSearch: boolean;
+  /** ให้ AI เรียกเครื่องมือได้ ปิดในรอบตอบต่อหลังจำหรือลืม */
+  tools: boolean;
+  /** ส่งตัวเลือกเสริมของผู้ให้บริการไปด้วย (เช่น ระดับการคิด) */
+  extras: boolean;
+}
+
 /**
  * รับประวัติบทสนทนา แล้วสตรีมคำตอบของ AI กลับเป็นเหตุการณ์ NDJSON
  * AI ค้นเว็บเองได้เมื่อจำเป็น ขอเปิดหน้าเว็บ เสนอกรอกฟอร์ม และจำหรือลืมเรื่องของผู้ใช้ได้เมื่อถูกสั่ง
  */
 export const chatHandler: RequestHandler = async (request, response) => {
   const ai = config.ai;
-  if (!ai.apiKey) {
-    response.status(500).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
+  const { apiKey } = ai;
+  if (!apiKey) {
+    // เป็นเรื่องการตั้งค่าของผู้ดูแล ไม่ใช่ข้อผิดพลาดภายในของเซิร์ฟเวอร์ จึงตอบ 503 เหมือนการตั้งค่าอื่นที่ยังไม่ครบ
+    response.status(503).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
     return;
   }
 
@@ -303,81 +332,108 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
-  const requestReply = (input: unknown[], withWebSearch: boolean, allowTools: boolean, withReasoningEffort = reasoningEffortUsable) => {
-    const instructions = buildInstructions(page, memories, withWebSearch);
-    const tools = buildTools(withWebSearch, pageFields.length > 0);
+  /** ขอคำตอบหนึ่งรอบจากผู้ให้บริการที่ตั้งค่าไว้ ผลลัพธ์มีรูปแบบเดียวกันทุกราย */
+  const startReply = (input: unknown[], options: ReplyOptions): Promise<ReplyStart> => {
+    const tools = buildTools(options.webSearch, pageFields.length > 0);
+    const turns = input as Array<{ role: string; content: string }>;
 
-    const body =
-      ai.apiStyle === "chat"
-        ? toChatCompletionsRequest({
-            model: ai.chatModel,
-            instructions,
-            messages: input as Array<{ role: string; content: string }>,
-            // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
-            tools: allowTools ? tools : [],
-            maxTokens: MAX_CHAT_STYLE_TOKENS,
-            reasoningEffort: withReasoningEffort ? ai.reasoningEffort : undefined
-          })
-        : {
-            model: ai.chatModel,
-            stream: true,
-            // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
-            store: false,
-            max_output_tokens: MAX_REPLY_TOKENS,
-            instructions,
-            input,
-            tools,
-            ...(allowTools ? {} : { tool_choice: "none" })
-          };
+    if (ai.apiStyle === "claude") {
+      const { fixed, personal } = buildInstructionParts(page, memories, options.webSearch, describeToday());
+      return startClaudeReply({
+        connection: { apiKey, baseUrl: ai.baseUrl },
+        signal,
+        timeoutMs: UPSTREAM_TIMEOUT_MS,
+        model: ai.chatModel,
+        fixedInstructions: fixed,
+        personalInstructions: personal,
+        messages: turns,
+        // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
+        tools: options.tools ? tools : [],
+        maxTokens: MAX_CLAUDE_TOKENS,
+        effort: CLAUDE_EFFORTS.find((effort) => effort === ai.reasoningEffort),
+        extras: options.extras,
+        // รอบตอบต่อมีประโยคสำรองของตัวเองอยู่แล้ว
+        speakRefusal: options.tools
+      });
+    }
 
-    return fetch(`${ai.baseUrl}/${ai.apiStyle === "chat" ? "chat/completions" : "responses"}`, {
-      method: "POST",
+    const instructions = buildInstructions(page, memories, options.webSearch);
+    if (ai.apiStyle === "chat") {
+      return startHttpReply({
+        url: `${ai.baseUrl}/chat/completions`,
+        apiKey,
+        signal,
+        style: "chat",
+        body: toChatCompletionsRequest({
+          model: ai.chatModel,
+          instructions,
+          messages: turns,
+          tools: options.tools ? tools : [],
+          maxTokens: MAX_CHAT_STYLE_TOKENS,
+          reasoningEffort: options.extras ? ai.reasoningEffort : undefined
+        })
+      });
+    }
+
+    return startHttpReply({
+      url: `${ai.baseUrl}/responses`,
+      apiKey,
       signal,
-      headers: {
-        Authorization: `Bearer ${ai.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
+      style: "responses",
+      body: {
+        model: ai.chatModel,
+        stream: true,
+        // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
+        store: false,
+        max_output_tokens: MAX_REPLY_TOKENS,
+        instructions,
+        input,
+        tools,
+        ...(options.tools ? {} : { tool_choice: "none" })
+      }
     });
   };
 
-  let upstream: Response;
-  /** รายละเอียดของคำตอบที่ถูกปฏิเสธ ถ้าอ่านเนื้อหาไปแล้วระหว่างตัดสินว่าจะลองใหม่ไหม (เนื้อหาอ่านได้ครั้งเดียว) */
-  let rejection: UpstreamRejection | null = null;
-  try {
-    upstream = await requestReply(messages, webSearchUsable, true);
+  /** ผู้ให้บริการรายนี้มีตัวเลือกเสริมที่โมเดลบางรุ่นอาจไม่รับ */
+  const hasOptionalSettings = ai.apiStyle === "claude" || (ai.apiStyle === "chat" && Boolean(ai.reasoningEffort));
+  /**
+   * คำขอถูกปฏิเสธเพราะรูปแบบ (400) และลองใหม่แบบลดตัวเลือกแล้วอาจผ่าน
+   * กุญแจผิดก็ได้รหัส 400 เหมือนกันในผู้ให้บริการบางราย กรณีนั้นลองใหม่ไปก็ไม่ช่วย จึงไม่ลอง
+   */
+  const isRejectedShape = (start: ReplyStart): start is Extract<ReplyStart, { ok: false }> =>
+    !start.ok && start.status === 400 && !start.rejection.codes.includes("invalid_api_key");
 
-    // คำขอถูกปฏิเสธตั้งแต่ต้น: สาเหตุที่พบบ่อยคือโมเดลไม่รองรับการค้นเว็บ ลองใหม่หนึ่งครั้งโดยไม่ค้นเว็บ
-    if (upstream.status === 400 && webSearchUsable) {
-      await upstream.body?.cancel().catch(() => undefined);
-      const retry = await requestReply(messages, false, true);
+  let reply: ReplyStart;
+  try {
+    reply = await startReply(messages, { webSearch: webSearchUsable, tools: true, extras: optionalSettingsUsable });
+
+    // คำขอถูกปฏิเสธตั้งแต่ต้น: สาเหตุที่พบบ่อยคือโมเดลหรือบัญชีไม่รับการค้นเว็บ ลองใหม่หนึ่งครั้งโดยไม่ค้นเว็บ
+    if (isRejectedShape(reply) && webSearchUsable) {
+      const retry = await startReply(messages, { webSearch: false, tools: true, extras: optionalSettingsUsable });
       if (retry.ok) {
         webSearchUsable = false;
         console.warn(
-          `โมเดล ${ai.chatModel} ไม่รับเครื่องมือ web_search จึงปิดการค้นเว็บจนกว่าจะรีสตาร์ต ` +
-            `เปลี่ยน ${ai.chatModelVariable} เป็นโมเดลที่รองรับ หรือตั้ง WEB_SEARCH_ENABLED=false เพื่อปิดคำเตือนนี้`
+          `โมเดล ${ai.chatModel} ไม่รับเครื่องมือค้นเว็บ จึงปิดการค้นเว็บจนกว่าจะรีสตาร์ต ` +
+            `เปลี่ยน ${ai.chatModelVariable} เป็นโมเดลที่รองรับ หรือตั้ง WEB_SEARCH_ENABLED=false เพื่อปิดคำเตือนนี้ (${reply.rejection.logDetail})`
         );
       }
-      upstream = retry;
+      reply = retry;
     }
 
-    // รูปแบบ Chat Completions: โมเดลบางรุ่นไม่รับการกำหนดระดับการคิด ลองใหม่หนึ่งครั้งโดยไม่กำหนด
-    // กุญแจผิดก็ได้รหัส 400 เหมือนกันในผู้ให้บริการบางราย กรณีนั้นลองใหม่ไปก็ไม่ช่วย จึงไม่ลอง
-    if (upstream.status === 400 && ai.apiStyle === "chat" && ai.reasoningEffort && reasoningEffortUsable) {
-      rejection = await readRejection(upstream);
-      if (!rejection.codes.includes("invalid_api_key")) {
-        const retry = await requestReply(messages, false, true, false);
-        if (retry.ok) {
-          reasoningEffortUsable = false;
-          console.warn(
-            `โมเดล ${ai.chatModel} ไม่รับระดับการคิด "${ai.reasoningEffort}" จึงใช้ค่าเริ่มต้นของโมเดลจนกว่าจะรีสตาร์ต ` +
-              `ตั้ง GEMINI_REASONING_EFFORT เป็นค่าที่โมเดลรองรับ หรือ default เพื่อปิดคำเตือนนี้ (${rejection.logDetail})`
-          );
-        }
-        // คำขอที่ลองใหม่มีเนื้อหาของตัวเอง รายละเอียดของคำขอแรกจึงไม่ใช้แล้ว
-        rejection = null;
-        upstream = retry;
+    // โมเดลบางรุ่นไม่รับตัวเลือกเสริมของคำขอ ลองใหม่หนึ่งครั้งแบบพื้นฐาน
+    if (isRejectedShape(reply) && hasOptionalSettings && optionalSettingsUsable) {
+      const retry = await startReply(messages, { webSearch: false, tools: true, extras: false });
+      if (retry.ok) {
+        optionalSettingsUsable = false;
+        console.warn(
+          ai.apiStyle === "claude"
+            ? `โมเดล ${ai.chatModel} ไม่รับตัวเลือกเสริมของคำขอ (ระดับการคิด การสลับไปโมเดลสำรอง หรือการสตรีมอาร์กิวเมนต์ของเครื่องมือ) ` +
+                `จึงส่งคำขอแบบพื้นฐานจนกว่าจะรีสตาร์ต ตั้ง ANTHROPIC_EFFORT เป็นค่าที่โมเดลรองรับ หรือ default (${reply.rejection.logDetail})`
+            : `โมเดล ${ai.chatModel} ไม่รับระดับการคิด "${ai.reasoningEffort}" จึงใช้ค่าเริ่มต้นของโมเดลจนกว่าจะรีสตาร์ต ` +
+                `ตั้ง GEMINI_REASONING_EFFORT เป็นค่าที่โมเดลรองรับ หรือ default เพื่อปิดคำเตือนนี้ (${reply.rejection.logDetail})`
+        );
       }
+      reply = retry;
     }
   } catch (error) {
     if (clientGone.signal.aborted) return;
@@ -386,16 +442,17 @@ export const chatHandler: RequestHandler = async (request, response) => {
     return;
   }
 
-  if (!upstream.ok || !upstream.body) {
-    const { codes, logDetail } = rejection ?? (await readRejection(upstream));
-    const failure = describeUpstreamFailure("chat", upstream.status, codes);
+  if (!reply.ok) {
+    const { codes, logDetail } = reply.rejection;
+    const failure = describeUpstreamFailure("chat", reply.status, codes);
     // ต้นทางปฏิเสธรูปแบบคำขอ (400): บันทึกข้อความที่ปิดบังแล้วไว้ให้ผู้ดูแลหาสาเหตุ กรณีอื่นรหัสก็บอกสาเหตุพอแล้ว
-    const detail = upstream.status === 400 && failure.reason === "unknown" ? logDetail : "";
-    console.error("Chat upstream failed", upstream.status, failure.reason, codes.join(","), detail);
+    const detail = reply.status === 400 && failure.reason === "unknown" ? logDetail : "";
+    console.error("Chat upstream failed", reply.status, failure.reason, codes.join(","), detail);
     aiAccount.reportFailure("chat", failure.reason);
     response.status(failure.status).json({ error: failure.message });
     return;
   }
+  const replyEvents = reply.events;
 
   // ต้นทางอาจตอบ 200 แล้วแจ้งล้มเหลวเป็นเหตุการณ์แรก (เช่น เครดิตหมด) จึงยังไม่เปิดสตรีมให้แอป
   // จนกว่าจะมีอะไรให้ส่งจริง เพื่อให้ยังตอบเป็นข้อผิดพลาดที่มีข้อความชัดเจนได้
@@ -422,19 +479,17 @@ export const chatHandler: RequestHandler = async (request, response) => {
    * คืน true ถ้า AI ตอบเป็นข้อความกลับมา
    */
   const continueAfterMemory = async (): Promise<boolean> => {
-    // รูปแบบ Chat Completions: แจ้งผลเป็นข้อความธรรมดา แทนการส่งรายการเรียกเครื่องมือกลับไป
+    // รูปแบบ Responses ส่งรายการเรียกเครื่องมือกลับไปพร้อมผล ส่วนรายอื่นแจ้งผลเป็นข้อความธรรมดา
+    // เพราะโมเดลที่มีขั้นคิดต้องการข้อมูลของขั้นคิดแนบกลับมาด้วย ซึ่งแอปไม่ได้เก็บไว้
     const result =
-      ai.apiStyle === "chat"
-        ? [{ role: "user", content: memoryFollowUpNote(reducer.memoryCalls.map((call) => call.output)) }]
-        : toolResultItems(reducer.memoryCalls);
-    const followUp = await requestReply([...messages, ...result], false, false);
-    if (!followUp.ok || !followUp.body) {
-      await followUp.body?.cancel().catch(() => undefined);
-      return false;
-    }
+      ai.apiStyle === "responses"
+        ? toolResultItems(reducer.memoryCalls)
+        : [{ role: "user", content: memoryFollowUpNote(reducer.memoryCalls.map((call) => call.output)) }];
+    const followUp = await startReply([...messages, ...result], { webSearch: false, tools: false, extras: optionalSettingsUsable });
+    if (!followUp.ok) return false;
 
     let spoke = false;
-    await readReplyEvents(followUp.body, (event) => {
+    await followUp.events.read((event) => {
       if (typeof event !== "object" || event === null) return false;
       const { type, delta } = event as { type?: unknown; delta?: unknown };
       if (type === "response.output_text.delta" && typeof delta === "string" && delta) {
@@ -447,7 +502,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
   };
 
   try {
-    await readReplyEvents(upstream.body, (event) => {
+    await replyEvents.read((event) => {
       reducer.push(event).forEach(send);
       if (reducer.failed) throw new Error("upstream reported a failed response");
       return reducer.done;

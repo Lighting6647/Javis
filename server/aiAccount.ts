@@ -105,6 +105,17 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
 /** สถานะบัญชี AI ของเซิร์ฟเวอร์นี้ */
 export const aiAccount = createAiAccountStatus();
 
+/** วิธีถามผู้ให้บริการรายหนึ่งเรื่องบัญชี แยกไว้เพราะแต่ละรายมีทางเรียกของตัวเอง (HTTP โดยตรง หรือผ่าน SDK) */
+export interface AccountProbe {
+  /**
+   * ถามต้นทางว่ามีโมเดลนี้ไหม (ไม่มีค่าใช้จ่าย) และยืนยันกุญแจ API ไปในตัว
+   * retiresOn คือวันที่ต้นทางประกาศปิดให้บริการโมเดลนั้น รูปแบบ YYYY-MM-DD
+   */
+  lookUpModel(service: UpstreamService, model: string): Promise<{ state: AiServiceState; retiresOn?: string | undefined }>;
+  /** ส่งคำขอสั้นที่สุดหนึ่งครั้ง คืน ok ถ้าเครดิตยังเหลือ หรือ unreachable ถ้ายังไม่รู้ผล */
+  probeCredits(model: string): Promise<AiServiceState>;
+}
+
 export interface AccountCheckOptions {
   baseUrl: string;
   apiKey: string | undefined;
@@ -117,6 +128,8 @@ export interface AccountCheckOptions {
   apiStyle?: "responses" | "chat";
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** ตัวตรวจของผู้ให้บริการที่ไม่ได้คุยด้วย HTTP แบบเดียวกับ OpenAI ถ้าไม่กำหนดจะตรวจด้วย HTTP ตามค่าด้านบน */
+  probe?: AccountProbe;
 }
 
 export interface RetiringModel {
@@ -143,14 +156,68 @@ function stateOf(service: UpstreamService, httpStatus: number, codes: readonly s
   return reason === "quota" || reason === "auth" || reason === "model" ? reason : "unreachable";
 }
 
+interface HttpProbeOptions {
+  baseUrl: string;
+  apiKey: string;
+  apiStyle: "responses" | "chat";
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+}
+
+/** ตัวตรวจบัญชีของผู้ให้บริการที่คุยด้วย HTTP โดยตรง (OpenAI และรายที่เข้ากันได้) */
+function createHttpAccountProbe(options: HttpProbeOptions): AccountProbe {
+  const { baseUrl, fetchImpl, timeoutMs } = options;
+  const headers = { Authorization: `Bearer ${options.apiKey}` };
+
+  return {
+    async lookUpModel(service, model) {
+      try {
+        const response = await fetchImpl(`${baseUrl}/models/${encodeURIComponent(model)}`, {
+          headers,
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+        if (!response.ok) return { state: stateOf(service, response.status, await readRejectedResponse(response)) };
+
+        const payload = (await response.json().catch(() => null)) as { shutdown_date?: unknown } | null;
+        const date = payload?.shutdown_date;
+        return { state: "ok", retiresOn: typeof date === "string" ? date : undefined };
+      } catch {
+        return { state: "unreachable" };
+      }
+    },
+
+    async probeCredits(model) {
+      try {
+        const chatStyle = options.apiStyle === "chat";
+        const response = await fetchImpl(`${baseUrl}/${chatStyle ? "chat/completions" : "responses"}`, {
+          method: "POST",
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify(
+            chatStyle
+              ? { model, messages: [{ role: "user", content: "ping" }], max_tokens: CREDIT_PROBE_TOKENS }
+              : { model, input: "ping", max_output_tokens: CREDIT_PROBE_TOKENS, store: false }
+          )
+        });
+        if (!response.ok) return stateOf("chat", response.status, await readRejectedResponse(response));
+
+        // ต้นทางอาจตอบ 200 แต่แจ้งล้มเหลวไว้ในเนื้อหา
+        const payload = (await response.json().catch(() => null)) as { status?: unknown } | null;
+        return payload?.status === "failed" ? stateOf("chat", 200, readUpstreamErrorCodes(payload)) : "ok";
+      } catch {
+        // ติดต่อไม่ได้ระหว่างตรวจเครดิต: ยังไม่รู้ผล
+        return "unreachable";
+      }
+    }
+  };
+}
+
 /**
  * ตรวจบัญชี AI: กุญแจ API ใช้ได้ไหม โมเดลที่ตั้งค่าไว้มีอยู่จริงไหม และเครดิตยังเหลือไหม
  * ไม่ throw ไม่ว่าเกิดอะไรขึ้น เพราะเป็นการตรวจเพื่อเตือน ไม่ใช่เงื่อนไขในการเริ่มเซิร์ฟเวอร์
  */
 export async function runAccountCheck(options: AccountCheckOptions): Promise<AccountCheckResult> {
-  const { baseUrl, apiKey, chatModel, transcribeModel, creditCheck } = options;
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const { apiKey, chatModel, transcribeModel, creditCheck } = options;
   const retiring: RetiringModel[] = [];
 
   /** สถานะของการแปลงเสียงเมื่อกุญแจหรือบัญชีมีปัญหา: ถ้าผู้ให้บริการไม่มีบริการนี้ก็ยังคงเป็นไม่รองรับ */
@@ -158,24 +225,21 @@ export async function runAccountCheck(options: AccountCheckOptions): Promise<Acc
 
   if (!apiKey) return { chat: "auth", transcribe: transcribeWhen("auth"), credits: "unverified", retiring };
 
-  const headers = { Authorization: `Bearer ${apiKey}` };
+  const probe =
+    options.probe ??
+    createHttpAccountProbe({
+      baseUrl: options.baseUrl,
+      apiKey,
+      apiStyle: options.apiStyle ?? "responses",
+      fetchImpl: options.fetchImpl ?? fetch,
+      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    });
 
-  /** ถามต้นทางว่ามีโมเดลนี้ไหม (ไม่มีค่าใช้จ่าย) และยืนยันกุญแจ API ไปในตัว */
   const lookUpModel = async (service: UpstreamService, model: string): Promise<AiServiceState> => {
-    try {
-      const response = await fetchImpl(`${baseUrl}/models/${encodeURIComponent(model)}`, {
-        headers,
-        signal: AbortSignal.timeout(timeoutMs)
-      });
-      if (!response.ok) return stateOf(service, response.status, await readRejectedResponse(response));
-
-      const payload = (await response.json().catch(() => null)) as { shutdown_date?: unknown } | null;
-      const date = payload?.shutdown_date;
-      if (typeof date === "string" && ISO_DATE.test(date)) retiring.push({ service, model, date });
-      return "ok";
-    } catch {
-      return "unreachable";
-    }
+    // ตัวตรวจไม่ควร throw แต่ถ้าเกิดขึ้น การตรวจทั้งรอบต้องไม่ล้มตาม
+    const { state, retiresOn } = await probe.lookUpModel(service, model).catch(() => ({ state: "unreachable" as const, retiresOn: undefined }));
+    if (state === "ok" && typeof retiresOn === "string" && ISO_DATE.test(retiresOn)) retiring.push({ service, model, date: retiresOn });
+    return state;
   };
 
   let [chat, transcribe] = await Promise.all([
@@ -191,39 +255,18 @@ export async function runAccountCheck(options: AccountCheckOptions): Promise<Acc
   if (chat !== "ok") return { chat, transcribe, credits: "unverified", retiring };
 
   let credits: CreditState = "unverified";
-  try {
-    const chatStyle = options.apiStyle === "chat";
-    const response = await fetchImpl(`${baseUrl}/${chatStyle ? "chat/completions" : "responses"}`, {
-      method: "POST",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(
-        chatStyle
-          ? { model: chatModel, messages: [{ role: "user", content: "ping" }], max_tokens: CREDIT_PROBE_TOKENS }
-          : { model: chatModel, input: "ping", max_output_tokens: CREDIT_PROBE_TOKENS, store: false }
-      )
-    });
+  const probed = await probe.probeCredits(chatModel).catch((): AiServiceState => "unreachable");
 
-    let failure: AiServiceState | null = null;
-    if (!response.ok) {
-      failure = stateOf("chat", response.status, await readRejectedResponse(response));
-    } else {
-      // ต้นทางอาจตอบ 200 แต่แจ้งล้มเหลวไว้ในเนื้อหา
-      const payload = (await response.json().catch(() => null)) as { status?: unknown } | null;
-      if (payload?.status === "failed") failure = stateOf("chat", 200, readUpstreamErrorCodes(payload));
-      else credits = "ok";
-    }
-
-    if (failure === "quota" || failure === "auth") {
-      chat = failure;
-      if (transcribe !== "model" && transcribe !== "unsupported") transcribe = failure;
-      if (failure === "quota") credits = "exhausted";
-    } else if (failure === "model") {
-      chat = "model";
-    }
-  } catch {
-    // ติดต่อไม่ได้ระหว่างตรวจเครดิต: ยังไม่รู้ผล ใช้สถานะจากการตรวจโมเดล
+  if (probed === "ok") {
+    credits = "ok";
+  } else if (probed === "quota" || probed === "auth") {
+    chat = probed;
+    if (transcribe !== "model" && transcribe !== "unsupported") transcribe = probed;
+    if (probed === "quota") credits = "exhausted";
+  } else if (probed === "model") {
+    chat = "model";
   }
+  // ผลอื่นคือยังไม่รู้: ใช้สถานะจากการตรวจโมเดล
 
   return { chat, transcribe, credits, retiring };
 }
@@ -262,7 +305,10 @@ export function describeAccountCheck(
       level: "error",
       message: settings.hasApiKey
         ? `ตรวจบัญชี AI: ${keyVariable} ถูกปฏิเสธ Javis จะ${affected}ไม่ได้จนกว่าจะแก้ค่านี้`
-        : `ตรวจบัญชี AI: ยังไม่ได้ตั้ง ${keyVariable} Javis จะ${affected}ไม่ได้`
+        : keyVariable === "OPENAI_API_KEY"
+          ? // ไม่มีกุญแจของรายใดเลย: บอกทุกทาง เพราะผู้ดูแลอาจตั้งใจใช้รายอื่น เช่นรายที่มีโควตาฟรี
+            `ตรวจบัญชี AI: ยังไม่ได้ตั้งกุญแจของบริการ AI ให้ตั้ง ANTHROPIC_API_KEY (Claude), GEMINI_API_KEY (Google Gemini มีโควตาฟรี) หรือ OPENAI_API_KEY Javis จะ${affected}ไม่ได้จนกว่าจะตั้ง`
+          : `ตรวจบัญชี AI: ยังไม่ได้ตั้ง ${keyVariable} Javis จะ${affected}ไม่ได้จนกว่าจะตั้ง`
     });
   } else if (chat === "quota" || transcribe === "quota") {
     reports.push({

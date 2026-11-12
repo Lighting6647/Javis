@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildInstructions, chatRequestSchema, MAX_CHAT_MESSAGES, MAX_MEMORIES, MAX_MESSAGE_LENGTH } from "./chat.js";
+import {
+  buildInstructionParts,
+  buildInstructions,
+  chatRequestSchema,
+  describeToday,
+  MAX_CHAT_MESSAGES,
+  MAX_MEMORIES,
+  MAX_MESSAGE_LENGTH
+} from "./chat.js";
 
 const user = (content: string) => ({ role: "user", content });
 const assistant = (content: string) => ({ role: "assistant", content });
@@ -125,5 +133,53 @@ describe("chatRequestSchema", () => {
   it("รับข้อความยาวและจำนวนข้อความที่เพดานพอดี", () => {
     const messages = Array.from({ length: MAX_CHAT_MESSAGES }, () => user("ก".repeat(MAX_MESSAGE_LENGTH)));
     expect(chatRequestSchema.safeParse({ messages }).success).toBe(true);
+  });
+});
+
+describe("describeToday", () => {
+  it("บอกวันที่ตามเวลาประเทศไทย พร้อมทั้งสองศักราช", () => {
+    expect(describeToday(new Date("2026-11-11T05:00:00Z"))).toBe("วันพุธที่ 11 พฤศจิกายน ค.ศ. 2026 (พ.ศ. 2569) ตามเวลาประเทศไทย");
+  });
+
+  it("หลัง 17:00 UTC นับเป็นวันถัดไปของประเทศไทย รวมถึงตอนข้ามปี", () => {
+    expect(describeToday(new Date("2026-11-11T16:59:59Z"))).toContain("วันพุธที่ 11 พฤศจิกายน");
+    expect(describeToday(new Date("2026-11-11T17:00:00Z"))).toContain("วันพฤหัสบดีที่ 12 พฤศจิกายน");
+    expect(describeToday(new Date("2026-12-31T17:00:00Z"))).toBe("วันศุกร์ที่ 1 มกราคม ค.ศ. 2027 (พ.ศ. 2570) ตามเวลาประเทศไทย");
+  });
+});
+
+describe("buildInstructionParts", () => {
+  const memories = [{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }];
+  const page = { url: "https://example.com/", title: "ฟอร์ม", fields: [{ id: "f1", label: "ชื่อ", type: "text" }] };
+  const today = "วันพุธที่ 11 พฤศจิกายน ค.ศ. 2026 (พ.ศ. 2569) ตามเวลาประเทศไทย";
+
+  it("รวมสองส่วนแล้วได้คำสั่งชุดเดียวกับที่ส่งให้ผู้ให้บริการรายอื่น", () => {
+    for (const webSearch of [true, false]) {
+      const { fixed, personal } = buildInstructionParts(page, memories, webSearch);
+      expect(`${fixed}\n\n${personal}`).toBe(buildInstructions(page, memories, webSearch));
+    }
+  });
+
+  it("ส่วนที่แคชได้ไม่มีข้อมูลที่เปลี่ยนตามผู้ใช้หรือเวลา", () => {
+    const first = buildInstructionParts(page, memories, true, today);
+    const second = buildInstructionParts(undefined, [{ id: "m2", text: "ชอบกาแฟ" }], true, "วันอื่น");
+
+    // ส่วนนี้ต้องเหมือนกันทุกคำขอ ไม่เช่นนั้นแคชจะไม่ถูกใช้ และเสียค่าเขียนแคชทุกครั้ง
+    expect(first.fixed).toBe(second.fixed);
+    for (const dynamic of ["ผู้ใช้ชื่อไลท์", "2026", "```json"]) expect(first.fixed).not.toContain(dynamic);
+    expect(first.personal).toContain("- [m1] ผู้ใช้ชื่อไลท์");
+    expect(first.personal).toContain('"label":"ชื่อ"');
+  });
+
+  it("บอกวันที่เมื่อกำหนดมา และเตือนเรื่องความรู้เก่าเฉพาะตอนที่ค้นเว็บได้", () => {
+    const searching = buildInstructionParts(undefined, undefined, true, today).personal;
+    expect(searching).toContain(`วันนี้คือ${today}`);
+    expect(searching).toContain("ให้ค้นเว็บก่อนตอบเรื่องเหล่านี้แม้จะมั่นใจ");
+
+    const offline = buildInstructionParts(undefined, undefined, false, today).personal;
+    expect(offline).toContain(`วันนี้คือ${today}`);
+    expect(offline).not.toContain("ค้นเว็บก่อนตอบ");
+
+    expect(buildInstructionParts(undefined, undefined).personal).not.toContain("วันนี้คือ");
   });
 });

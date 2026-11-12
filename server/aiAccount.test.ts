@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAiAccountStatus, describeAccountCheck, runAccountCheck, type AccountCheckResult } from "./aiAccount.js";
+import { type AccountProbe, createAiAccountStatus, describeAccountCheck, runAccountCheck, type AccountCheckResult } from "./aiAccount.js";
 
 const BASE = "https://ai.test/v1";
 const QUOTA_BODY = { error: { type: "insufficient_quota", code: "credit_balance_exhausted", message: "no credits" } };
@@ -319,6 +319,31 @@ describe("describeAccountCheck", () => {
     expect(describeAccountCheck(broken, { ...settings, hasApiKey: false }, now)[0]?.message).toContain("ยังไม่ได้ตั้ง");
   });
 
+  it("ไม่มีกุญแจของรายใดเลย: บอกทุกทางเลือก รวมรายที่มีโควตาฟรี", () => {
+    const broken = result({ chat: "auth", transcribe: "auth", credits: "unverified" });
+    const message = describeAccountCheck(broken, { ...settings, hasApiKey: false }, now)[0]?.message ?? "";
+    expect(message).toContain("ANTHROPIC_API_KEY");
+    expect(message).toContain("GEMINI_API_KEY");
+    expect(message).toContain("OPENAI_API_KEY");
+    expect(message).toContain("โควตาฟรี");
+  });
+
+  it("บังคับใช้ Claude แต่ยังไม่ได้ตั้งกุญแจ: บอกเฉพาะตัวแปรของ Anthropic", () => {
+    const broken = result({ chat: "auth", transcribe: "unsupported", credits: "unverified" });
+    const claude = { hasApiKey: false, chatModel: "claude-test", transcribeModel: null, keyVariable: "ANTHROPIC_API_KEY" };
+    const message = describeAccountCheck(broken, claude, now)[0]?.message ?? "";
+    expect(message).toContain("ยังไม่ได้ตั้ง ANTHROPIC_API_KEY");
+    expect(message).not.toContain("OPENAI_API_KEY");
+  });
+
+  it("บังคับใช้ Gemini แต่ยังไม่ได้ตั้งกุญแจ: บอกเฉพาะตัวแปรของ Gemini", () => {
+    const broken = result({ chat: "auth", transcribe: "unsupported", credits: "unverified" });
+    const gemini = { hasApiKey: false, chatModel: "gemini-test", transcribeModel: null, keyVariable: "GEMINI_API_KEY" };
+    const message = describeAccountCheck(broken, gemini, now)[0]?.message ?? "";
+    expect(message).toContain("ยังไม่ได้ตั้ง GEMINI_API_KEY");
+    expect(message).not.toContain("OPENAI_API_KEY");
+  });
+
   it("บอกชื่อโมเดลและตัวแปรที่ต้องแก้เมื่อไม่พบโมเดล", () => {
     const reports = describeAccountCheck(result({ chat: "model", transcribe: "model", credits: "unverified" }), settings, now);
     expect(reports.map((report) => report.level)).toEqual(["error", "warn"]);
@@ -366,5 +391,94 @@ describe("describeAccountCheck", () => {
     const message = describeAccountCheck(result({ retiring }), settings, now)[1]?.message;
     expect(message).toContain("ถึงกำหนดปิดให้บริการแล้ว");
     expect(message).toContain("OPENAI_TRANSCRIBE_MODEL");
+  });
+});
+
+describe("runAccountCheck กับตัวตรวจของผู้ให้บริการเอง", () => {
+  /** ตัวตรวจจำลองของผู้ให้บริการที่ไม่ได้คุยด้วย HTTP แบบ OpenAI (เช่น Claude ซึ่งเรียกผ่าน SDK) */
+  function fakeProbe(overrides: Partial<AccountProbe> = {}) {
+    const calls: string[] = [];
+    const probe: AccountProbe = {
+      lookUpModel: async (service, model) => {
+        calls.push(`model:${service}:${model}`);
+        return { state: "ok" };
+      },
+      probeCredits: async (model) => {
+        calls.push(`credits:${model}`);
+        return "ok";
+      },
+      ...overrides
+    };
+    return { probe, calls };
+  }
+
+  const claude = { baseUrl: "https://claude.test", apiKey: "test-key", chatModel: "claude-test", transcribeModel: null, creditCheck: true };
+  /** ถ้าการตรวจหลุดไปใช้ HTTP โดยตรง การทดสอบต้องล้ม */
+  const noHttp: typeof fetch = async () => {
+    throw new Error("ต้องไม่เรียก HTTP โดยตรงเมื่อมีตัวตรวจของผู้ให้บริการ");
+  };
+
+  it("ใช้ตัวตรวจที่ส่งมาแทน HTTP และไม่ถามถึงการแปลงเสียงที่ผู้ให้บริการไม่มี", async () => {
+    const { probe, calls } = fakeProbe();
+    const result = await runAccountCheck({ ...claude, probe, fetchImpl: noHttp });
+
+    expect(result).toEqual({ chat: "ok", transcribe: "unsupported", credits: "ok", retiring: [] });
+    expect(calls).toEqual(["model:chat:claude-test", "credits:claude-test"]);
+  });
+
+  it("ไม่ได้ตั้งกุญแจ: ไม่เรียกตัวตรวจเลย", async () => {
+    const { probe, calls } = fakeProbe();
+    expect(await runAccountCheck({ ...claude, apiKey: undefined, probe })).toMatchObject({ chat: "auth", transcribe: "unsupported" });
+    expect(calls).toEqual([]);
+  });
+
+  it("กุญแจถูกปฏิเสธหรือไม่พบโมเดล: ไม่ส่งคำขอตรวจเครดิต", async () => {
+    for (const state of ["auth", "model"] as const) {
+      const { probe, calls } = fakeProbe({ lookUpModel: async () => ({ state }) });
+      expect(await runAccountCheck({ ...claude, probe })).toMatchObject({ chat: state, transcribe: "unsupported", credits: "unverified" });
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it("เครดิตหมด: รายงานที่การสนทนา ส่วนการแปลงเสียงยังเป็นไม่รองรับ", async () => {
+    const { probe } = fakeProbe({ probeCredits: async () => "quota" });
+    expect(await runAccountCheck({ ...claude, probe })).toEqual({ chat: "quota", transcribe: "unsupported", credits: "exhausted", retiring: [] });
+  });
+
+  it("ตรวจเครดิตแล้วยังไม่รู้ผล: ใช้สถานะจากการตรวจโมเดล", async () => {
+    const { probe } = fakeProbe({ probeCredits: async () => "unreachable" });
+    expect(await runAccountCheck({ ...claude, probe })).toMatchObject({ chat: "ok", credits: "unverified" });
+  });
+
+  it("ปิดการตรวจเครดิต: ไม่ส่งคำขอที่มีค่าใช้จ่าย", async () => {
+    const { probe, calls } = fakeProbe();
+    expect(await runAccountCheck({ ...claude, creditCheck: false, probe })).toMatchObject({ chat: "ok", credits: "skipped" });
+    expect(calls).toEqual(["model:chat:claude-test"]);
+  });
+
+  it("เก็บวันปลดระวางของโมเดลจากตัวตรวจ เฉพาะค่าที่เป็นวันที่", async () => {
+    const dated = fakeProbe({ lookUpModel: async () => ({ state: "ok", retiresOn: "2027-02-01" }) });
+    expect((await runAccountCheck({ ...claude, probe: dated.probe })).retiring).toEqual([
+      { service: "chat", model: "claude-test", date: "2027-02-01" }
+    ]);
+
+    const malformed = fakeProbe({ lookUpModel: async () => ({ state: "ok", retiresOn: "เร็ว ๆ นี้" }) });
+    expect((await runAccountCheck({ ...claude, probe: malformed.probe })).retiring).toEqual([]);
+  });
+
+  it("ตัวตรวจ throw: นับว่าติดต่อไม่ได้ การตรวจทั้งรอบไม่ล้มตาม", async () => {
+    const broken = fakeProbe({
+      lookUpModel: async () => {
+        throw new Error("boom");
+      }
+    });
+    expect(await runAccountCheck({ ...claude, probe: broken.probe })).toMatchObject({ chat: "unreachable", credits: "unverified" });
+
+    const halfBroken = fakeProbe({
+      probeCredits: async () => {
+        throw new Error("boom");
+      }
+    });
+    expect(await runAccountCheck({ ...claude, probe: halfBroken.probe })).toMatchObject({ chat: "ok", credits: "unverified" });
   });
 });

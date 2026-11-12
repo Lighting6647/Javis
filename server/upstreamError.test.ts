@@ -199,3 +199,35 @@ describe("readRejectedResponse", () => {
     expect(await readRejectedResponse(new Response(null, { status: 500 }))).toEqual([]);
   });
 });
+
+describe("ข้อผิดพลาดของ Anthropic (Claude)", () => {
+  it("อ่านกลุ่มของข้อผิดพลาดจากเนื้อหาที่ Anthropic ส่ง ทั้งคำตอบที่ถูกปฏิเสธและเหตุการณ์กลางสตรีม", () => {
+    const body = { type: "error", error: { type: "overloaded_error", message: "Overloaded" }, request_id: "req_test" };
+    expect(readUpstreamErrorCodes(body)).toEqual(["overloaded_error"]);
+  });
+
+  it.each([
+    ["กุญแจผิด", 401, ["authentication_error"], "auth", 502],
+    ["กุญแจไม่มีสิทธิ์", 403, ["permission_error"], "auth", 502],
+    ["ปัญหาการชำระเงิน", 402, ["billing_error"], "quota", 503],
+    ["ปัญหาการชำระเงินที่ไม่มีเนื้อหา", 402, [], "quota", 503],
+    ["ไม่พบโมเดลหรือไม่มีสิทธิ์ใช้โมเดล", 404, ["not_found_error"], "model", 502],
+    ["เรียกถี่เกินกำหนด", 429, ["rate_limit_error"], "busy", 503],
+    ["บริการรับภาระเกิน", 529, ["overloaded_error"], "busy", 503],
+    ["บริการรับภาระเกินที่ไม่มีเนื้อหา", 529, [], "busy", 503],
+    ["บริการรับภาระเกินกลางสตรีม", null, ["overloaded_error"], "busy", 503],
+    ["ข้อผิดพลาดภายในของ Anthropic", 500, ["api_error"], "unknown", 502],
+    ["รูปแบบคำขอไม่ถูกต้อง", 400, ["invalid_request_error"], "unknown", 502],
+    ["คำขอใหญ่เกิน", 413, ["request_too_large"], "unknown", 502]
+  ] as const)("%s", (_name, httpStatus, codes, reason, status) => {
+    expect(describeUpstreamFailure("chat", httpStatus, codes)).toMatchObject({ reason, status });
+  });
+
+  it("ปิดบังกุญแจของ Anthropic ที่ปนมาในข้อความ", () => {
+    // ค่าทดสอบเท่านั้น ประกอบขึ้นตอนรันเพื่อไม่ให้เครื่องมือสแกนความลับเข้าใจผิดว่าเป็นกุญแจจริง
+    const keyLike = ["sk", "ant", "api03", "TESTONLYnotarealkey0000"].join("-");
+    const cleaned = sanitizeUpstreamMessage(`invalid x-api-key: ${keyLike}`);
+    expect(cleaned).not.toContain("TESTONLY");
+    expect(cleaned).toContain("[ปิดบัง]");
+  });
+});

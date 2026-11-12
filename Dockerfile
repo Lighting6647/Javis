@@ -32,5 +32,5 @@ EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" || exit 1
 
-# ค่าลับทั้งหมด (OPENAI_API_KEY, ACCESS_CODES, SESSION_SECRET) ส่งเข้ามาเป็น environment ตอนรัน ไม่ฝังใน image
+# ค่าลับทั้งหมด (กุญแจของผู้ให้บริการ AI เช่น ANTHROPIC_API_KEY, ACCESS_CODES, SESSION_SECRET) ส่งเข้ามาเป็น environment ตอนรัน ไม่ฝังใน image
 CMD ["node", "--import", "tsx", "server/index.ts"]
