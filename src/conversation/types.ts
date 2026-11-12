@@ -98,6 +98,8 @@ export interface ConversationState {
   searching: boolean;
   /** รหัสข้อความที่มีรายการกรอกฟอร์มรอผู้ใช้ยืนยันอยู่ */
   pendingFillId: string | null;
+  /** เวลาที่รอคำตอบครั้งล่าสุด นับจากส่งคำถามจนข้อความแรกมาถึง (มิลลิวินาที) หรือ null ถ้ายังไม่เคยได้คำตอบ */
+  lastReplyMs: number | null;
 }
 
 export interface ChatTurn {

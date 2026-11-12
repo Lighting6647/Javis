@@ -145,10 +145,13 @@ function setup(options: SetupOptions = {}) {
   const synthesizer = new FakeSynthesizer();
   const chat = new FakeChat();
   const browser = new FakeBrowser();
+  /** นาฬิกาจำลองของตัวจับเวลารอคำตอบ (มิลลิวินาที) */
+  const clock = { time: 0 };
   const controller: ConversationController = new ConversationController({
     recognizer,
     synthesizer,
     chat: chat.stream,
+    now: () => clock.time,
     openPage: browser.open,
     leaveToPage: options.canLeave
       ? (url) => {
@@ -157,7 +160,7 @@ function setup(options: SetupOptions = {}) {
         }
       : undefined
   });
-  return { recognizer, synthesizer, chat, browser, controller };
+  return { recognizer, synthesizer, chat, browser, clock, controller };
 }
 
 describe("ConversationController", () => {
@@ -424,7 +427,8 @@ describe("ConversationController", () => {
       notice: null,
       onDeviceListening: false,
       searching: false,
-      pendingFillId: null
+      pendingFillId: null,
+      lastReplyMs: null
     });
   });
 
@@ -1122,6 +1126,73 @@ describe("ConversationController", () => {
       controller.reset();
 
       expect(controller.getState().messages).toEqual([]);
+    });
+  });
+
+  describe("เวลารอคำตอบ", () => {
+    it("วัดตั้งแต่ส่งคำถามจนข้อความแรกของคำตอบมาถึง ไม่ใช่จนตอบจบ", async () => {
+      const { chat, clock, controller } = setup();
+      expect(controller.getState().lastReplyMs).toBeNull();
+
+      clock.time = 1000;
+      controller.sendText("สวัสดี");
+      await settle();
+      expect(controller.getState().lastReplyMs).toBeNull();
+
+      clock.time = 2400;
+      chat.current.options.onEvent({ type: "delta", text: "สวัสดี" });
+      expect(controller.getState().lastReplyMs).toBe(1400);
+
+      clock.time = 6000;
+      chat.current.options.onEvent({ type: "delta", text: "ครับ" });
+      chat.current.result.resolve("สวัสดีครับ");
+      await settle();
+      expect(controller.getState().lastReplyMs).toBe(1400);
+    });
+
+    it("คำถามถัดไปยังแสดงค่าของครั้งก่อนระหว่างรอ แล้วเปลี่ยนเป็นค่าใหม่เมื่อคำตอบมาถึง", async () => {
+      const { chat, clock, controller } = setup();
+
+      controller.sendText("สวัสดี");
+      await settle();
+      clock.time = 800;
+      chat.reply("สวัสดีครับ");
+      await settle();
+
+      clock.time = 5000;
+      controller.sendText("ขอบคุณ");
+      await settle();
+      expect(controller.getState().lastReplyMs).toBe(800);
+
+      clock.time = 7500;
+      chat.reply("ยินดีครับ");
+      await settle();
+      expect(controller.getState().lastReplyMs).toBe(2500);
+    });
+
+    it("คำขอที่ล้มเหลวก่อนได้ข้อความ: ไม่นับ", async () => {
+      const { chat, clock, controller } = setup();
+
+      controller.sendText("สวัสดี");
+      await settle();
+      clock.time = 9000;
+      chat.current.result.reject(new ChatError("บริการ AI มีผู้ใช้งานหนาแน่น"));
+      await settle();
+
+      expect(controller.getState().lastReplyMs).toBeNull();
+    });
+
+    it("ล้างบทสนทนาแล้วค่านี้หายไปด้วย", async () => {
+      const { chat, clock, controller } = setup();
+
+      controller.sendText("สวัสดี");
+      await settle();
+      clock.time = 800;
+      chat.reply("สวัสดีครับ");
+      await settle();
+      controller.reset();
+
+      expect(controller.getState().lastReplyMs).toBeNull();
     });
   });
 

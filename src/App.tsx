@@ -10,9 +10,12 @@ import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback
 import { Transcript } from "./components/Transcript";
 import { VoiceDock } from "./components/VoiceDock";
 import { VoiceSettingsDialog } from "./components/VoiceSettingsDialog";
+import { HudFrame } from "./components/hud/HudFrame";
+import { Stage } from "./components/hud/Stage";
 import { PHASE_LABEL } from "./conversation/messages";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useConversation } from "./hooks/useConversation";
+import { useHudTelemetry } from "./hooks/useHudTelemetry";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useSession } from "./hooks/useSession";
 
@@ -40,7 +43,7 @@ export default function App() {
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId } = state;
+  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [desktop] = useState(isDesktopApp);
 
@@ -53,6 +56,9 @@ export default function App() {
   const statusLabel = phase === "thinking" && searching ? "กำลังค้นเว็บ" : aiDown ? "AI ใช้งานไม่ได้" : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
+  const readouts = useHudTelemetry({ platformLabel, messageCount: messages.length, lastReplyMs });
+  // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป
+  const stageShown = ready && !showingWeb;
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
   useEffect(() => {
@@ -68,7 +74,8 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${stageShown ? " has-stage" : ""}`}>
+      <HudFrame />
       <header className="app-header">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
@@ -109,6 +116,10 @@ export default function App() {
         </div>
       </header>
 
+      {stageShown && (
+        <Stage phase={phase} statusLabel={statusLabel} readouts={readouts} compact={messages.length > 0} offline={aiDown} />
+      )}
+
       <main className="app-main">
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
@@ -125,9 +136,6 @@ export default function App() {
               onLinkOpened={markLinkOpened}
               onUndoMemory={undoMemory}
               privacyNote={desktop ? DESKTOP_PRIVACY_NOTE : PRIVACY_NOTE}
-              phase={phase}
-              statusLabel={statusLabel}
-              platformLabel={platformLabel}
             />
           )}
         </div>

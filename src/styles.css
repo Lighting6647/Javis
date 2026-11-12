@@ -153,7 +153,7 @@ a { color: inherit; }
 .core-rings { position: absolute; inset: 0; width: 100%; height: 100%; display: none; overflow: visible; pointer-events: none; }
 .core.large { width: 72px; height: 72px; margin-bottom: var(--space-3); }
 .core-heart { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #6ee7b7, #10b981 55%, #047857); box-shadow: 0 0 0 10px var(--accent-soft), 0 0 0 11px var(--accent-ring); }
-.hud-readout { display: none; }
+.welcome-kicker { display: none; }
 .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
 .welcome h1 { font-size: clamp(22px, 4.2vw, 28px); font-weight: 700; line-height: 1.3; letter-spacing: -.02em; }
 .welcome p { max-width: 440px; color: var(--text-muted); }
@@ -466,12 +466,11 @@ html[data-theme="holo"] .ring-arc.reverse { stroke-width: 3; stroke-dasharray: 5
 html[data-theme="holo"] .ring-inner { stroke-width: 1; opacity: .45; }
 html[data-theme="holo"] .ring-cross line { stroke: var(--accent); stroke-width: 2; opacity: .85; }
 
-/* ย่อตามความสูงจอด้วย เพื่อให้คำถามตัวอย่างยังอยู่ในจอบนหน้าต่างเตี้ย */
-html[data-theme="holo"] .core.large { width: min(236px, 56vw, 21vh); height: min(236px, 56vw, 21vh); margin-bottom: var(--space-2); }
+/* แกนกลางขนาดใหญ่อยู่บนแผงสถานะ (src/hud.css) หน้าเริ่มต้นจึงซ่อนลูกแก้วของธีมเรียบ */
+html[data-theme="holo"] .welcome .core.large { display: none; }
 html[data-theme="holo"] .welcome { gap: var(--space-2); padding-block: var(--space-3); }
 html[data-theme="holo"] .welcome .suggestions { margin-top: var(--space-3); }
 html[data-theme="holo"] .welcome small { margin-top: var(--space-3); }
-html[data-theme="holo"] .core.large .core-heart { width: 30%; height: 30%; background: radial-gradient(circle, #f0fdff 0 14%, #67e8f9 34%, #0891b2 62%, rgba(8, 145, 178, 0) 74%); box-shadow: 0 0 44px 10px rgba(34, 211, 238, .42); animation: heartbeat 3.4s ease-in-out infinite; }
 html[data-theme="holo"] .core.small { width: 78px; height: 78px; }
 html[data-theme="holo"] .core.small .orb { width: 46px; height: 46px; }
 
@@ -479,11 +478,9 @@ html[data-theme="holo"] .core.small .orb { width: 46px; height: 46px; }
 html[data-theme="holo"] .core.listening .ring-arc { animation-duration: 3.2s; }
 html[data-theme="holo"] .core.listening .ring-arc.reverse { animation-duration: 4.4s; }
 html[data-theme="holo"] .core.listening .ring-outer { opacity: 1; }
-html[data-theme="holo"] .core.listening .core-heart { animation-duration: 1.1s; }
 html[data-theme="holo"] .core.starting .ring-arc, html[data-theme="holo"] .core.thinking .ring-arc { stroke: var(--warning); filter: drop-shadow(0 0 4px var(--warning)); animation-duration: 1.3s; }
 html[data-theme="holo"] .core.thinking .ring-arc.reverse { animation-duration: 1.9s; }
 html[data-theme="holo"] .core.speaking .ring-arc { animation-duration: 5s; }
-html[data-theme="holo"] .core.speaking .core-heart { animation: heartbeat .62s ease-in-out infinite; }
 html[data-theme="holo"] .core.speaking .ring-inner { animation: ring-pulse .62s ease-in-out infinite; }
 
 /* ---------- ปุ่มเสียง ---------- */
@@ -496,11 +493,6 @@ html[data-theme="holo"] .orb::after { display: none; }
 
 /* ---------- หน้าเริ่มต้นและตัวเลข HUD ---------- */
 html[data-theme="holo"] .welcome h1 { font-weight: 600; text-shadow: 0 0 18px rgba(34, 211, 238, .45); }
-html[data-theme="holo"] .hud-readout { width: min(440px, 100%); display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 0 var(--space-3); border: 1px solid var(--border); background: var(--corners), rgba(4, 26, 38, .55); }
-html[data-theme="holo"] .hud-readout > div { padding: 8px 10px; text-align: center; }
-html[data-theme="holo"] .hud-readout > div + div { border-left: 1px solid var(--border); }
-html[data-theme="holo"] .hud-readout dt { color: var(--text-faint); font-size: 10px; font-weight: 500; letter-spacing: .08em; }
-html[data-theme="holo"] .hud-readout dd { margin: 2px 0 0; color: var(--accent); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(34, 211, 238, .5); white-space: nowrap; }
 html[data-theme="holo"] .suggestions button { border-color: var(--border); background: linear-gradient(90deg, rgba(34, 211, 238, .12), rgba(4, 26, 38, .5) 45%); box-shadow: inset 2px 0 0 var(--accent); }
 html[data-theme="holo"] .suggestions button:hover { border-color: var(--accent-ring); background: linear-gradient(90deg, rgba(34, 211, 238, .22), rgba(4, 26, 38, .6) 60%); box-shadow: inset 2px 0 0 var(--accent), var(--glow); }
 
@@ -558,7 +550,6 @@ html[data-theme="holo"] .skeleton { background: linear-gradient(90deg, rgba(34, 
 @keyframes ring-pulse { 50% { opacity: 1; stroke-width: 2.4; } }
 
 @media (max-width: 520px) {
-  html[data-theme="holo"] .hud-readout dd { font-size: 12px; }
   html[data-theme="holo"] .core.small { width: 68px; height: 68px; }
   html[data-theme="holo"] .core.small .orb { width: 44px; height: 44px; }
 }

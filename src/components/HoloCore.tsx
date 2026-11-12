@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
-
 /**
- * วงแหวน HUD ของแกนกลาง Javis: วงขีดบอกองศา วงโค้งหมุนสวนกัน และเป้าเล็ง
+ * วงแหวน HUD ขนาดเล็กรอบปุ่มเสียง: วงขีดบอกองศา วงโค้งหมุนสวนกัน และเป้าเล็ง
  * เป็นภาพประกอบล้วน ๆ ความเร็วและสีเปลี่ยนตามสถานะผ่าน CSS ของตัวหุ้ม (.core)
+ * แกนกลางขนาดใหญ่ของแผงสถานะอยู่ที่ components/hud/ArcCore.tsx
  */
 export function HoloRings() {
   return (
@@ -20,48 +19,5 @@ export function HoloRings() {
         <line x1="186" y1="100" x2="198" y2="100" />
       </g>
     </svg>
-  );
-}
-
-function formatClock(date: Date): string {
-  return date.toLocaleTimeString("th-TH", { hour12: false });
-}
-
-/** นาฬิกาของจอ HUD เดินทุกวินาที */
-function Clock() {
-  const [now, setNow] = useState(() => formatClock(new Date()));
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(formatClock(new Date())), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return <time>{now}</time>;
-}
-
-interface HudReadoutProps {
-  /** สถานะปัจจุบันของ Javis เป็นข้อความ */
-  status: string;
-  /** ที่ที่แอปกำลังทำงาน เช่น เว็บ แอปเดสก์ท็อป */
-  platform: string;
-}
-
-/** แถบตัวเลขของจอ HUD แสดงข้อมูลจริงของระบบ: สถานะ ที่ทำงาน และเวลา */
-export function HudReadout({ status, platform }: HudReadoutProps) {
-  return (
-    <dl className="hud-readout">
-      <div>
-        <dt>สถานะ</dt>
-        <dd>{status}</dd>
-      </div>
-      <div>
-        <dt>ระบบ</dt>
-        <dd>{platform}</dd>
-      </div>
-      <div>
-        <dt>เวลา</dt>
-        <dd><Clock /></dd>
-      </div>
-    </dl>
   );
 }

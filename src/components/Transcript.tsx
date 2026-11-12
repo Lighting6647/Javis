@@ -1,7 +1,6 @@
 import { CloudSun, ListChecks, Newspaper } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { ConversationMessage, Phase } from "../conversation/types";
-import { HoloRings, HudReadout } from "./HoloCore";
+import type { ConversationMessage } from "../conversation/types";
 import { MessageBubble } from "./MessageBubble";
 
 interface TranscriptProps {
@@ -16,10 +15,6 @@ interface TranscriptProps {
   onUndoMemory: (messageId: string, memoryId: string) => void;
   /** ข้อความท้ายหน้าเริ่มต้นที่บอกว่าเสียงถูกประมวลผลที่ใด */
   privacyNote: string;
-  /** จังหวะปัจจุบัน ใช้ขับการเคลื่อนไหวของแกนกลางบนหน้าเริ่มต้น */
-  phase: Phase;
-  statusLabel: string;
-  platformLabel: string;
 }
 
 const SUGGESTIONS = [
@@ -28,17 +23,7 @@ const SUGGESTIONS = [
   { icon: ListChecks, text: "ช่วยวางแผนงานสัปดาห์นี้" }
 ];
 
-export function Transcript({
-  messages,
-  onSuggest,
-  onOpenLink,
-  onLinkOpened,
-  onUndoMemory,
-  privacyNote,
-  phase,
-  statusLabel,
-  platformLabel
-}: TranscriptProps) {
+export function Transcript({ messages, onSuggest, onOpenLink, onLinkOpened, onUndoMemory, privacyNote }: TranscriptProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // เลื่อนตามข้อความล่าสุดเสมอ รวมถึงตอนคำตอบกำลังทยอยเข้ามา
@@ -49,11 +34,11 @@ export function Transcript({
   if (messages.length === 0) {
     return (
       <section className="welcome">
-        <div className={`core large ${phase}`} aria-hidden>
-          <HoloRings />
+        {/* ลูกแก้วของธีมเรียบ ธีมโฮโลแกรมมีแกนกลางอยู่บนแผงสถานะแล้ว จึงซ่อนอันนี้ */}
+        <div className="core large" aria-hidden>
           <span className="core-heart" />
         </div>
-        <HudReadout status={statusLabel} platform={platformLabel} />
+        <span className="welcome-kicker">พร้อมรับคำสั่ง</span>
         <h1>สวัสดีครับ ให้ Javis ช่วยอะไรดี</h1>
         <p>ถามได้ทุกเรื่อง Javis ค้นข้อมูลล่าสุดจากเว็บและเปิดหน้าเว็บให้ได้</p>
 

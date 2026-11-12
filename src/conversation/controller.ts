@@ -37,6 +37,8 @@ export interface ConversationDeps {
   fillPage?: (pageUrl: string, values: FillValue[]) => Promise<FillResult>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
+  /** นาฬิกาของตัวจับเวลารอคำตอบ (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
+  now?: () => number;
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -56,7 +58,8 @@ const INITIAL_STATE: ConversationState = {
   notice: null,
   onDeviceListening: false,
   searching: false,
-  pendingFillId: null
+  pendingFillId: null,
+  lastReplyMs: null
 };
 
 function toChatTurns(messages: ConversationMessage[]): ChatTurn[] {
@@ -407,6 +410,10 @@ export class ConversationController {
       });
     });
 
+    const now = this.deps.now ?? (() => performance.now());
+    const askedAt = now();
+    let answered = false;
+
     let reply: string;
     try {
       reply = await this.deps.chat(toChatTurns(history), {
@@ -418,6 +425,11 @@ export class ConversationController {
 
           switch (event.type) {
             case "delta":
+              if (!answered) {
+                // ผู้ใช้รู้สึกว่าได้คำตอบตั้งแต่ข้อความแรกโผล่ จึงวัดถึงตรงนี้ ไม่ใช่จนตอบจบ
+                answered = true;
+                this.update({ lastReplyMs: Math.max(0, Math.round(now() - askedAt)) });
+              }
               if (this.state.searching) this.update({ searching: false });
               this.patchMessage(replyId, (message) => ({ ...message, text: message.text + event.text }));
               if (speakReply) chunker.push(event.text);
