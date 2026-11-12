@@ -22,6 +22,16 @@ export function hostOf(url: string): string {
   return URL.canParse(url) ? new URL(url).hostname.replace(/^www\./, "") : url;
 }
 
+/** ลิงก์แหล่งที่มาจากการค้นด้วย Google เป็นลิงก์ส่งต่อของ Google ทั้งหมด ชื่อเว็บจริงอยู่ในชื่อของแหล่งที่มา */
+const SEARCH_REDIRECT_HOST = "vertexaisearch.cloud.google.com";
+
+/** ป้ายสั้น ๆ ของแหล่งที่มา: ปกติคือชื่อโดเมน แต่ลิงก์ส่งต่อของ Google ใช้ชื่อเว็บที่ Google ให้มา */
+export function sourceLabel(source: { url: string; title: string }): string {
+  const host = hostOf(source.url);
+  const title = source.title.trim();
+  return host === SEARCH_REDIRECT_HOST && title && title !== source.url ? title : host;
+}
+
 /** แยกข้อความคำตอบออกเป็นส่วนข้อความกับลิงก์อ้างอิง เพื่อแสดงลิงก์ให้กดได้ */
 export function splitLinks(text: string): TextSegment[] {
   const segments: TextSegment[] = [];

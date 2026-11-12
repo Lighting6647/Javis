@@ -95,3 +95,20 @@ describe("parseChatEventLine", () => {
     expect(JSON.stringify(event)).not.toContain("javascript");
   });
 });
+
+describe("แถบคำค้นที่เกี่ยวข้องของ Google", () => {
+  const block = '<style>.chip{color:#111}</style><div class="container"><a class="chip" href="https://www.google.com/search?q=x">x</a></div>';
+
+  it("รับแถบคำค้นตามที่ backend ส่ง โดยไม่แก้เนื้อหา", () => {
+    expect(parseChatEventLine(line({ type: "suggestions", html: [block] }))).toEqual({ type: "suggestions", html: [block] });
+  });
+
+  it("จำกัดจำนวนและขนาด และข้ามรายการที่ไม่ใช่ข้อความ", () => {
+    const event = parseChatEventLine(line({ type: "suggestions", html: [block, 42, "   ", null, `${block}1`, `${block}2`, `${block}3`] }));
+    expect(event).toEqual({ type: "suggestions", html: [block, `${block}1`, `${block}2`] });
+
+    expect(parseChatEventLine(line({ type: "suggestions", html: ["x".repeat(20_001)] }))).toBeNull();
+    expect(parseChatEventLine(line({ type: "suggestions", html: block }))).toBeNull();
+    expect(parseChatEventLine(line({ type: "suggestions", html: [] }))).toBeNull();
+  });
+});

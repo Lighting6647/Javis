@@ -1,4 +1,3 @@
-import { createChatCompletionsTranslator } from "./chatCompletions.js";
 import { parseSseChunk } from "./sse.js";
 import { readRejection, type UpstreamRejection } from "./upstreamError.js";
 
@@ -23,6 +22,14 @@ export type ReplyStart =
       rejection: UpstreamRejection;
     };
 
+/** ตัวแปลงสตรีมของผู้ให้บริการรายหนึ่ง เป็นเหตุการณ์แบบ Responses ที่ตัวประมวลผลคำตอบเข้าใจ */
+export interface StreamTranslator {
+  /** รับข้อมูลหนึ่งก้อนจากสตรีม คืนเหตุการณ์ที่แปลงแล้ว */
+  push(chunk: unknown): unknown[];
+  /** เรียกเมื่อสตรีมจบ คืนเหตุการณ์ปิดท้ายถ้าต้นทางจบโดยไม่บอกเหตุผล */
+  finish(): unknown[];
+}
+
 /** อ่านสตรีม SSE จากต้นทางทีละเหตุการณ์ หยุดเมื่อ onEvent คืน true */
 async function readSseEvents(body: ReadableStream<Uint8Array>, onEvent: (event: unknown) => boolean): Promise<void> {
   const reader = body.getReader();
@@ -45,9 +52,12 @@ async function readSseEvents(body: ReadableStream<Uint8Array>, onEvent: (event: 
   }
 }
 
-/** อ่านสตรีมแบบ Chat Completions แล้วแปลงเป็นเหตุการณ์แบบ Responses */
-async function readChatCompletionEvents(body: ReadableStream<Uint8Array>, onEvent: (event: unknown) => boolean): Promise<void> {
-  const translator = createChatCompletionsTranslator();
+/** อ่านสตรีมของผู้ให้บริการที่ใช้รูปแบบของตัวเอง แล้วแปลงเป็นเหตุการณ์แบบ Responses */
+async function readTranslatedEvents(
+  body: ReadableStream<Uint8Array>,
+  translator: StreamTranslator,
+  onEvent: (event: unknown) => boolean
+): Promise<void> {
   let stopped = false;
   const forward = (events: unknown[]) => {
     stopped = events.some((event) => onEvent(event));
@@ -59,29 +69,32 @@ async function readChatCompletionEvents(body: ReadableStream<Uint8Array>, onEven
   if (!stopped) forward(translator.finish());
 }
 
+/** หัวคำขอแบบที่ผู้ให้บริการส่วนใหญ่ใช้: กุญแจแบบ Bearer */
+export function bearerHeaders(apiKey: string): Record<string, string> {
+  return { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+}
+
 export interface HttpReplyRequest {
   /** ที่อยู่เต็มของปลายทาง */
   url: string;
-  apiKey: string;
+  /** หัวคำขอ รวมการยืนยันตัวตนตามแบบของผู้ให้บริการ */
+  headers: Record<string, string>;
   body: unknown;
   signal: AbortSignal;
-  /** รูปแบบของสตรีมที่ต้นทางตอบกลับ */
-  style: "responses" | "chat";
+  /** ตัวแปลงสตรีม ไม่ต้องระบุถ้าต้นทางตอบเป็นเหตุการณ์แบบ Responses อยู่แล้ว */
+  translator?: StreamTranslator;
   fetchImpl?: typeof fetch;
 }
 
 /**
- * ขอคำตอบจากผู้ให้บริการที่คุยด้วย HTTP โดยตรง (OpenAI และรายที่เข้ากันได้)
+ * ขอคำตอบจากผู้ให้บริการที่คุยด้วย HTTP โดยตรง
  * throw เมื่อเชื่อมต่อไม่ได้ ส่วนคำขอที่ต้นทางปฏิเสธจะคืนเป็นผลลัพธ์พร้อมรหัสข้อผิดพลาด
  */
 export async function startHttpReply(request: HttpReplyRequest): Promise<ReplyStart> {
   const upstream = await (request.fetchImpl ?? fetch)(request.url, {
     method: "POST",
     signal: request.signal,
-    headers: {
-      Authorization: `Bearer ${request.apiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: request.headers,
     body: JSON.stringify(request.body)
   });
 
@@ -90,11 +103,11 @@ export async function startHttpReply(request: HttpReplyRequest): Promise<ReplySt
     return { ok: false, status: upstream.status, rejection: await readRejection(upstream) };
   }
 
-  const read = request.style === "chat" ? readChatCompletionEvents : readSseEvents;
+  const { translator } = request;
   return {
     ok: true,
     events: {
-      read: (onEvent) => read(body, onEvent),
+      read: (onEvent) => (translator ? readTranslatedEvents(body, translator, onEvent) : readSseEvents(body, onEvent)),
       cancel: () => body.cancel().catch(() => undefined)
     }
   };

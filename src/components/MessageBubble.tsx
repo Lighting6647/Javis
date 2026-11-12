@@ -1,7 +1,8 @@
 import { Ban, Brain, CircleAlert, CircleCheck, ClipboardPen, ExternalLink, Globe } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
-import { hostOf, splitLinks } from "../conversation/richText";
+import { hostOf, sourceLabel, splitLinks } from "../conversation/richText";
 import type { ConversationMessage, FillRequest } from "../conversation/types";
+import { SearchSuggestions } from "./SearchSuggestions";
 
 interface MessageBubbleProps {
   message: ConversationMessage;
@@ -107,13 +108,15 @@ export function MessageBubble({ message, onOpenLink, onUndoMemory }: MessageBubb
             {message.sources.map((source) => (
               <li key={source.url}>
                 <WebLink url={source.url} title={source.title} onOpenLink={onOpenLink}>
-                  {hostOf(source.url)}
+                  {sourceLabel(source)}
                 </WebLink>
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      {message.suggestions && message.suggestions.length > 0 && <SearchSuggestions blocks={message.suggestions} />}
     </article>
   );
 }

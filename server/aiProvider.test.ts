@@ -159,9 +159,17 @@ describe("resolveAiProvider", () => {
   });
 
   it("Gemini: ไม่ค้นเว็บ ไม่แปลงเสียง และไม่ใช้โควตาฟรีไปกับการตรวจเครดิต เว้นแต่สั่งชัดเจน", () => {
-    const provider = resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, WEB_SEARCH_ENABLED: "true" }, quiet);
+    const provider = resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY }, quiet);
     expect(provider).toMatchObject({ webSearch: false, transcribeModel: null, creditCheck: false });
     expect(resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, AI_CREDIT_CHECK: "true" }, quiet).creditCheck).toBe(true);
+  });
+
+  it("Gemini: ค้นเว็บด้วย Google เฉพาะเมื่อเปิดชัดเจน เพราะคำถามของผู้ใช้ถูกส่งไปค้นและมีโควตาต่อวันของตัวเอง", () => {
+    expect(resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, WEB_SEARCH_ENABLED: " TRUE " }, quiet).webSearch).toBe(true);
+    // ค่าอื่นไม่นับว่าเปิด การตั้งค่าเดิมจึงทำงานเหมือนเดิมโดยไม่ต้องแก้อะไร
+    for (const value of ["false", "1", "yes", ""]) {
+      expect(resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, WEB_SEARCH_ENABLED: value }, quiet).webSearch).toBe(false);
+    }
   });
 
   it("Gemini: เปลี่ยนโมเดล ที่อยู่ และระดับการคิดได้", () => {
@@ -171,6 +179,22 @@ describe("resolveAiProvider", () => {
     );
     expect(provider).toMatchObject({ chatModel: "gemini-3.8-flash", baseUrl: "http://127.0.0.1:8797", reasoningEffort: "low" });
     expect(resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, GEMINI_REASONING_EFFORT: "default" }, quiet).reasoningEffort).toBeUndefined();
+  });
+
+  it("Gemini: เปลี่ยนโมเดลของขั้นค้นเว็บได้ ส่วนค่าที่ดูเหมือนกุญแจไม่ถูกใช้เป็นชื่อโมเดล และคำเตือนไม่แสดงค่านั้น", () => {
+    const chosen = resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, GEMINI_SEARCH_MODEL: " gemini-3.5-flash-lite " }, quiet);
+    expect(chosen.searchModel).toBe("gemini-3.5-flash-lite");
+
+    // ค่าทดสอบเท่านั้น ประกอบขึ้นตอนรันเพื่อไม่ให้เครื่องมือสแกนความลับเข้าใจผิดว่าเป็นกุญแจจริง
+    const keyLike = `${"AI"}${"za"}SyTESTONLYnotarealkey0000`;
+    const warnings: string[] = [];
+    const guarded = resolveAiProvider({ GEMINI_API_KEY: GEMINI_KEY, GEMINI_SEARCH_MODEL: keyLike }, (message) => warnings.push(message));
+
+    // ชื่อโมเดลถูกใส่ในเนื้อหาคำขอและใน log ถ้าปล่อยผ่าน กุญแจจะรั่ว จึงกลับไปใช้โมเดลที่โควตาฟรีค้นด้วย Google ได้
+    expect(guarded.searchModel).toBe("gemini-2.5-flash-lite");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("GEMINI_SEARCH_MODEL");
+    expect(warnings[0]).not.toContain(keyLike);
   });
 
   it("ที่อยู่ที่ไม่ถูกต้องถูกแทนด้วยค่าเริ่มต้นพร้อมคำเตือน", () => {

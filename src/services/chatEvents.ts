@@ -6,6 +6,9 @@ import { cleanMemoryText, MEMORY_ID_PATTERN } from "../memory/memoryStore";
 const MAX_SOURCES = 6;
 /** จำนวนเรื่องที่ยอมให้จำหรือลืมในคำตอบเดียว */
 const MAX_MEMORY_CHANGES = 5;
+/** แถบคำค้นที่เกี่ยวข้องของ Google ต่อหนึ่งคำตอบ: จำนวนสูงสุด และขนาดสูงสุดของแต่ละแถบ */
+const MAX_SUGGESTION_BLOCKS = 3;
+const MAX_SUGGESTION_LENGTH = 20_000;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -86,6 +89,14 @@ export function parseChatEventLine(line: string): ChatEvent | null {
             .slice(0, MAX_MEMORY_CHANGES)
         : [];
       return added.length > 0 || removed.length > 0 ? { type: "memory", added, removed } : null;
+    }
+
+    case "suggestions": {
+      if (!Array.isArray(value.html)) return null;
+      const html = value.html
+        .filter((block): block is string => typeof block === "string" && block.trim().length > 0 && block.length <= MAX_SUGGESTION_LENGTH)
+        .slice(0, MAX_SUGGESTION_BLOCKS);
+      return html.length > 0 ? { type: "suggestions", html } : null;
     }
 
     default:

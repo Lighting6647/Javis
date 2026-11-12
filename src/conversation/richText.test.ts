@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hostOf, safeHttpUrl, splitLinks, stripLinks } from "./richText";
+import { hostOf, safeHttpUrl, sourceLabel, splitLinks, stripLinks } from "./richText";
 import { toSpeakable } from "./sentenceChunker";
 
 describe("splitLinks", () => {
@@ -48,5 +48,19 @@ describe("hostOf / safeHttpUrl", () => {
     expect(safeHttpUrl("https://example.com")).toBe("https://example.com/");
     expect(safeHttpUrl("javascript:alert(1)")).toBeNull();
     expect(safeHttpUrl(undefined)).toBeNull();
+  });
+});
+
+describe("sourceLabel", () => {
+  it("แหล่งที่มาทั่วไป: แสดงชื่อโดเมนของลิงก์", () => {
+    expect(sourceLabel({ url: "https://www.thairath.co.th/news/1", title: "ข่าววันนี้ ไทยรัฐออนไลน์" })).toBe("thairath.co.th");
+  });
+
+  it("ลิงก์ส่งต่อของ Google: แสดงชื่อเว็บที่ Google ให้มา แทนที่จะเป็นโดเมนของ Google ทุกรายการ", () => {
+    const url = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbCdEf";
+    expect(sourceLabel({ url, title: "goldtraders.or.th" })).toBe("goldtraders.or.th");
+    // ไม่มีชื่อ หรือชื่อเป็นลิงก์เดิม: ใช้โดเมนของลิงก์ตามปกติ
+    expect(sourceLabel({ url, title: "  " })).toBe("vertexaisearch.cloud.google.com");
+    expect(sourceLabel({ url, title: url })).toBe("vertexaisearch.cloud.google.com");
   });
 });

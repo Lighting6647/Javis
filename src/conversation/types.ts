@@ -53,6 +53,11 @@ export interface ConversationMessage {
   role: Role;
   text: string;
   sources?: WebSource[];
+  /**
+   * แถบคำค้นที่เกี่ยวข้องของ Google (HTML สำเร็จรูปจาก Google) สำหรับคำตอบที่ได้จากการค้นด้วย Google
+   * เงื่อนไขการใช้ของ Google กำหนดให้แสดงคู่กับคำตอบโดยไม่ดัดแปลง และไม่ให้เก็บไว้ จึงอยู่ในหน่วยความจำเท่านั้น
+   */
+  suggestions?: string[];
   link?: PageLink;
   fill?: FillRequest;
   memoryNotes?: MemoryNote[];
@@ -101,7 +106,9 @@ export type ChatEvent =
   | { type: "open"; url: string; title: string; auto: boolean }
   | { type: "fill"; fields: FillValue[] }
   /** AI ขอจำเรื่องใหม่ (ข้อความ) หรือลืมเรื่องเดิม (รหัสความจำ) */
-  | { type: "memory"; added: string[]; removed: string[] };
+  | { type: "memory"; added: string[]; removed: string[] }
+  /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
+  | { type: "suggestions"; html: string[] };
 
 export interface ChatStreamOptions {
   signal: AbortSignal;

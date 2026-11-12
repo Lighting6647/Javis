@@ -31,6 +31,11 @@ export interface AiProvider {
   creditCheck: boolean;
   /** ระดับการคิดก่อนตอบของโมเดลที่มีขั้นคิด ไม่กำหนด = ใช้ค่าเริ่มต้นของโมเดล */
   reasoningEffort?: string;
+  /**
+   * โมเดลที่ใช้ค้นเว็บ สำหรับผู้ให้บริการที่ขั้นค้นเว็บใช้โมเดลคนละตัวกับการสนทนาได้ (Gemini)
+   * ผู้ให้บริการรายอื่นค้นในคำขอเดียวกับคำตอบ จึงไม่มีค่านี้
+   */
+  searchModel?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -45,6 +50,11 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai
 const GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite";
 /** คิดให้น้อยที่สุด เพราะคำตอบถูกอ่านออกเสียงทันที ความเร็วสำคัญกว่าการคิดลึก */
 const GEMINI_REASONING_EFFORT = "minimal";
+/**
+ * โมเดลของขั้นค้นเว็บ: รุ่นที่โควตาฟรีของ Google รวมการค้นด้วย Google Search ไว้ด้วย (รุ่น 3 ขึ้นไปต้องเปิดการเรียกเก็บเงิน)
+ * เปลี่ยนได้ด้วย GEMINI_SEARCH_MODEL
+ */
+const GEMINI_SEARCH_MODEL = "gemini-2.5-flash-lite";
 
 const CLAUDE_BASE_URL = "https://api.anthropic.com";
 /**
@@ -164,11 +174,12 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
       chatModelVariable: "GEMINI_CHAT_MODEL",
       // การแปลงเสียงผ่านทางที่เข้ากันได้กับ OpenAI ยังไม่มี แอปเดสก์ท็อปจึงต้องพิมพ์แทน
       transcribeModel: null,
-      // การค้นเว็บในตัวไม่อยู่ในโควตาฟรีของโมเดลรุ่นปัจจุบัน
-      webSearch: false,
+      // การค้นด้วย Google ส่งคำถามของผู้ใช้ไปค้น และมีโควตาต่อวันของตัวเอง จึงเปิดเฉพาะเมื่อสั่งชัดเจน
+      webSearch: isOn(env, "WEB_SEARCH_ENABLED"),
       // คำขอตรวจเครดิตกินโควตาฟรีต่อวันซึ่งมีจำกัด จึงตรวจเฉพาะเมื่อสั่งชัดเจน
       creditCheck: isOn(env, "AI_CREDIT_CHECK"),
-      reasoningEffort: effort === "default" ? undefined : (effort ?? GEMINI_REASONING_EFFORT)
+      reasoningEffort: effort === "default" ? undefined : (effort ?? GEMINI_REASONING_EFFORT),
+      searchModel: readModel(env, "GEMINI_SEARCH_MODEL", GEMINI_SEARCH_MODEL, "GEMINI_API_KEY", warn)
     };
   }
 

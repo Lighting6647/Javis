@@ -10,9 +10,12 @@ import {
   MAX_MEMORIES_PER_REPLY,
   MAX_MEMORY_LENGTH,
   MAX_SOURCES,
+  MAX_SUGGESTION_BLOCKS,
+  MAX_SUGGESTION_LENGTH,
   OPEN_PAGE_TOOL,
   REMEMBER_TOOL,
-  safeHttpUrl
+  safeHttpUrl,
+  SEARCH_WEB_TOOL
 } from "./responseStream.js";
 
 const delta = (text: string) => ({ type: "response.output_text.delta", delta: text });
@@ -424,5 +427,99 @@ describe("createResponseReducer", () => {
 
   it("ข้ามเหตุการณ์ที่ผิดรูปโดยไม่ล้ม", () => {
     expect(run([null, 42, "text", [], {}, { type: 7 }, { type: "response.output_text.delta", delta: 5 }])).toEqual([]);
+  });
+});
+
+describe("แถบคำค้นที่เกี่ยวข้องของ Google", () => {
+  const block = (name: string) => `<div class="container"><a class="chip" href="https://www.google.com/search?q=${name}">${name}</a></div>`;
+  const suggestion = (html: unknown) => ({ type: "response.search_suggestions", html });
+  const finish = (events: unknown[]) => {
+    const reducer = createResponseReducer();
+    events.forEach((event) => reducer.push(event));
+    return reducer.finish();
+  };
+
+  it("ส่งต่อให้หน้าเว็บตามที่ได้รับ ต่อท้ายแหล่งที่มา", () => {
+    const events = finish([
+      { type: "response.web_search_call.in_progress" },
+      suggestion(block("a")),
+      { type: "response.output_text.delta", delta: "คำตอบ" },
+      { type: "response.output_text.annotation.added", annotation: { type: "url_citation", url: "https://example.com/", title: "ตัวอย่าง" } }
+    ]);
+    expect(events).toEqual([
+      { type: "sources", sources: [{ url: "https://example.com/", title: "ตัวอย่าง" }] },
+      { type: "suggestions", html: [block("a")] }
+    ]);
+  });
+
+  it("ไม่ซ้ำ ไม่เกินจำนวนที่กำหนด และข้ามรายการที่ว่าง ผิดชนิด หรือใหญ่เกิน", () => {
+    const events = finish([
+      suggestion(block("a")),
+      suggestion(block("a")),
+      suggestion("   "),
+      suggestion(42),
+      suggestion("x".repeat(MAX_SUGGESTION_LENGTH + 1)),
+      suggestion(block("b")),
+      suggestion(block("c")),
+      suggestion(block("d"))
+    ]);
+    expect(events).toEqual([{ type: "suggestions", html: [block("a"), block("b"), block("c")] }]);
+    expect(MAX_SUGGESTION_BLOCKS).toBe(3);
+  });
+
+  it("ไม่มีแถบคำค้น: ไม่ส่งเหตุการณ์นี้", () => {
+    expect(finish([{ type: "response.output_text.delta", delta: "คำตอบ" }])).toEqual([]);
+  });
+});
+
+describe("การขอค้นเว็บผ่านเครื่องมือของ Javis", () => {
+  const searchCall = (args: unknown, callId = "call_s1") => ({
+    type: "response.output_item.done",
+    item: { type: "function_call", name: SEARCH_WEB_TOOL, call_id: callId, arguments: typeof args === "string" ? args : JSON.stringify(args) }
+  });
+  const requestOf = (events: unknown[]) => {
+    const reducer = createResponseReducer();
+    events.forEach((event) => reducer.push(event));
+    return reducer.searchRequest;
+  };
+
+  it("AI เรียกเครื่องมือค้นเว็บ: เซิร์ฟเวอร์รู้ว่าต้องค้น พร้อมคำค้นที่ AI เสนอ", () => {
+    expect(requestOf([searchCall({ query: "ราคาทองคำวันนี้" })])).toBe("ราคาทองคำวันนี้");
+  });
+
+  it("ไม่ได้เรียกเครื่องมือค้นเว็บ: ไม่มีคำขอค้น แม้จะเรียกเครื่องมืออื่น", () => {
+    expect(requestOf([delta("สวัสดีครับ")])).toBeNull();
+    expect(requestOf([openCall({ url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา" })])).toBeNull();
+  });
+
+  it("ทำคำค้นให้เป็นบรรทัดเดียวและไม่ยาวเกินกำหนด เพราะคำค้นถูกใส่ต่อในคำสั่งของขั้นค้น", () => {
+    expect(requestOf([searchCall({ query: "  ราคาทอง\n\nวันนี้\tล่าสุด\u0000  " })])).toBe("ราคาทอง วันนี้ ล่าสุด");
+    expect(requestOf([searchCall({ query: "ก".repeat(500) })])).toBe("ก".repeat(200));
+  });
+
+  it("เรียกเครื่องมือค้นเว็บโดยอาร์กิวเมนต์อ่านไม่ได้: ยังนับว่าขอค้น เพียงแต่ไม่มีคำค้นที่เสนอ", () => {
+    for (const args of ["{เสีย", "{}", { query: 42 }, { query: "   " }]) {
+      expect(requestOf([searchCall(args)])).toBe("");
+    }
+  });
+
+  it("ใช้คำค้นของการเรียกครั้งแรกที่มีคำค้น การเรียกซ้ำไม่ทำให้ค้นหลายรอบ", () => {
+    expect(requestOf([searchCall({}, "call_s1"), searchCall({ query: "ข่าวเศรษฐกิจวันนี้" }, "call_s2"), searchCall({ query: "คำค้นที่สาม" }, "call_s3")])).toBe(
+      "ข่าวเศรษฐกิจวันนี้"
+    );
+  });
+
+  it("การขอค้นไม่ใช่การอ่านเว็บ: ยังจำเรื่องที่ผู้ใช้บอกในคำขอเดียวกันได้ และไม่ประกาศว่ากำลังค้น", () => {
+    const reducer = createResponseReducer();
+    const sent = [
+      searchCall({ query: "ราคาทองคำวันนี้" }),
+      {
+        type: "response.output_item.done",
+        item: { type: "function_call", name: REMEMBER_TOOL, call_id: "call_m1", arguments: JSON.stringify({ text: "ผู้ใช้ลงทุนในทองคำ" }) }
+      }
+    ].flatMap((event) => reducer.push(event));
+
+    expect(sent).toEqual([]);
+    expect(reducer.finish()).toEqual([{ type: "memory", added: ["ผู้ใช้ลงทุนในทองคำ"], removed: [] }]);
   });
 });

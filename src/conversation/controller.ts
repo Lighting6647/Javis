@@ -371,6 +371,10 @@ export class ConversationController {
               this.patchMessage(replyId, (message) => ({ ...message, sources: event.sources }));
               break;
 
+            case "suggestions":
+              this.patchMessage(replyId, (message) => ({ ...message, suggestions: event.html }));
+              break;
+
             case "open": {
               // เปิดให้เองเฉพาะเมื่อ backend ยืนยันว่าลิงก์มาจากคำสั่งของผู้ใช้โดยตรง
               const opened = event.auto && this.deps.openPage(event.url);

@@ -194,6 +194,10 @@ a { color: inherit; }
 .sources ul, .sources li { display: contents; }
 .sources a { max-width: 100%; padding: 2px 9px; overflow: hidden; color: var(--text-muted); border: 1px solid var(--border-strong); border-radius: var(--radius-full); font-size: 11px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; transition: color .15s, border-color .15s; }
 .sources a:hover { color: var(--accent); border-color: var(--accent-ring); }
+/* แถบคำค้นที่เกี่ยวข้องของ Google: หน้าตาข้างในเป็นของ Google เอง แอปกำหนดแค่กรอบไม่ให้ล้นข้อความ */
+/* contain: สไตล์ของแถบคำค้นมาจากนอกแอป จึงกันไม่ให้วาดหรือจัดวางออกนอกกรอบนี้ได้ ไม่ว่าสไตล์นั้นจะเขียนมาอย่างไร */
+.search-suggestions { display: flex; flex-direction: column; gap: 6px; max-width: 100%; min-width: 0; margin-top: var(--space-1); contain: layout paint; }
+.search-suggestions-block { display: block; max-width: 100%; min-width: 0; padding: 1px; overflow: hidden; }
 
 /* ---------- Voice dock ---------- */
 .dock { position: relative; padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-3), env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); border-top: 1px solid var(--border); background: var(--bg); }

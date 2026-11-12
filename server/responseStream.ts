@@ -5,10 +5,16 @@ export const OPEN_PAGE_TOOL = "open_web_page";
 export const FILL_FORM_TOOL = "fill_form_fields";
 export const REMEMBER_TOOL = "remember";
 export const FORGET_TOOL = "forget_memory";
+/** เครื่องมือที่ AI ใช้ขอให้เซิร์ฟเวอร์ค้นเว็บ เมื่อการค้นทำเป็นขั้นแยกจากคำขอปกติ */
+export const SEARCH_WEB_TOOL = "search_web";
+export const MAX_SEARCH_QUERY_LENGTH = 200;
 export const MAX_SOURCES = 6;
 export const MAX_FILL_VALUE_LENGTH = 500;
 export const MAX_MEMORY_LENGTH = 200;
 export const MAX_MEMORIES_PER_REPLY = 3;
+/** แถบคำค้นที่เกี่ยวข้องของ Google ต่อหนึ่งคำตอบ: จำนวนสูงสุด และขนาดสูงสุดของแต่ละแถบ */
+export const MAX_SUGGESTION_BLOCKS = 3;
+export const MAX_SUGGESTION_LENGTH = 20_000;
 
 const MAX_URL_LENGTH = 2000;
 const MAX_TITLE_LENGTH = 120;
@@ -37,14 +43,19 @@ function cleanTitle(value: unknown, url: string): string {
   return (title || new URL(url).hostname).slice(0, MAX_TITLE_LENGTH);
 }
 
-/** ทำข้อความความจำให้เป็นบรรทัดเดียว ไม่มีอักขระควบคุม และไม่ยาวเกินกำหนด */
-export function cleanMemoryText(value: unknown): string {
+/** ทำข้อความที่ได้จาก AI ให้เป็นบรรทัดเดียว ไม่มีอักขระควบคุม และไม่ยาวเกินกำหนด */
+function cleanLine(value: unknown, maxLength: number): string {
   if (typeof value !== "string") return "";
   return value
     .replace(/\p{Cc}+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, MAX_MEMORY_LENGTH);
+    .slice(0, maxLength);
+}
+
+/** ทำข้อความความจำให้เป็นบรรทัดเดียว ไม่มีอักขระควบคุม และไม่ยาวเกินกำหนด */
+export function cleanMemoryText(value: unknown): string {
+  return cleanLine(value, MAX_MEMORY_LENGTH);
 }
 
 /** ข้อมูลที่ Javis ไม่เก็บเป็นความจำ: รหัสผ่าน รหัสยืนยัน เลขบัตร และเลขประจำตัว */
@@ -80,6 +91,11 @@ export interface ResponseReducer {
   readonly needsFollowUp: boolean;
   /** ประโยคสำรองเมื่อขอให้ AI ตอบต่อไม่สำเร็จ */
   readonly memoryFallbackText: string;
+  /**
+   * AI ขอให้ค้นเว็บผ่านเครื่องมือของ Javis: ค่าคือคำค้นที่ AI เสนอ (ว่างถ้าอ่านคำค้นไม่ได้)
+   * null คือไม่ได้ขอค้น เซิร์ฟเวอร์เป็นผู้ค้นและตอบต่อในขั้นถัดไป
+   */
+  readonly searchRequest: string | null;
 }
 
 export interface ResponseReducerOptions {
@@ -103,6 +119,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let page: { url: string; title: string } | null = null;
   let fill: FillProposal[] | null = null;
   const sources = new Map<string, WebSource>();
+  const suggestionBlocks: string[] = [];
+  let searchRequest: string | null = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
 
@@ -186,6 +204,14 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     sources.set(url, { url, title: cleanTitle(annotation.title, url) });
   };
 
+  /** แถบคำค้นที่เกี่ยวข้องของ Google ส่งต่อให้หน้าเว็บตามที่ได้รับ โดยจำกัดจำนวนและขนาด */
+  const addSuggestions = (html: unknown) => {
+    const block = typeof html === "string" ? html.trim() : "";
+    if (!block || block.length > MAX_SUGGESTION_LENGTH) return;
+    if (suggestionBlocks.length >= MAX_SUGGESTION_BLOCKS || suggestionBlocks.includes(block)) return;
+    suggestionBlocks.push(block);
+  };
+
   const readItem = (item: unknown) => {
     if (!isObject(item)) return;
 
@@ -204,6 +230,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       if (proposals.length > 0) fill = proposals;
     } else if (item.type === "function_call" && (item.name === REMEMBER_TOOL || item.name === FORGET_TOOL)) {
       readMemoryCall(item);
+    } else if (item.type === "function_call" && item.name === SEARCH_WEB_TOOL && !searchRequest) {
+      // การขอค้นยังไม่ใช่การอ่านเว็บ จึงไม่กระทบการจำหรือการเปิดหน้าเว็บในคำขอเดียวกัน ใช้คำค้นแรกที่อ่านได้
+      searchRequest = cleanLine(parseArguments(item.arguments).query, MAX_SEARCH_QUERY_LENGTH);
     }
   };
 
@@ -229,6 +258,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       }
 
       if (type === "response.output_text.annotation.added") addSource(event.annotation);
+      else if (type === "response.search_suggestions") addSuggestions(event.html);
       else if (type === "response.output_item.done") readItem(event.item);
       else if (type === "response.failed" || type === "error") {
         failed = true;
@@ -263,6 +293,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         events.push({ type: "memory", added: [...memoryAdds], removed: [...memoryRemoves] });
       }
       if (sources.size > 0) events.push({ type: "sources", sources: [...sources.values()] });
+      if (suggestionBlocks.length > 0) events.push({ type: "suggestions", html: [...suggestionBlocks] });
 
       return events;
     },
@@ -286,6 +317,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       if (memoryAdds.length > 0) return "จำไว้แล้วครับ";
       if (memoryRemoves.length > 0) return "ลืมเรื่องนั้นให้แล้วครับ";
       return "เรื่องนี้ผมไม่ได้บันทึกไว้ครับ";
+    },
+    get searchRequest() {
+      return searchRequest;
     }
   };
 }
