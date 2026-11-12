@@ -358,7 +358,12 @@ export const chatRequestSchema = z.object({
   /** ความจำของผู้ใช้ที่เก็บอยู่ในอุปกรณ์ */
   memories: z.array(memorySchema).max(MAX_MEMORIES).optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
-  diagnose: z.string().max(200).optional()
+  diagnose: z.string().max(200).optional(),
+  /** โมเดลค้นเว็บที่ผู้ถือรหัสวินิจฉัยขอลองในคำขอนี้ คำขอที่ไม่มีรหัสจะถูกเมิน */
+  searchModel: z
+    .string()
+    .regex(/^[A-Za-z0-9._/-]{1,100}$/)
+    .optional()
 });
 
 type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -535,7 +540,9 @@ export const chatHandler: RequestHandler = async (request, response) => {
     !start.rejection.codes.includes("invalid_api_key");
 
   /** โมเดลที่ Gemini ใช้ค้นเว็บ และวิธีค้น: ในคำขอเดียวกับคำตอบ หรือเป็นขั้นแยกที่โมเดลสนทนาขอผ่านเครื่องมือของ Javis */
-  const searchModel = ai.searchModel ?? ai.chatModel;
+  /** ผู้ถือรหัสวินิจฉัยกำลังลองโมเดลค้นตัวอื่น: ต้องลองค้นจริงเสมอ และผลของการลองต้องไม่เปลี่ยนสถานะการค้นของผู้ใช้ทั่วไป */
+  const probing = diagnosing && parsed.data.searchModel !== undefined;
+  const searchModel = (probing ? parsed.data.searchModel : undefined) ?? ai.searchModel ?? ai.chatModel;
   const separateSearch = ai.name === "gemini" && geminiSearchMode(ai.chatModel, searchModel) === "separate";
 
   /** โควตาค้นเว็บเต็มเป็นเรื่องชั่วคราว จึงพักการค้นไว้ช่วงหนึ่งแทนการปิดจนรีสตาร์ต */
@@ -678,7 +685,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const hasOptionalSettings = ai.apiStyle === "claude" || (ai.apiStyle === "chat" && Boolean(ai.reasoningEffort));
 
   /** คำขอนี้ให้ AI ค้นเว็บได้ (ยังไม่ถูกปิดหรือพักไว้) */
-  const searching = webSearchUsable && Date.now() >= webSearchPausedUntil;
+  const searching = ai.webSearch && (probing || (webSearchUsable && Date.now() >= webSearchPausedUntil));
   /** เครื่องมือค้นของผู้ให้บริการอยู่ในคำขอแรก การถูกปฏิเสธจึงอาจมาจากการค้น */
   const searchingInline = searching && !separateSearch;
 
@@ -689,7 +696,9 @@ export const chatHandler: RequestHandler = async (request, response) => {
     // คำขอถูกปฏิเสธตั้งแต่ต้น: สาเหตุที่พบบ่อยคือโมเดลหรือบัญชีไม่รับการค้นเว็บ ลองใหม่หนึ่งครั้งโดยไม่ค้นเว็บ
     if (searchingInline && (isRejectedShape(reply) || isSearchUnavailable(reply))) {
       const retry = await startReply(messages, { webSearch: false, tools: true, extras: optionalSettingsUsable });
-      if (retry.ok && reply.status === 429) {
+      if (probing) {
+        // การลองของผู้ถือรหัสวินิจฉัยไม่เปลี่ยนสถานะการค้น
+      } else if (retry.ok && reply.status === 429) {
         pauseWebSearch(reply.rejection.logDetail);
       } else if (retry.ok) {
         webSearchUsable = false;
@@ -818,6 +827,8 @@ export const chatHandler: RequestHandler = async (request, response) => {
 
   /** Google ปฏิเสธขั้นค้นเว็บ: พักหรือปิดการค้น เพื่อไม่ให้คำถามถัดไปเสียเวลากับคำขอที่รู้ว่าจะถูกปฏิเสธ */
   const noteSearchRejection = (rejected: Extract<ReplyStart, { ok: false }>) => {
+    if (probing) return;
+
     const { status } = rejected;
     const { logDetail } = rejected.rejection;
     if (status === 429) {

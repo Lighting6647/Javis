@@ -593,6 +593,32 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
       expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
     });
 
+    it("ผู้ถือรหัสลองโมเดลค้นตัวอื่นได้ในคำขอเดียว ส่วนคำขอทั่วไปเปลี่ยนโมเดลไม่ได้", async () => {
+      const app = await boot(searchingModel, withToken);
+
+      await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN, searchModel: "gemini-3.6-flash" });
+      expect(app.calls[1]?.body.model).toBe("gemini-3.6-flash");
+
+      // ไม่มีรหัส: ค่าที่ส่งมาถูกเมิน ไม่เช่นนั้นใครก็เลือกโมเดลที่มีค่าใช้จ่ายสูงกว่าได้
+      await app.ask("ราคาทองวันนี้เท่าไหร่", [], { searchModel: "gemini-3.6-flash" });
+      expect(app.calls[3]?.body.model).toBe("gemini-2.5-flash-lite");
+    });
+
+    it("การลองโมเดลค้นของผู้ถือรหัสไม่เปลี่ยนสถานะการค้นของผู้ใช้ทั่วไป ไม่ว่าจะถูกปฏิเสธหรือเคยถูกปิดไว้", async () => {
+      const app = await boot((call) => {
+        if (call.api === "interactions") {
+          return call.body.model === "gemini-3.6-flash" ? rejected(403, "PERMISSION_DENIED", "Search grounding is not available.") : groundedAnswer();
+        }
+        return chatToolNames(call).includes("search_web") ? searchRequest("ราคาทองคำวันนี้") : plainAnswer();
+      }, withToken);
+
+      // ลองโมเดลที่ถูกปฏิเสธ: ผู้ใช้ทั่วไปยังค้นได้ตามเดิม
+      await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN, searchModel: "gemini-3.6-flash" });
+      const normal = await app.ask("ราคาทองวันนี้เท่าไหร่");
+      expect(eventOf(normal, "suggestions")).toBeDefined();
+      expect(app.warnings.join("\n")).not.toContain("ปิดการค้นเว็บ");
+    });
+
     it("เซิร์ฟเวอร์ที่ไม่ได้ตั้งค่าแฮชของรหัส: ไม่มีรหัสใดใช้ได้", async () => {
       const app = await boot(refusedSearch, { ...FREE_SEARCH, DIAGNOSTIC_TOKEN_SHA256: "" });
       const reply = await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN });
