@@ -188,6 +188,23 @@ a { color: inherit; }
 .page-link span { min-width: 0; }
 .page-link strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .page-link small { display: block; color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+/* เบราว์เซอร์บล็อกแท็บใหม่: ลิงก์กลายเป็นปุ่มหลักของคำตอบ ให้แตะเปิดได้ทันที */
+.page-link.blocked { color: var(--accent-contrast); border-color: var(--accent); background: var(--accent); transition: border-color .15s, background .15s, transform .15s; }
+.page-link.blocked:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+.page-link.blocked svg, .page-link.blocked small { color: inherit; }
+.page-link.blocked small { opacity: .85; }
+
+/* วิธีอนุญาตให้เว็บนี้เปิดแท็บใหม่เอง อยู่ใต้ลิงก์ที่ถูกบล็อก */
+.popup-help { align-self: flex-start; max-width: 100%; margin-top: var(--space-1); color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.popup-help summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); font-weight: 500; cursor: pointer; list-style: none; user-select: none; transition: color .15s, border-color .15s, background .15s, transform .15s; }
+.popup-help summary::-webkit-details-marker { display: none; }
+.popup-help summary:hover { color: var(--accent); border-color: var(--accent-ring); }
+.popup-help summary:active { transform: scale(.98); }
+.popup-help summary svg { flex: none; transition: transform .2s var(--ease); }
+.popup-help[open] summary { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); }
+.popup-help[open] summary svg { transform: rotate(180deg); }
+.popup-help-body { margin-top: var(--space-2); padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.popup-help-body ol { display: grid; gap: 6px; margin: var(--space-2) 0 0; padding-left: 20px; color: var(--text); overflow-wrap: anywhere; }
 
 .sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-1); }
 .sources-label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-faint); font-size: 11px; font-weight: 500; }
@@ -495,6 +512,9 @@ html[data-theme="holo"] .message.assistant .typing { border: 0; background: none
 html[data-theme="holo"] .typing i { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 html[data-theme="holo"] .page-link { background: var(--corners), rgba(34, 211, 238, .09); }
 html[data-theme="holo"] .page-link:hover { box-shadow: var(--glow); }
+html[data-theme="holo"] .page-link.blocked { background: var(--accent); box-shadow: 0 0 18px rgba(34, 211, 238, .35); }
+html[data-theme="holo"] .page-link.blocked:hover { background: var(--accent-hover); box-shadow: 0 0 26px rgba(34, 211, 238, .6); }
+html[data-theme="holo"] .popup-help-body { background: var(--corners), rgba(4, 26, 38, .62); }
 
 /* ---------- แถบล่าง ปุ่ม และช่องพิมพ์ ---------- */
 html[data-theme="holo"] .dock { border-top-color: var(--border); background: linear-gradient(rgba(4, 26, 38, .35), rgba(4, 26, 38, .85)); }

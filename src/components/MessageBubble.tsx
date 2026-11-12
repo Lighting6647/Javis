@@ -1,7 +1,8 @@
 import { Ban, Brain, CircleAlert, CircleCheck, ClipboardPen, ExternalLink, Globe } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { hostOf, sourceLabel, splitLinks } from "../conversation/richText";
-import type { ConversationMessage, FillRequest } from "../conversation/types";
+import type { ConversationMessage, FillRequest, PageLink } from "../conversation/types";
+import { PopupHelp } from "./PopupHelp";
 import { SearchSuggestions } from "./SearchSuggestions";
 
 interface MessageBubbleProps {
@@ -11,6 +12,8 @@ interface MessageBubbleProps {
    * ถ้าไม่ได้ส่งมาหรือคืน false ลิงก์จะเปิดแท็บใหม่ตามปกติ
    */
   onOpenLink?: (url: string) => boolean;
+  /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความนี้เอง */
+  onLinkOpened?: (messageId: string) => void;
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ในข้อความนี้ */
   onUndoMemory?: (messageId: string, memoryId: string) => void;
 }
@@ -20,12 +23,15 @@ interface WebLinkProps {
   className?: string;
   title?: string;
   onOpenLink?: (url: string) => boolean;
+  /** เรียกเมื่อผู้ใช้แตะลิงก์ ไม่ว่าจะเปิดในแท็บใหม่หรือในเบราว์เซอร์ในตัว */
+  onOpened?: () => void;
   children: ReactNode;
 }
 
-function WebLink({ url, className, title, onOpenLink, children }: WebLinkProps) {
+function WebLink({ url, className, title, onOpenLink, onOpened, children }: WebLinkProps) {
   const handleClick = (event: MouseEvent) => {
     if (onOpenLink?.(url)) event.preventDefault();
+    onOpened?.();
   };
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" className={className} title={title} onClick={handleClick}>
@@ -41,7 +47,13 @@ const FILL_SUMMARY: Record<FillRequest["status"], { icon: typeof Ban; text: (req
   failed: { icon: CircleAlert, text: () => "กรอกไม่สำเร็จ" }
 };
 
-export function MessageBubble({ message, onOpenLink, onUndoMemory }: MessageBubbleProps) {
+/** บอกผู้ใช้ว่าหน้าเว็บเปิดแล้ว หรือต้องแตะเอง และเพราะอะไร */
+function linkStatus(link: PageLink): string {
+  if (link.opened) return "เปิดให้แล้ว แตะเพื่อเปิดอีกครั้ง";
+  return link.blocked ? "เบราว์เซอร์บล็อกแท็บใหม่ แตะเพื่อเปิด" : "แตะเพื่อเปิดหน้าเว็บ";
+}
+
+export function MessageBubble({ message, onOpenLink, onLinkOpened, onUndoMemory }: MessageBubbleProps) {
   const fromUser = message.role === "user";
   const fill = message.fill ? FILL_SUMMARY[message.fill.status] : null;
 
@@ -70,16 +82,22 @@ export function MessageBubble({ message, onOpenLink, onUndoMemory }: MessageBubb
       )}
 
       {message.link && (
-        <WebLink url={message.link.url} className="page-link" onOpenLink={onOpenLink}>
+        <WebLink
+          url={message.link.url}
+          className={`page-link${message.link.blocked ? " blocked" : ""}`}
+          onOpenLink={onOpenLink}
+          onOpened={() => onLinkOpened?.(message.id)}
+        >
           <ExternalLink size={18} aria-hidden />
           <span>
             <strong>{message.link.title}</strong>
             <small>
-              {hostOf(message.link.url)} · {message.link.opened ? "เปิดให้แล้ว แตะเพื่อเปิดอีกครั้ง" : "แตะเพื่อเปิดหน้าเว็บ"}
+              {hostOf(message.link.url)} · {linkStatus(message.link)}
             </small>
           </span>
         </WebLink>
       )}
+      {message.link?.blocked && <PopupHelp />}
 
       {message.fill && fill && (
         <span className={`fill-status ${message.fill.status}`}>

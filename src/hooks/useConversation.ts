@@ -55,6 +55,7 @@ export function useConversation() {
     sendText: controller.sendText,
     confirmFill: controller.confirmFill,
     cancelFill: controller.cancelFill,
-    undoMemory: controller.undoMemory
+    undoMemory: controller.undoMemory,
+    markLinkOpened: controller.markLinkOpened
   };
 }

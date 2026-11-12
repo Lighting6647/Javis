@@ -748,7 +748,8 @@ describe("ConversationController", () => {
     expect(controller.getState().messages.at(-1)?.link).toEqual({
       title: "กรมอุตุนิยมวิทยา",
       url: "https://www.tmd.go.th/",
-      opened: true
+      opened: true,
+      blocked: false
     });
   });
 
@@ -763,23 +764,87 @@ describe("ConversationController", () => {
     await settle();
 
     expect(browser.opened).toEqual([]);
-    expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false });
+    // ลิงก์ที่ตั้งใจให้ผู้ใช้กดเองไม่ใช่การถูกบล็อก จึงไม่ต้องสอนวิธีอนุญาตป๊อปอัป
+    expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: false });
   });
 
-  it("ยังแสดงลิงก์ให้กดเองเมื่อเบราว์เซอร์บล็อกการเปิดหน้าใหม่", async () => {
-    const { chat, browser, controller } = setup();
-    browser.succeeds = false;
+  describe("เบราว์เซอร์บล็อกแท็บใหม่", () => {
+    const OPEN = { type: "open", url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก", auto: true } as const;
+    const SAID = "ได้เลยครับ นี่คือหน้า ผลค้นหา ก ครับ";
 
-    controller.sendText("เปิดเว็บให้หน่อย");
-    await settle();
-    chat.current.options.onEvent({ type: "delta", text: "ได้เลยครับ" });
-    chat.current.options.onEvent({ type: "open", url: "https://example.com/", title: "ตัวอย่าง", auto: true });
-    chat.current.result.resolve("ได้เลยครับ");
-    await settle();
+    it("พิมพ์สั่ง: ลิงก์ถูกทำเครื่องหมายว่าถูกบล็อก ให้ผู้ใช้แตะเปิดเอง", async () => {
+      const { synthesizer, chat, browser, controller } = setup();
+      browser.succeeds = false;
 
-    expect(browser.opened).toEqual(["https://example.com/"]);
-    expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false });
-    expect(controller.getState().notice).toBeNull();
+      controller.sendText("หาข้อมูลเรื่อง ก ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(browser.opened).toEqual([OPEN.url]);
+      expect(controller.getState().messages.at(-1)?.link).toEqual({ title: "ผลค้นหา ก", url: OPEN.url, opened: false, blocked: true });
+      // ไม่ได้เปิดโหมดเสียง จึงไม่มีอะไรถูกอ่านออกเสียง
+      expect(synthesizer.spoken).toEqual([]);
+      expect(controller.getState().notice).toBeNull();
+    });
+
+    it("สั่งด้วยเสียง: บอกผู้ใช้ด้วยเสียงว่าต้องแตะลิงก์เอง ไม่เช่นนั้นจะเข้าใจว่าเปิดให้แล้ว", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup();
+      browser.succeeds = false;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("หาข้อมูลเรื่อง ก ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(synthesizer.spoken).toEqual([SAID, NOTICE_TEXT.popupBlocked]);
+      // ข้อความในบทสนทนายังเป็นคำตอบของ Javis ตามเดิม ส่วนที่ถูกบล็อกบอกไว้ที่ลิงก์
+      expect(controller.getState().messages.at(-1)).toMatchObject({ text: SAID, link: { opened: false, blocked: true } });
+      expect(controller.getState().phase).toBe("listening");
+    });
+
+    it("เปิดสำเร็จ: ไม่พูดอะไรเพิ่ม", async () => {
+      const { recognizer, synthesizer, chat, controller } = setup();
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("หาข้อมูลเรื่อง ก ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      expect(synthesizer.spoken).toEqual([SAID]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: true, blocked: false });
+    });
+
+    it("ผู้ใช้แตะลิงก์เปิดเองแล้ว: ลิงก์นั้นไม่ถูกแสดงว่าถูกบล็อกอีก", async () => {
+      const { chat, browser, controller } = setup();
+      browser.succeeds = false;
+
+      controller.sendText("หาข้อมูลเรื่อง ก ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: SAID });
+      chat.current.options.onEvent(OPEN);
+      chat.current.result.resolve(SAID);
+      await settle();
+
+      const reply = controller.getState().messages.at(-1);
+      controller.markLinkOpened(reply?.id ?? "");
+
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: true, blocked: false });
+      // ข้อความที่ไม่มีลิงก์หรือไม่มีอยู่จริง: ไม่เกิดอะไรขึ้น
+      controller.markLinkOpened("message-1");
+      controller.markLinkOpened("ไม่มีข้อความนี้");
+      expect(controller.getState().messages[0]?.link).toBeUndefined();
+    });
   });
 
   it("สั่งจบการฟังเองได้เฉพาะตอนกำลังฟัง", async () => {

@@ -34,7 +34,8 @@ export default function App() {
     sendText,
     confirmFill,
     cancelFill,
-    undoMemory
+    undoMemory,
+    markLinkOpened
   } = useConversation();
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
@@ -121,6 +122,7 @@ export default function App() {
               messages={messages}
               onSuggest={sendText}
               onOpenLink={desktop ? browserStore.open : undefined}
+              onLinkOpened={markLinkOpened}
               onUndoMemory={undoMemory}
               privacyNote={desktop ? DESKTOP_PRIVACY_NOTE : PRIVACY_NOTE}
               phase={phase}

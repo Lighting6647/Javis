@@ -168,6 +168,13 @@ export class ConversationController {
     }));
   };
 
+  /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความนั้นเอง: ลิงก์ถือว่าเปิดแล้ว และไม่ต้องบอกว่าถูกบล็อกอีก */
+  markLinkOpened = (messageId: string): void => {
+    this.patchMessage(messageId, (message) =>
+      message.link ? { ...message, link: { ...message.link, opened: true, blocked: false } } : message
+    );
+  };
+
   private update(patch: Partial<ConversationState>): void {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
@@ -378,10 +385,13 @@ export class ConversationController {
             case "open": {
               // เปิดให้เองเฉพาะเมื่อ backend ยืนยันว่าลิงก์มาจากคำสั่งของผู้ใช้โดยตรง
               const opened = event.auto && this.deps.openPage(event.url);
+              const blocked = event.auto && !opened;
               this.patchMessage(replyId, (message) => ({
                 ...message,
-                link: { title: event.title, url: event.url, opened }
+                link: { title: event.title, url: event.url, opened, blocked }
               }));
+              // ผู้ใช้ที่สั่งด้วยเสียงไม่ได้มองจอ: ต้องได้ยินว่ายังไม่ได้เปิด ไม่เช่นนั้นจะรอหน้าเว็บที่ไม่มา
+              if (blocked && speakReply) chunker.push(`\n${NOTICE_TEXT.popupBlocked}`);
               break;
             }
 

@@ -10,6 +10,8 @@ interface TranscriptProps {
   onSuggest: (text: string) => void;
   /** เปิดลิงก์ในเบราว์เซอร์ในตัว (เฉพาะแอปเดสก์ท็อป) */
   onOpenLink?: (url: string) => boolean;
+  /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความหนึ่งเอง */
+  onLinkOpened: (messageId: string) => void;
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ */
   onUndoMemory: (messageId: string, memoryId: string) => void;
   /** ข้อความท้ายหน้าเริ่มต้นที่บอกว่าเสียงถูกประมวลผลที่ใด */
@@ -30,6 +32,7 @@ export function Transcript({
   messages,
   onSuggest,
   onOpenLink,
+  onLinkOpened,
   onUndoMemory,
   privacyNote,
   phase,
@@ -73,7 +76,13 @@ export function Transcript({
   return (
     <section className="thread" role="log" aria-live="polite" aria-label="บทสนทนา">
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} onOpenLink={onOpenLink} onUndoMemory={onUndoMemory} />
+        <MessageBubble
+          key={message.id}
+          message={message}
+          onOpenLink={onOpenLink}
+          onLinkOpened={onLinkOpened}
+          onUndoMemory={onUndoMemory}
+        />
       ))}
       <div ref={endRef} />
     </section>
