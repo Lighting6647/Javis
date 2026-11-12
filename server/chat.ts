@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { aiAccount } from "./aiAccount.js";
 import { CLAUDE_EFFORTS } from "./aiProvider.js";
@@ -292,6 +293,37 @@ const textDelta = (text: string) => ({ type: "response.output_text.delta", delta
 /** บอกผู้ใช้เมื่อขั้นค้นเว็บไม่ได้คำตอบกลับมาเลย แทนการส่งคำตอบว่าง */
 const SEARCH_FAILED_TEXT = "ขออภัยครับ ผมค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ";
 
+/**
+ * รหัสชั่วคราวของช่องวินิจฉัย (เก็บเฉพาะค่าแฮช) ใช้ระหว่างตรวจการค้นเว็บของ Gemini บนเว็บจริง
+ * จะถูกลบออกเมื่อตรวจเสร็จ เหลือเฉพาะค่าที่ผู้ดูแลตั้งเองผ่าน DIAGNOSTIC_TOKEN_SHA256
+ */
+const TEMPORARY_DIAGNOSTIC_TOKEN_SHA256 = "016d80acd794cabcc00c2853fab4907be58606bd3f9d8df6f5ea7f12b326d55e";
+
+/**
+ * ช่องวินิจฉัยของผู้ดูแล: คำขอที่แนบรหัส (diagnose) ซึ่งค่าแฮช SHA-256 ตรงกับค่านี้ จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
+ * บอกว่าเซิร์ฟเวอร์เรียกผู้ให้บริการกี่ครั้ง ได้สถานะอะไร ใช้เวลาเท่าไร และเหตุผลที่ถูกปฏิเสธ (ข้อความที่ปิดบังสิ่งที่ดูเหมือนกุญแจแล้ว)
+ * โค้ดเก็บเฉพาะค่าแฮช จึงอ่านรหัสจากโค้ดหรือจากการตั้งค่าไม่ได้
+ */
+const DIAGNOSTIC_TOKEN_SHA256 = process.env.DIAGNOSTIC_TOKEN_SHA256?.trim().toLowerCase() || TEMPORARY_DIAGNOSTIC_TOKEN_SHA256;
+
+function isDiagnosticToken(token: string | undefined): boolean {
+  if (!token || !/^[0-9a-f]{64}$/.test(DIAGNOSTIC_TOKEN_SHA256)) return false;
+  return timingSafeEqual(createHash("sha256").update(token).digest(), Buffer.from(DIAGNOSTIC_TOKEN_SHA256, "hex"));
+}
+
+/** คำขอหนึ่งครั้งที่ส่งไปยังผู้ให้บริการ สำหรับช่องวินิจฉัยของผู้ดูแล */
+interface UpstreamAttempt {
+  /** ปลายทางและตัวเลือกของคำขอ เช่น "chat gemini-3.5-flash-lite search=request" */
+  target: string;
+  /** เวลาที่เริ่มส่ง นับจากเริ่มรับคำขอของผู้ใช้ (มิลลิวินาที) */
+  at: number;
+  /** เวลาที่รอจนผู้ให้บริการเริ่มตอบ (มิลลิวินาที) */
+  ms: number;
+  status: number;
+  codes?: string[];
+  detail?: string;
+}
+
 const pageFieldSchema = z.object({
   id: z.string().regex(/^f\d{1,3}$/),
   label: z.string().trim().min(1).max(120),
@@ -324,7 +356,9 @@ export const chatRequestSchema = z.object({
     })
     .optional(),
   /** ความจำของผู้ใช้ที่เก็บอยู่ในอุปกรณ์ */
-  memories: z.array(memorySchema).max(MAX_MEMORIES).optional()
+  memories: z.array(memorySchema).max(MAX_MEMORIES).optional(),
+  /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
+  diagnose: z.string().max(200).optional()
 });
 
 type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -462,9 +496,25 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const clientGone = new AbortController();
   response.on("close", () => clientGone.abort());
 
-  const { messages, page, memories } = parsed.data;
+  const { messages, page, memories, diagnose } = parsed.data;
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
+
+  const diagnosing = isDiagnosticToken(diagnose);
+  const requestStarted = Date.now();
+  const attempts: UpstreamAttempt[] = [];
+  /** ส่งคำขอไปยังผู้ให้บริการ พร้อมจดสถานะและเวลาไว้สำหรับช่องวินิจฉัย */
+  const tracked = async (target: string, start: () => Promise<ReplyStart>): Promise<ReplyStart> => {
+    const began = Date.now();
+    const result = await start();
+    attempts.push({
+      target,
+      at: began - requestStarted,
+      ms: Date.now() - began,
+      ...(result.ok ? { status: 200 } : { status: result.status, codes: result.rejection.codes, detail: result.rejection.logDetail })
+    });
+    return result;
+  };
 
   /**
    * คำขอถูกปฏิเสธเพราะรูปแบบ (400) และลองใหม่แบบลดตัวเลือกแล้วอาจผ่าน
@@ -507,29 +557,31 @@ export const chatHandler: RequestHandler = async (request, response) => {
     tools: unknown[];
     extras: boolean;
   }): Promise<ReplyStart> => {
-    const send = (thinkingLevel: string | undefined) =>
-      startHttpReply({
-        url: geminiInteractionsUrl(ai.baseUrl),
-        headers: geminiInteractionsHeaders(apiKey),
-        signal,
-        translator: createGeminiInteractionTranslator(),
-        body: toGeminiInteractionRequest({
-          model: request.model,
-          instructions: request.instructions,
-          messages: request.turns,
-          tools: request.tools,
-          maxTokens: MAX_GEMINI_SEARCH_TOKENS,
-          thinkingLevel
+    const post = (thinkingLevel: string | undefined) =>
+      tracked(`interactions ${request.model}${thinkingLevel ? ` thinking=${thinkingLevel}` : ""}`, () =>
+        startHttpReply({
+          url: geminiInteractionsUrl(ai.baseUrl),
+          headers: geminiInteractionsHeaders(apiKey),
+          signal,
+          translator: createGeminiInteractionTranslator(),
+          body: toGeminiInteractionRequest({
+            model: request.model,
+            instructions: request.instructions,
+            messages: request.turns,
+            tools: request.tools,
+            maxTokens: MAX_GEMINI_SEARCH_TOKENS,
+            thinkingLevel
+          })
         })
-      });
+      );
 
     const thinkingLevel = request.extras && searchThinkingLevelUsable ? geminiThinkingLevel(request.model, ai.reasoningEffort) : undefined;
-    const first = await send(thinkingLevel);
+    const first = await post(thinkingLevel);
     if (!thinkingLevel || !isRejectedShape(first)) return first;
 
     // ทางนี้ตรวจระดับการคิดแยกจากทางที่ไม่ค้นเว็บ: ลองใหม่หนึ่งครั้งโดยให้โมเดลใช้ค่าเริ่มต้นของตัวเอง
     // ถ้ายังไม่ผ่าน สาเหตุไม่ใช่ระดับการคิด จึงคืนผลของครั้งแรกให้ขั้นถัดไปตัดสิน
-    const retry = await send(undefined);
+    const retry = await post(undefined);
     if (!retry.ok) return first;
 
     searchThinkingLevelUsable = false;
@@ -545,25 +597,29 @@ export const chatHandler: RequestHandler = async (request, response) => {
     const searchTool: SearchTool = !options.webSearch ? "none" : separateSearch ? "request" : "provider";
     const tools = buildTools(searchTool, pageFields.length > 0);
     const turns = input as Array<{ role: string; content: string }>;
+    /** คำอธิบายคำขอนี้ในช่องวินิจฉัย */
+    const target = `${ai.apiStyle} ${ai.chatModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
 
     if (ai.apiStyle === "claude") {
       const { fixed, personal } = buildInstructionParts(page, memories, options.webSearch, describeToday());
-      return startClaudeReply({
-        connection: { apiKey, baseUrl: ai.baseUrl },
-        signal,
-        timeoutMs: UPSTREAM_TIMEOUT_MS,
-        model: ai.chatModel,
-        fixedInstructions: fixed,
-        personalInstructions: personal,
-        messages: turns,
-        // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
-        tools: options.tools ? tools : [],
-        maxTokens: MAX_CLAUDE_TOKENS,
-        effort: CLAUDE_EFFORTS.find((effort) => effort === ai.reasoningEffort),
-        extras: options.extras,
-        // รอบตอบต่อมีประโยคสำรองของตัวเองอยู่แล้ว
-        speakRefusal: options.tools
-      });
+      return tracked(target, () =>
+        startClaudeReply({
+          connection: { apiKey, baseUrl: ai.baseUrl },
+          signal,
+          timeoutMs: UPSTREAM_TIMEOUT_MS,
+          model: ai.chatModel,
+          fixedInstructions: fixed,
+          personalInstructions: personal,
+          messages: turns,
+          // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
+          tools: options.tools ? tools : [],
+          maxTokens: MAX_CLAUDE_TOKENS,
+          effort: CLAUDE_EFFORTS.find((effort) => effort === ai.reasoningEffort),
+          extras: options.extras,
+          // รอบตอบต่อมีประโยคสำรองของตัวเองอยู่แล้ว
+          speakRefusal: options.tools
+        })
+      );
     }
 
     // โมเดลที่ค้นเว็บได้ต้องรู้วันที่ปัจจุบัน จึงจะรู้ว่าเรื่องใดควรค้นก่อนตอบ และค้นด้วยวันที่ที่ถูก
@@ -580,38 +636,42 @@ export const chatHandler: RequestHandler = async (request, response) => {
     const instructions =
       searchTool === "request" ? buildInstructions(page, memories, "request", describeToday()) : buildInstructions(page, memories, options.webSearch);
     if (ai.apiStyle === "chat") {
-      return startHttpReply({
-        url: `${ai.baseUrl}/chat/completions`,
-        headers: bearerHeaders(apiKey),
-        signal,
-        translator: createChatCompletionsTranslator(),
-        body: toChatCompletionsRequest({
-          model: ai.chatModel,
-          instructions,
-          messages: turns,
-          tools: options.tools ? tools : [],
-          maxTokens: MAX_CHAT_STYLE_TOKENS,
-          reasoningEffort: options.extras ? ai.reasoningEffort : undefined
+      return tracked(target, () =>
+        startHttpReply({
+          url: `${ai.baseUrl}/chat/completions`,
+          headers: bearerHeaders(apiKey),
+          signal,
+          translator: createChatCompletionsTranslator(),
+          body: toChatCompletionsRequest({
+            model: ai.chatModel,
+            instructions,
+            messages: turns,
+            tools: options.tools ? tools : [],
+            maxTokens: MAX_CHAT_STYLE_TOKENS,
+            reasoningEffort: options.extras ? ai.reasoningEffort : undefined
+          })
         })
-      });
+      );
     }
 
-    return startHttpReply({
-      url: `${ai.baseUrl}/responses`,
-      headers: bearerHeaders(apiKey),
-      signal,
-      body: {
-        model: ai.chatModel,
-        stream: true,
-        // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
-        store: false,
-        max_output_tokens: MAX_REPLY_TOKENS,
-        instructions,
-        input,
-        tools,
-        ...(options.tools ? {} : { tool_choice: "none" })
-      }
-    });
+    return tracked(target, () =>
+      startHttpReply({
+        url: `${ai.baseUrl}/responses`,
+        headers: bearerHeaders(apiKey),
+        signal,
+        body: {
+          model: ai.chatModel,
+          stream: true,
+          // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
+          store: false,
+          max_output_tokens: MAX_REPLY_TOKENS,
+          instructions,
+          input,
+          tools,
+          ...(options.tools ? {} : { tool_choice: "none" })
+        }
+      })
+    );
   };
 
   /** ผู้ให้บริการรายนี้มีตัวเลือกเสริมที่โมเดลบางรุ่นอาจไม่รับ */
@@ -826,6 +886,23 @@ export const chatHandler: RequestHandler = async (request, response) => {
     }
 
     reducer.finish().forEach(send);
+    if (diagnosing) {
+      send({
+        type: "diagnostic",
+        totalMs: Date.now() - requestStarted,
+        attempts,
+        state: {
+          searchModel,
+          separateSearch,
+          searching,
+          webSearchUsable,
+          searchPausedMs: Math.max(0, webSearchPausedUntil - Date.now()),
+          optionalSettingsUsable,
+          searchThinkingLevelUsable,
+          searchRequest: reducer.searchRequest
+        }
+      });
+    }
     openStream();
     response.end();
     // ต้นทางตอบจนจบ: บัญชี AI ใช้งานได้ (เช่น หลังผู้ดูแลเติมเครดิต สถานะกลับมาปกติเองโดยไม่ต้องรีสตาร์ต)

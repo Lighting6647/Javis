@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -167,11 +168,15 @@ async function boot(respond: Responder, env: Record<string, string> = FREE_SEARC
   await once(server, "listening");
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-  const ask = async (content: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<ChatReply> => {
+  const ask = async (
+    content: string,
+    history: Array<{ role: "user" | "assistant"; content: string }> = [],
+    extra: Json = {}
+  ): Promise<ChatReply> => {
     const response = await realFetch(`${base}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [...history, { role: "user", content }] })
+      body: JSON.stringify({ messages: [...history, { role: "user", content }], ...extra })
     });
     const raw = await response.text();
     if (!response.headers.get("content-type")?.includes("ndjson")) {
@@ -551,6 +556,49 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
     const reply = await app.ask("ราคาทองวันนี้เท่าไหร่");
     expect(reply.status).toBe(200);
     expect(reply.text).toMatch(/ค้น.*ไม่สำเร็จ/);
+  });
+
+  describe("ช่องวินิจฉัยของผู้ดูแล", () => {
+    // ค่าทดสอบเท่านั้น เซิร์ฟเวอร์รู้จักเฉพาะค่าแฮชของรหัสนี้
+    const TOKEN = "diagnostic-token-used-only-in-tests";
+    const withToken = { ...FREE_SEARCH, DIAGNOSTIC_TOKEN_SHA256: createHash("sha256").update(TOKEN).digest("hex") };
+    const refusedSearch: Responder = (call) => {
+      if (call.api === "interactions") return rejected(403, "PERMISSION_DENIED", "Grounding with Google Search is not enabled for this project.");
+      return chatToolNames(call).includes("search_web") ? searchRequest("ราคาทองคำวันนี้") : plainAnswer();
+    };
+
+    it("คำขอที่แนบรหัสถูกต้อง: ได้รายการคำขอที่ส่งไปยัง Google พร้อมสถานะและเหตุผลที่ถูกปฏิเสธ", async () => {
+      const app = await boot(refusedSearch, withToken);
+      const reply = await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN });
+
+      const diagnostic = eventOf(reply, "diagnostic") as { attempts: Array<{ target: string; status: number; detail?: string }> } | undefined;
+      expect(diagnostic?.attempts.map((attempt) => [attempt.target.split(" ")[0], attempt.status])).toEqual([
+        ["chat", 200],
+        ["interactions", 403],
+        ["chat", 200]
+      ]);
+      expect(diagnostic?.attempts[1]?.detail).toBe("Grounding with Google Search is not enabled for this project.");
+      // ผู้ใช้ยังได้คำตอบตามปกติ
+      expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
+    });
+
+    it.each([
+      ["ไม่แนบรหัส", {}],
+      ["รหัสผิด", { diagnose: "not-the-token" }]
+    ])("%s: คำตอบไม่มีข้อมูลวินิจฉัย", async (_name, extra) => {
+      const app = await boot(refusedSearch, withToken);
+      const reply = await app.ask("ราคาทองวันนี้เท่าไหร่", [], extra);
+
+      expect(eventOf(reply, "diagnostic")).toBeUndefined();
+      expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
+    });
+
+    it("เซิร์ฟเวอร์ที่ไม่ได้ตั้งค่าแฮชของรหัส: ไม่มีรหัสใดใช้ได้", async () => {
+      const app = await boot(refusedSearch, { ...FREE_SEARCH, DIAGNOSTIC_TOKEN_SHA256: "" });
+      const reply = await app.ask("ราคาทองวันนี้เท่าไหร่", [], { diagnose: TOKEN });
+
+      expect(eventOf(reply, "diagnostic")).toBeUndefined();
+    });
   });
 
   it("ตั้งโมเดลสนทนาเป็นรุ่น 2.5 เอง: ยังค้นเป็นขั้นแยก เพราะรุ่นนี้ใช้การค้นร่วมกับเครื่องมืออื่นไม่ได้", async () => {
