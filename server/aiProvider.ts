@@ -47,9 +47,12 @@ const GEMINI_CHAT_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_REASONING_EFFORT = "minimal";
 
 const CLAUDE_BASE_URL = "https://api.anthropic.com";
-/** โมเดลหลักรุ่นปัจจุบันของ Anthropic เปลี่ยนเป็นรุ่นที่ถูกและเร็วกว่าได้ด้วย ANTHROPIC_CHAT_MODEL */
-const CLAUDE_CHAT_MODEL = "claude-opus-5-5";
-/** โมเดลรุ่นนี้ปิดขั้นคิดไม่ได้ จึงให้คิดน้อยที่สุดเพื่อให้ตอบเร็ว */
+/**
+ * โมเดลรุ่นเล็กของ Anthropic: ราคาต่ำที่สุดและตอบเร็วที่สุด เหมาะกับคำตอบสั้นที่ถูกอ่านออกเสียง
+ * เปลี่ยนเป็นรุ่นใหญ่ได้ด้วย ANTHROPIC_CHAT_MODEL (claude-sonnet-5-5 หรือ claude-opus-5-5)
+ */
+const CLAUDE_CHAT_MODEL = "claude-haiku-5-5";
+/** ให้คิดก่อนตอบน้อยที่สุด เพราะคำตอบถูกอ่านออกเสียงทันที ความเร็วสำคัญกว่าการคิดลึก */
 const CLAUDE_EFFORT: ClaudeEffort = "low";
 
 const read = (env: Env, name: string) => env[name]?.trim() || undefined;

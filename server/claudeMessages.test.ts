@@ -4,6 +4,7 @@ import {
   claudeWebSearchTool,
   createClaudeTranslator,
   FALLBACK_BETA,
+  memoryOperatorNote,
   REFUSAL_REPLY,
   REFUSAL_TAIL,
   supportsServerFallback,
@@ -108,6 +109,35 @@ describe("toClaudeMessages", () => {
       { role: "assistant", content: "คำตอบ" },
       { role: "user", content: "คำถามล่าสุด" }
     ]);
+  });
+
+  it("ข้อความระบบกลางบทสนทนาอยู่ต่อจากข้อความของผู้ใช้ โดยไม่ถูกรวมเข้ากับคำพูดของผู้ใช้", () => {
+    const note = memoryOperatorNote(["บันทึกแล้ว"]);
+    const messages = [
+      { role: "user", content: "สวัสดี" },
+      { role: "assistant", content: "สวัสดีครับ" },
+      { role: "user", content: "จำไว้ว่าผมชื่อไลท์" },
+      { role: "system", content: note }
+    ];
+
+    // Claude กำหนดให้ข้อความระบบตามหลังข้อความของผู้ใช้ทันที และเป็นรายการสุดท้ายได้
+    expect(toClaudeMessages(messages)).toEqual([
+      { role: "user", content: "สวัสดี" },
+      { role: "assistant", content: "สวัสดีครับ" },
+      { role: "user", content: "จำไว้ว่าผมชื่อไลท์" },
+      { role: "system", content: note }
+    ]);
+    // ข้อความระบบขึ้นต้นบทสนทนาไม่ได้ จึงถูกข้ามเหมือนคำตอบที่ไม่มีคำถามนำหน้า
+    expect(toClaudeMessages([{ role: "system", content: note }, ...messages.slice(0, 1)])).toEqual([{ role: "user", content: "สวัสดี" }]);
+  });
+});
+
+describe("memoryOperatorNote", () => {
+  it("บอกผลของทุกการเรียกเครื่องมือความจำ และไม่อ้างตัวว่าเป็นข้อความที่แทรกในคำพูดของผู้ใช้", () => {
+    const note = memoryOperatorNote(["บันทึกแล้ว", "มีความจำนี้อยู่แล้ว"]);
+    expect(note).toContain("บันทึกแล้ว / มีความจำนี้อยู่แล้ว");
+    expect(note).toContain("ตอบผู้ใช้สั้น ๆ");
+    expect(note).not.toContain("[ข้อความจากระบบ");
   });
 });
 

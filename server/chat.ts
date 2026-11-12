@@ -4,6 +4,7 @@ import { aiAccount } from "./aiAccount.js";
 import { CLAUDE_EFFORTS } from "./aiProvider.js";
 import { memoryFollowUpNote, toChatCompletionsRequest } from "./chatCompletions.js";
 import { startClaudeReply } from "./claudeClient.js";
+import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
 import { type ReplyStart, startHttpReply } from "./replySource.js";
 import {
@@ -27,7 +28,7 @@ const MAX_REPLY_TOKENS = 1000;
 /** โมเดลที่มีขั้นคิดนับโทเค็นที่ใช้คิดรวมในเพดานนี้ด้วย จึงเผื่อไว้ให้คำตอบไม่ถูกตัดกลางประโยค */
 const MAX_CHAT_STYLE_TOKENS = 2000;
 /**
- * Claude รุ่นปัจจุบันปิดขั้นคิดไม่ได้ และตอนค้นเว็บยังเขียนโค้ดกรองผลค้นหาเองด้วย ทั้งหมดนับรวมในเพดานนี้
+ * Claude คิดก่อนตอบ และรุ่นใหญ่ยังเขียนโค้ดกรองผลค้นหาเองตอนค้นเว็บ ทั้งหมดนับรวมในเพดานนี้
  * ค่าใช้จ่ายคิดตามโทเค็นที่ใช้จริง เพดานนี้จึงเป็นแค่ตัวกันคำตอบยาวผิดปกติ
  */
 const MAX_CLAUDE_TOKENS = 8000;
@@ -178,6 +179,12 @@ let webSearchUsable = config.ai.webSearch;
  * คำขอถัดไปจะส่งแบบพื้นฐาน โมเดลใช้ค่าเริ่มต้นของตัวเอง (ตอบช้าลงบ้าง) แทนที่ทุกคำถามจะล้มเหลว
  */
 let optionalSettingsUsable = true;
+/**
+ * เปลี่ยนเป็น false เมื่อพบว่าโมเดล Claude ที่ตั้งไว้ไม่รับข้อความระบบกลางบทสนทนา (มีเฉพาะโมเดลรุ่นใหม่)
+ * รอบตอบต่อหลังจำหรือลืมจะแจ้งผลไว้ในข้อความของผู้ใช้แทน เหมือนผู้ให้บริการรายอื่น
+ */
+let operatorNoteUsable = true;
+
 
 function buildTools(withWebSearch: boolean, withFormFill: boolean): unknown[] {
   return [
@@ -479,13 +486,32 @@ export const chatHandler: RequestHandler = async (request, response) => {
    * คืน true ถ้า AI ตอบเป็นข้อความกลับมา
    */
   const continueAfterMemory = async (): Promise<boolean> => {
-    // รูปแบบ Responses ส่งรายการเรียกเครื่องมือกลับไปพร้อมผล ส่วนรายอื่นแจ้งผลเป็นข้อความธรรมดา
+    const outputs = reducer.memoryCalls.map((call) => call.output);
+    const options: ReplyOptions = { webSearch: false, tools: false, extras: optionalSettingsUsable };
+    // แจ้งผลเป็นข้อความธรรมดาต่อท้ายข้อความของผู้ใช้ แทนการส่งรายการเรียกเครื่องมือกลับไป
     // เพราะโมเดลที่มีขั้นคิดต้องการข้อมูลของขั้นคิดแนบกลับมาด้วย ซึ่งแอปไม่ได้เก็บไว้
-    const result =
-      ai.apiStyle === "responses"
-        ? toolResultItems(reducer.memoryCalls)
-        : [{ role: "user", content: memoryFollowUpNote(reducer.memoryCalls.map((call) => call.output)) }];
-    const followUp = await startReply([...messages, ...result], { webSearch: false, tools: false, extras: optionalSettingsUsable });
+    const plainNote = () => startReply([...messages, { role: "user", content: memoryFollowUpNote(outputs) }], options);
+
+    let followUp: ReplyStart;
+    if (ai.apiStyle === "responses") {
+      // รูปแบบ Responses ส่งรายการเรียกเครื่องมือกลับไปพร้อมผลได้โดยตรง
+      followUp = await startReply([...messages, ...toolResultItems(reducer.memoryCalls)], options);
+    } else if (ai.apiStyle === "claude" && operatorNoteUsable) {
+      // Claude รุ่นใหม่มีช่องทางของผู้ดูแลระบบกลางบทสนทนา ผลจึงไม่ปนอยู่ในคำพูดของผู้ใช้
+      followUp = await startReply([...messages, { role: "system", content: memoryOperatorNote(outputs) }], options);
+      if (isRejectedShape(followUp)) {
+        const retry = await plainNote();
+        if (retry.ok) {
+          operatorNoteUsable = false;
+          console.warn(
+            `โมเดล ${ai.chatModel} ไม่รับข้อความระบบกลางบทสนทนา จึงแจ้งผลของความจำไว้ในข้อความของผู้ใช้แทนจนกว่าจะรีสตาร์ต (${followUp.rejection.logDetail})`
+          );
+        }
+        followUp = retry;
+      }
+    } else {
+      followUp = await plainNote();
+    }
     if (!followUp.ok) return false;
 
     let spoke = false;

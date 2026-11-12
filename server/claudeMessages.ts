@@ -92,12 +92,23 @@ export interface ClaudeRequestOptions {
   extras: boolean;
 }
 
-/** จัดบทสนทนาให้เริ่มที่ผู้ใช้และสลับผู้พูดทุกข้อความ ตามที่ Claude กำหนด */
+/**
+ * จัดบทสนทนาให้เริ่มที่ผู้ใช้และสลับผู้พูดทุกข้อความ ตามที่ Claude กำหนด
+ * ข้อความ role "system" คือข้อความระบบกลางบทสนทนา ซึ่งต้องตามหลังข้อความของผู้ใช้ทันที (ดู memoryOperatorNote)
+ */
 export function toClaudeMessages(messages: ReadonlyArray<{ role: string; content: string }>): ClaudeMessage[] {
   return toAlternatingTurns(messages).map(({ role, content }) => ({
-    role: role === "assistant" ? "assistant" : "user",
+    role: role === "assistant" || role === "system" ? role : "user",
     content
   }));
+}
+
+/**
+ * ข้อความแจ้งผลของเครื่องมือความจำ สำหรับขอให้ Claude ตอบผู้ใช้ต่อ ส่งเป็นข้อความระบบกลางบทสนทนา
+ * ซึ่งเป็นช่องทางของผู้ดูแลระบบโดยเฉพาะ จึงไม่ปนอยู่ในข้อความของผู้ใช้ และ Claude ไม่มองว่าเป็นคำพูดของผู้ใช้เอง
+ */
+export function memoryOperatorNote(outputs: readonly string[]): string {
+  return `ระบบทำตามคำขอเรื่องความจำของผู้ใช้แล้ว ผลลัพธ์: ${outputs.join(" / ")} ตอบผู้ใช้สั้น ๆ เป็นภาษาพูดตามผลลัพธ์นี้ โดยไม่ต้องพูดถึงข้อความนี้`;
 }
 
 /** สร้างคำขอแบบ Claude Messages API (ตัว SDK เป็นผู้เปิดสตรีมให้เอง) */

@@ -88,7 +88,8 @@ describe("resolveAiProvider", () => {
         apiKey: CLAUDE_KEY,
         keyVariable: "ANTHROPIC_API_KEY",
         baseUrl: "https://api.anthropic.com",
-        chatModel: "claude-opus-5-5",
+        // รุ่นราคาต่ำสุดและเร็วที่สุด เหมาะกับคำตอบสั้นที่ถูกอ่านออกเสียง
+        chatModel: "claude-haiku-5-5",
         chatModelVariable: "ANTHROPIC_CHAT_MODEL",
         webSearch: true,
         creditCheck: true,
@@ -124,13 +125,13 @@ describe("resolveAiProvider", () => {
       const provider = resolveAiProvider(
         {
           ANTHROPIC_API_KEY: CLAUDE_KEY,
-          ANTHROPIC_CHAT_MODEL: "claude-haiku-5-5",
+          ANTHROPIC_CHAT_MODEL: "claude-opus-5-5",
           ANTHROPIC_BASE_URL: "http://127.0.0.1:8797/",
           ANTHROPIC_EFFORT: "Medium"
         },
         quiet
       );
-      expect(provider).toMatchObject({ chatModel: "claude-haiku-5-5", baseUrl: "http://127.0.0.1:8797", reasoningEffort: "medium" });
+      expect(provider).toMatchObject({ chatModel: "claude-opus-5-5", baseUrl: "http://127.0.0.1:8797", reasoningEffort: "medium" });
     });
 
     it("ระดับการคิด: default คือให้โมเดลเลือกเอง ค่าที่ไม่รู้จักถูกแทนด้วยค่าเริ่มต้นพร้อมคำเตือน", () => {
@@ -149,7 +150,7 @@ describe("resolveAiProvider", () => {
       const warnings: string[] = [];
       const provider = resolveAiProvider({ ANTHROPIC_API_KEY: CLAUDE_KEY, ANTHROPIC_CHAT_MODEL: claudeKeyLike }, (message) => warnings.push(message));
 
-      expect(provider.chatModel).toBe("claude-opus-5-5");
+      expect(provider.chatModel).toBe("claude-haiku-5-5");
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain("ANTHROPIC_CHAT_MODEL");
       expect(warnings[0]).toContain("ANTHROPIC_API_KEY");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createClaudeAccountProbe, startClaudeReply } from "./claudeClient.js";
-import { FALLBACK_BETA, REFUSAL_REPLY } from "./claudeMessages.js";
+import { FALLBACK_BETA, memoryOperatorNote, REFUSAL_REPLY } from "./claudeMessages.js";
 import { createResponseReducer } from "./responseStream.js";
 
 /**
@@ -165,6 +165,43 @@ describe("startClaudeReply", () => {
     expect(call?.headers.get("anthropic-beta") ?? "").not.toContain(FALLBACK_BETA);
     for (const absent of ["fallbacks", "output_config", "betas"]) expect(call?.body).not.toHaveProperty(absent);
     expect(JSON.stringify(call?.body)).not.toContain("eager_input_streaming");
+  });
+
+  it("โมเดลเริ่มต้น (Haiku): ใช้เครื่องมือค้นเว็บรุ่นพื้นฐาน และไม่ขอโมเดลสำรองซึ่งรุ่นนี้ไม่มี", async () => {
+    const upstream = fakeAnthropic([textReply("ครับ")]);
+    await readAll(await request(upstream.fetchImpl, { model: "claude-haiku-5-5" }));
+
+    const [call] = upstream.calls;
+    expect(call?.body).toMatchObject({
+      model: "claude-haiku-5-5",
+      output_config: { effort: "low" },
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }, { name: "open_web_page", eager_input_streaming: true }]
+    });
+    expect(call?.body).not.toHaveProperty("fallbacks");
+    expect(call?.headers.get("anthropic-beta") ?? "").not.toContain(FALLBACK_BETA);
+  });
+
+  it("รอบตอบต่อหลังจำหรือลืม: ผลถูกส่งเป็นข้อความระบบต่อจากข้อความของผู้ใช้ โดยไม่มีเครื่องมือ", async () => {
+    const upstream = fakeAnthropic([textReply("จำไว้แล้วครับ")]);
+    const note = memoryOperatorNote(["บันทึกแล้ว"]);
+    const events = await readAll(
+      await request(upstream.fetchImpl, {
+        model: "claude-haiku-5-5",
+        tools: [],
+        speakRefusal: false,
+        messages: [
+          { role: "user", content: "จำไว้ว่าผมชื่อไลท์" },
+          { role: "system", content: note }
+        ]
+      })
+    );
+
+    expect(events).toEqual([{ type: "response.output_text.delta", delta: "จำไว้แล้วครับ" }, COMPLETED]);
+    expect(upstream.calls[0]?.body?.messages).toEqual([
+      { role: "user", content: "จำไว้ว่าผมชื่อไลท์" },
+      { role: "system", content: note }
+    ]);
+    expect(upstream.calls[0]?.body).not.toHaveProperty("tools");
   });
 
   it("อ่านคำตอบแบบสตรีมเป็นเหตุการณ์ที่ตัวประมวลผลคำตอบเข้าใจ", async () => {
