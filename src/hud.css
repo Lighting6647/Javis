@@ -23,6 +23,8 @@ html[data-theme="holo"] .app-header::after,
 html[data-theme="holo"] .dock::before { content: ""; position: absolute; right: 0; left: 0; height: 1px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--accent) 16%, rgba(34, 211, 238, .18) 50%, var(--accent) 84%, transparent); opacity: .75; }
 html[data-theme="holo"] .app-header::after { bottom: -1px; }
 html[data-theme="holo"] .dock::before { top: -1px; }
+/* ฟังตลอดเวลาอยู่: ไม่มีแถบสั่งงาน จึงไม่มีเส้นเรืองแสงคั่น */
+html[data-theme="holo"] .dock.bare::before { display: none; }
 
 /* ---------- แผงสถานะ: จอแคบอยู่ใต้แถบบน จอกว้างอยู่ด้านซ้ายตลอดความสูง ---------- */
 html[data-theme="holo"] .app.has-stage { grid-template-rows: auto auto minmax(0, 1fr) auto; }
@@ -107,18 +109,52 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
 
 /* ---------- จอแคบ: เมื่อมีบทสนทนาแล้ว แผงสถานะย่อเป็นแถบเดียว เหลือที่ให้ข้อความ ---------- */
 @media (max-width: 999px) {
-  html[data-theme="holo"] .stage.compact { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "core status" "core telemetry"; align-items: center; gap: 2px var(--space-3); padding: 8px var(--space-4); }
-  html[data-theme="holo"] .stage.compact .core.hero { grid-area: core; width: 68px; animation: none; }
-  .stage.compact .stage-status { grid-area: status; flex-flow: row wrap; align-items: baseline; gap: 0 10px; text-align: left; }
+  html[data-theme="holo"] .stage.compact {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "core status" "core telemetry";
+    align-items: center;
+    gap: 2px var(--space-3);
+    padding: 6px var(--space-3);
+  }
+  html[data-theme="holo"] .stage.compact .core.hero {
+    grid-area: core;
+    width: 60px;
+    height: 60px;
+    animation: none;
+  }
+  .stage.compact .stage-status {
+    grid-area: status;
+    flex-flow: row wrap;
+    align-items: baseline;
+    gap: 0 8px;
+    text-align: left;
+  }
   .stage.compact .stage-kicker { display: none; }
-  .stage.compact .stage-status strong { font-size: 15px; }
+  .stage.compact .stage-status strong { font-size: 14px; }
   .stage.compact .hud-clock { justify-content: flex-start; font-size: 11px; }
-  .stage.compact .telemetry { grid-area: telemetry; max-width: none; display: flex; flex-wrap: wrap; gap: 0 var(--space-3); margin: 0; border: 0; background: none; }
-  .stage.compact .readout { flex-direction: row; align-items: baseline; gap: 6px; padding: 0; background: none; animation: none; }
+  .stage.compact .telemetry {
+    grid-area: telemetry;
+    max-width: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 10px;
+    margin: 0;
+    border: 0;
+    background: none;
+  }
+  .stage.compact .readout {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    padding: 0;
+    background: none;
+    animation: none;
+  }
   .stage.compact .readout:not(.primary) { display: none; }
   /* เหลือเฉพาะรหัสย่อ ชื่อเต็มยังอยู่ให้โปรแกรมอ่านหน้าจอ */
   .stage.compact .readout dt { gap: 0; overflow: visible; font-size: 0; }
-  .stage.compact .readout dd { font-size: 12px; }
+  .stage.compact .readout dd { font-size: 11px; }
   .stage.compact .arc-degrees, .stage.compact .core-sweep { display: none; }
 }
 
@@ -135,12 +171,56 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
 
 /* จอมือถือ ก่อนเริ่มสนทนา: ย่อแกนและเหลือแผงตัวเลขแถวเดียว ให้คำถามตัวอย่างอยู่ในจอแรก */
 @media (max-width: 640px) {
-  html[data-theme="holo"] .stage:not(.compact) .core.hero { width: min(200px, 46vw, 20vh); }
+  html[data-theme="holo"] .stage:not(.compact) {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  html[data-theme="holo"] .stage:not(.compact) .core.hero {
+    width: min(136px, 34vw, 15vh);
+  }
   .stage:not(.compact) .stage-kicker { display: none; }
+  .stage:not(.compact) .stage-status strong { font-size: 16px; }
+  .stage:not(.compact) .hud-clock { font-size: 11px; }
+  .stage:not(.compact) .telemetry {
+    max-width: 320px;
+    margin-top: 2px;
+  }
+  .stage:not(.compact) .readout {
+    padding: 4px 6px;
+  }
+  .stage:not(.compact) .readout dd {
+    font-size: 11px;
+  }
+  .stage:not(.compact) .readout dt {
+    font-size: 9px;
+  }
   .stage:not(.compact) .readout:not(.primary) { display: none; }
+
+  /* Compact mode on phones */
+  html[data-theme="holo"] .stage.compact {
+    padding: 5px 10px;
+    gap: 2px 8px;
+  }
+  html[data-theme="holo"] .stage.compact .core.hero {
+    width: 48px;
+    height: 48px;
+  }
+  .stage.compact .stage-status strong {
+    font-size: 13px;
+  }
+  .stage.compact .hud-clock {
+    font-size: 10px;
+  }
 }
 
-@media (max-width: 520px) {
-  .hud-frame i { width: 14px; height: 14px; }
-  .readout { padding: 6px 8px; }
+@media (max-width: 420px) {
+  html[data-theme="holo"] .stage:not(.compact) .core.hero {
+    width: min(118px, 30vw, 13vh);
+  }
+  html[data-theme="holo"] .stage.compact .core.hero {
+    width: 42px;
+    height: 42px;
+  }
+  .hud-frame i { width: 12px; height: 12px; }
+  .readout { padding: 4px 6px; }
 }
