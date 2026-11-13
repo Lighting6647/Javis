@@ -8,7 +8,7 @@ import { clearConversationSnapshot, restoredConversation, saveConversationSnapsh
 import { leaveToPage, openExternalPage } from "../services/openPage";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
-import { createSpeechServices } from "../speech";
+import { createSpeechServices, handsFreeAvailable } from "../speech";
 
 interface ConversationOptions {
   /** เซสชันผ่านการตรวจแล้วและใช้งานได้ บทสนทนาที่เก็บไว้จะถูกคืนให้หลังจากนี้เท่านั้น */
@@ -37,8 +37,12 @@ export function useConversation({ ready }: ConversationOptions) {
     const controller: ConversationController = new ConversationController({
       ...services,
       chat: streamChatReply,
+      // เบราว์เซอร์บนคอมพิวเตอร์ฟังตลอดเวลา: เงียบก็ฟังต่อ ไม่ต้องให้ผู้ใช้แตะไมโครโฟนใหม่ทุกครั้ง
+      handsFree: handsFreeAvailable(),
       // แอปเดสก์ท็อปเปิดหน้าเว็บในเบราว์เซอร์ในตัว ที่อื่นเปิดแท็บใหม่หรือเบราว์เซอร์ของระบบ
       openPage: (url) => (isDesktopApp() ? browserStore.open(url) : openExternalPage(url)),
+      // เว็บในเบราว์เซอร์: หน้าที่เจ้าของเว็บยอมให้แสดงในกรอบ แสดงในพื้นที่หลักของ Javis เลย ไม่ต้องเปิดแท็บใหม่
+      showPage: runsInBrowserTab() ? browserStore.showFramed : undefined,
       // เบราว์เซอร์ไม่ยอมเปิดแท็บใหม่: พาแท็บนี้ไปแทน โดยเก็บบทสนทนาไว้คืนให้ตอนผู้ใช้กลับมา
       leaveToPage: runsInBrowserTab()
         ? (url) => {
@@ -89,6 +93,7 @@ export function useConversation({ ready }: ConversationOptions) {
   }, [synthesizer, voiceSettings]);
 
   return {
+    controller,
     state,
     synthesizer,
     voiceSettings,

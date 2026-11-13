@@ -24,6 +24,11 @@ export interface PageLink {
    * อ่านคู่กับ opened: ยังไม่ได้ออกจากหน้า (false) หรือออกไปแล้วและผู้ใช้กลับมา (true)
    */
   inPlace: boolean;
+  /**
+   * หน้านี้แสดงอยู่ในกรอบของแอปเอง (เจ้าของเว็บยอมให้แสดงในกรอบ) ผู้ใช้จึงไม่ต้องออกจาก Javis
+   * แตะลิงก์แล้วจะแสดงหน้านั้นในกรอบอีกครั้ง ไม่เปิดแท็บใหม่
+   */
+  framed?: boolean;
 }
 
 /**
@@ -115,7 +120,8 @@ export type ChatEvent =
   | { type: "delta"; text: string }
   | { type: "status"; status: "searching" }
   | { type: "sources"; sources: WebSource[] }
-  | { type: "open"; url: string; title: string; auto: boolean }
+  /** embed: เซิร์ฟเวอร์ตรวจแล้วว่าเจ้าของเว็บยอมให้แสดงหน้านี้ในกรอบของเว็บอื่น */
+  | { type: "open"; url: string; title: string; auto: boolean; embed?: boolean }
   | { type: "fill"; fields: FillValue[] }
   /** AI ขอจำเรื่องใหม่ (ข้อความ) หรือลืมเรื่องเดิม (รหัสความจำ) */
   | { type: "memory"; added: string[]; removed: string[] }
@@ -129,6 +135,8 @@ export interface ChatStreamOptions {
   page?: PageContext | null;
   /** ความจำของผู้ใช้ที่เก็บในอุปกรณ์ ส่งไปให้ AI ใช้ปรับคำตอบ */
   memories?: MemoryEntry[];
+  /** แอปแสดงหน้าเว็บในกรอบของตัวเองได้ ขอให้เซิร์ฟเวอร์ตรวจมาด้วยว่าหน้าที่จะเปิดยอมให้แสดงในกรอบไหม */
+  frames?: boolean;
 }
 
 /** ส่งประวัติบทสนทนาไปขอคำตอบ เรียก onEvent ทีละเหตุการณ์ และคืนข้อความคำตอบเต็มเมื่อจบ */

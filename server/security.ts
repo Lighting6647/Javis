@@ -42,6 +42,8 @@ export const securityHeaders: RequestHandler = helmet({
       "img-src": ["'self'", "data:"],
       "media-src": ["'self'"],
       "connect-src": ["'self'"],
+      // หน้าเว็บแสดงหน้าที่ผู้ใช้สั่งเปิดไว้ในกรอบของตัวเองได้ เฉพาะหน้า https และเฉพาะหน้าที่เจ้าของเว็บยอม (ดู server/frameCheck.ts)
+      "frame-src": ["https:"],
       "object-src": ["'none'"],
       "frame-ancestors": ["'none'"],
       "upgrade-insecure-requests": config.isProduction ? [] : null

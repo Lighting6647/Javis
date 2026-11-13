@@ -43,6 +43,14 @@ describe("chatRequestSchema", () => {
     expect(chatRequestSchema.safeParse(body).success).toBe(false);
   });
 
+  it("รับคำบอกว่าหน้าเว็บของผู้ใช้แสดงหน้าอื่นในกรอบได้ (frames) เป็นค่าจริงเท็จเท่านั้น และไม่ส่งมาก็ได้", () => {
+    const messages = [user("เข้าเว็บพันทิป")];
+
+    expect(chatRequestSchema.safeParse({ messages, frames: true }).data?.frames).toBe(true);
+    expect(chatRequestSchema.safeParse({ messages }).data?.frames).toBeUndefined();
+    expect(chatRequestSchema.safeParse({ messages, frames: "yes" }).success).toBe(false);
+  });
+
   describe("ข้อมูลหน้าเว็บจากแอปเดสก์ท็อป", () => {
     const messages = [user("กรอกชื่อ สมชาย ให้หน่อย")];
     const page = {

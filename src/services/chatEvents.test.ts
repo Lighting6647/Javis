@@ -79,6 +79,20 @@ describe("parseChatEventLine", () => {
     expect(parseChatEventLine(line({ type: "memory", added: "ทั้งหมด", removed: ["bad id"] }))).toBeNull();
   });
 
+  it("แสดงในกรอบได้เฉพาะเมื่อเซิร์ฟเวอร์ยืนยันมาว่า embed เป็น true จริง ๆ และเป็นหน้า https", () => {
+    const open = (extra: Record<string, unknown>) => parseChatEventLine(line({ type: "open", url: "https://pantip.com/", title: "พันทิป", auto: true, ...extra }));
+
+    expect(open({ embed: true })).toEqual({ type: "open", url: "https://pantip.com/", title: "พันทิป", auto: true, embed: true });
+    expect(open({ embed: "yes" })).toEqual({ type: "open", url: "https://pantip.com/", title: "พันทิป", auto: true });
+    expect(open({})).toEqual({ type: "open", url: "https://pantip.com/", title: "พันทิป", auto: true });
+    expect(parseChatEventLine(line({ type: "open", url: "http://old.example.com/", title: "เว็บเก่า", auto: true, embed: true }))).toEqual({
+      type: "open",
+      url: "http://old.example.com/",
+      title: "เว็บเก่า",
+      auto: true
+    });
+  });
+
   it("เปิดอัตโนมัติเฉพาะเมื่อ auto เป็น true จริง ๆ", () => {
     const event = parseChatEventLine(line({ type: "open", url: "https://example.com/", auto: "yes" }));
     expect(event).toEqual({ type: "open", url: "https://example.com/", title: "https://example.com/", auto: false });

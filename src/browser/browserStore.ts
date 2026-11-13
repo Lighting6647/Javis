@@ -68,6 +68,27 @@ export const browserStore = {
     set({ requestedUrl: safe, requestId: state.requestId + 1, visible: true, currentUrl: safe, error: null });
     return true;
   },
+  /**
+   * แสดงหน้าเว็บในกรอบของหน้า Javis เอง (เว็บในเบราว์เซอร์) คืน false ถ้าลิงก์ไม่ปลอดภัยหรือไม่ใช่ https
+   * ใช้กับหน้าที่เซิร์ฟเวอร์ตรวจแล้วว่าเจ้าของเว็บยอมให้แสดงในกรอบเท่านั้น
+   * หน้าในกรอบอยู่คนละเว็บกับ Javis จึงอ่านชื่อหน้าและที่อยู่ปัจจุบันของมันไม่ได้ ชื่อที่แสดงมาจากคำสั่งเปิด
+   */
+  showFramed(url: string, title: string): boolean {
+    const safe = safeHttpUrl(url);
+    if (!safe || !safe.startsWith("https://")) return false;
+    set({
+      requestedUrl: safe,
+      requestId: state.requestId + 1,
+      visible: true,
+      currentUrl: safe,
+      title,
+      loading: true,
+      canGoBack: false,
+      canGoForward: false,
+      error: null
+    });
+    return true;
+  },
   show: (): void => {
     if (state.requestedUrl) set({ visible: true });
   },

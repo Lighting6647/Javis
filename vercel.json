@@ -18,7 +18,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self';base-uri 'self';font-src 'self' https://fonts.gstatic.com;form-action 'self';frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https://fonts.googleapis.com 'sha256-XNfYdUW7S7AWSxlvq47SGsGIxvvzKwvUGdsFQQ/zXf4=';upgrade-insecure-requests;media-src 'self';connect-src 'self'"
+          "value": "default-src 'self';base-uri 'self';font-src 'self' https://fonts.gstatic.com;form-action 'self';frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https://fonts.googleapis.com 'sha256-XNfYdUW7S7AWSxlvq47SGsGIxvvzKwvUGdsFQQ/zXf4=';upgrade-insecure-requests;media-src 'self';connect-src 'self';frame-src https:"
         },
         { "key": "Permissions-Policy", "value": "microphone=(self), camera=(), geolocation=()" },
         { "key": "Referrer-Policy", "value": "no-referrer" },

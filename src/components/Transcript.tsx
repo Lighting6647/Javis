@@ -5,10 +5,14 @@ import { MessageBubble } from "./MessageBubble";
 
 interface TranscriptProps {
   messages: ConversationMessage[];
+  /** Javis ฟังตลอดเวลาอยู่: หน้าเริ่มต้นบอกผู้ใช้ว่าพูดได้เลย เพราะไม่มีปุ่มไมโครโฟนให้แตะ */
+  listening: boolean;
   /** ผู้ใช้เลือกคำถามตัวอย่าง */
   onSuggest: (text: string) => void;
   /** เปิดลิงก์ในเบราว์เซอร์ในตัว (เฉพาะแอปเดสก์ท็อป) */
   onOpenLink?: (url: string) => boolean;
+  /** แสดงหน้าเว็บในกรอบของแอปอีกครั้ง (เฉพาะเว็บในเบราว์เซอร์) */
+  onShowFramed?: (url: string, title: string) => boolean;
   /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความหนึ่งเอง */
   onLinkOpened: (messageId: string) => void;
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ */
@@ -23,7 +27,7 @@ const SUGGESTIONS = [
   { icon: ListChecks, text: "ช่วยวางแผนงานสัปดาห์นี้" }
 ];
 
-export function Transcript({ messages, onSuggest, onOpenLink, onLinkOpened, onUndoMemory, privacyNote }: TranscriptProps) {
+export function Transcript({ messages, listening, onSuggest, onOpenLink, onShowFramed, onLinkOpened, onUndoMemory, privacyNote }: TranscriptProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // เลื่อนตามข้อความล่าสุดเสมอ รวมถึงตอนคำตอบกำลังทยอยเข้ามา
@@ -38,7 +42,7 @@ export function Transcript({ messages, onSuggest, onOpenLink, onLinkOpened, onUn
         <div className="core large" aria-hidden>
           <span className="core-heart" />
         </div>
-        <span className="welcome-kicker">พร้อมรับคำสั่ง</span>
+        <span className="welcome-kicker">{listening ? "กำลังฟัง พูดได้เลย" : "พร้อมรับคำสั่ง"}</span>
         <h1>สวัสดีครับ ให้ Javis ช่วยอะไรดี</h1>
         <p>ถามได้ทุกเรื่อง Javis ค้นข้อมูลล่าสุดจากเว็บและเปิดหน้าเว็บให้ได้</p>
 
@@ -65,6 +69,7 @@ export function Transcript({ messages, onSuggest, onOpenLink, onLinkOpened, onUn
           key={message.id}
           message={message}
           onOpenLink={onOpenLink}
+          onShowFramed={onShowFramed}
           onLinkOpened={onLinkOpened}
           onUndoMemory={onUndoMemory}
         />

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
-import { ConversationController, HISTORY_LIMIT, type MemoryPort } from "./controller";
+import {
+  ConversationController,
+  HISTORY_LIMIT,
+  LISTEN_RETRY_LIMIT,
+  type MemoryPort,
+  QUICK_LISTEN_LIMIT,
+  QUICK_LISTEN_PAUSE_MS
+} from "./controller";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import {
   ChatError,
@@ -33,11 +40,14 @@ const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 class FakeRecognizer implements SpeechRecognizer {
   prepareError: SpeechError | null = null;
+  /** ถ้าตั้งไว้ การเตรียมไมโครโฟนจะค้างจนกว่าการทดสอบจะปล่อย (เช่นระหว่างรอผู้ใช้ตอบคำขอสิทธิ์) */
+  prepareGate: Deferred<void> | null = null;
   onDevice = false;
   stopCalls = 0;
   readonly listens: Array<{ onPartial: (text: string) => void; result: Deferred<string> }> = [];
 
   async prepare(): Promise<void> {
+    if (this.prepareGate) await this.prepareGate.promise;
     if (this.prepareError) throw this.prepareError;
   }
 
@@ -128,6 +138,10 @@ class FakeBrowser {
   readonly opened: string[] = [];
   /** หน้าที่แท็บนี้ถูกพาไป พร้อมบทสนทนาที่เห็นในจังหวะนั้น (สิ่งที่จะถูกเก็บไว้คืนให้ตอนผู้ใช้กลับมา) */
   readonly left: Array<{ url: string; messages: ConversationMessage[] }> = [];
+  /** การแสดงหน้าเว็บในกรอบของแอปสำเร็จหรือไม่ */
+  frameSucceeds = true;
+  /** หน้าที่ถูกสั่งให้แสดงในกรอบของแอป */
+  readonly framed: Array<{ url: string; title: string }> = [];
 
   readonly open = (url: string): boolean => {
     this.opened.push(url);
@@ -138,6 +152,10 @@ class FakeBrowser {
 interface SetupOptions {
   /** เบราว์เซอร์ทั่วไป: เมื่อเปิดแท็บใหม่ไม่ได้ พาแท็บนี้ไปยังหน้านั้นแทนได้ */
   canLeave?: boolean;
+  /** ฟังตลอดเวลา: ไม่ได้ยินอะไรก็ฟังต่อ และลองใหม่เองเมื่อระบบฟังสะดุด */
+  handsFree?: boolean;
+  /** แอปมีกรอบสำหรับแสดงหน้าเว็บในตัว (เว็บในเบราว์เซอร์) */
+  canFrame?: boolean;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -145,14 +163,28 @@ function setup(options: SetupOptions = {}) {
   const synthesizer = new FakeSynthesizer();
   const chat = new FakeChat();
   const browser = new FakeBrowser();
-  /** นาฬิกาจำลองของตัวจับเวลารอคำตอบ (มิลลิวินาที) */
+  /** นาฬิกาจำลองของตัวควบคุม (มิลลิวินาที) */
   const clock = { time: 0 };
+  /** การหน่วงเวลาที่ตัวควบคุมขอ: จดระยะเวลาไว้ และเดินต่อเมื่อการทดสอบปล่อย */
+  const waits: Array<{ ms: number; done: Deferred<void> }> = [];
   const controller: ConversationController = new ConversationController({
     recognizer,
     synthesizer,
     chat: chat.stream,
     now: () => clock.time,
+    handsFree: options.handsFree,
+    wait: (ms) => {
+      const done = deferred<void>();
+      waits.push({ ms, done });
+      return done.promise;
+    },
     openPage: browser.open,
+    showPage: options.canFrame
+      ? (url, title) => {
+          if (browser.frameSucceeds) browser.framed.push({ url, title });
+          return browser.frameSucceeds;
+        }
+      : undefined,
     leaveToPage: options.canLeave
       ? (url) => {
           if (browser.leaveSucceeds) browser.left.push({ url, messages: controller.getState().messages });
@@ -160,7 +192,7 @@ function setup(options: SetupOptions = {}) {
         }
       : undefined
   });
-  return { recognizer, synthesizer, chat, browser, clock, controller };
+  return { recognizer, synthesizer, chat, browser, clock, waits, controller };
 }
 
 describe("ConversationController", () => {
@@ -1206,5 +1238,414 @@ describe("ConversationController", () => {
     await settle();
     controller.finishListening();
     expect(recognizer.stopCalls).toBe(1);
+  });
+
+  describe("แสดงหน้าเว็บในกรอบของแอป", () => {
+    const PANTIP = { type: "open", url: "https://pantip.com/", title: "พันทิป", auto: true } as const;
+
+    it("บอกเซิร์ฟเวอร์ว่าแอปแสดงหน้าเว็บในกรอบได้ เพื่อให้ตรวจมาว่าหน้านั้นยอมไหม", async () => {
+      const withFrame = setup({ canFrame: true });
+      withFrame.controller.sendText("เข้าเว็บพันทิป");
+      await settle();
+      expect(withFrame.chat.current.options.frames).toBe(true);
+
+      const without = setup();
+      without.controller.sendText("เข้าเว็บพันทิป");
+      await settle();
+      expect(without.chat.current.options.frames).toBeFalsy();
+    });
+
+    it("เจ้าของเว็บยอม: แสดงในกรอบของแอป ไม่เปิดแท็บใหม่ และไม่พาแท็บนี้ไปไหน", async () => {
+      const { chat, browser, controller } = setup({ canFrame: true, canLeave: true });
+
+      controller.sendText("เข้าเว็บพันทิป");
+      await settle();
+      chat.current.options.onEvent({ ...PANTIP, embed: true });
+      chat.reply("ได้เลยครับ นี่คือหน้า พันทิป ครับ");
+      await settle();
+
+      expect(browser.framed).toEqual([{ url: "https://pantip.com/", title: "พันทิป" }]);
+      expect(browser.opened).toEqual([]);
+      expect(browser.left).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toEqual({
+        title: "พันทิป",
+        url: "https://pantip.com/",
+        opened: true,
+        blocked: false,
+        inPlace: false,
+        framed: true
+      });
+    });
+
+    it("เจ้าของเว็บไม่ยอมให้แสดงในกรอบ: เปิดแบบเดิม", async () => {
+      const { chat, browser, controller } = setup({ canFrame: true });
+
+      controller.sendText("เข้าเว็บยูทูบ");
+      await settle();
+      chat.current.options.onEvent({ type: "open", url: "https://www.youtube.com/", title: "ยูทูบ", auto: true, embed: false });
+      chat.reply("ได้เลยครับ");
+      await settle();
+
+      expect(browser.framed).toEqual([]);
+      expect(browser.opened).toEqual(["https://www.youtube.com/"]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: true, blocked: false });
+      expect(controller.getState().messages.at(-1)?.link?.framed).toBeUndefined();
+    });
+
+    it("แสดงในกรอบไม่สำเร็จ: กลับไปเปิดแบบเดิม", async () => {
+      const { chat, browser, controller } = setup({ canFrame: true });
+      browser.frameSucceeds = false;
+
+      controller.sendText("เข้าเว็บพันทิป");
+      await settle();
+      chat.current.options.onEvent({ ...PANTIP, embed: true });
+      chat.reply("ได้เลยครับ");
+      await settle();
+
+      expect(browser.opened).toEqual(["https://pantip.com/"]);
+      expect(controller.getState().messages.at(-1)?.link?.framed).toBeUndefined();
+    });
+
+    it("ลิงก์ที่ระบบไม่ได้สั่งให้เปิดเอง: ไม่แสดงในกรอบเอง แม้เจ้าของเว็บจะยอม", async () => {
+      const { chat, browser, controller } = setup({ canFrame: true });
+
+      controller.sendText("สรุปข่าวนี้ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "open", url: "https://news.example.com/", title: "ข่าว", auto: false, embed: true });
+      chat.reply("สรุปให้แล้วครับ");
+      await settle();
+
+      expect(browser.framed).toEqual([]);
+      expect(browser.opened).toEqual([]);
+      expect(controller.getState().messages.at(-1)?.link).toMatchObject({ opened: false, blocked: false, inPlace: false });
+    });
+
+    it("แอปที่ไม่มีกรอบ (เช่นแอปมือถือ): เปิดแบบเดิม แม้เซิร์ฟเวอร์จะบอกว่าแสดงในกรอบได้", async () => {
+      const { chat, browser, controller } = setup();
+
+      controller.sendText("เข้าเว็บพันทิป");
+      await settle();
+      chat.current.options.onEvent({ ...PANTIP, embed: true });
+      chat.reply("ได้เลยครับ");
+      await settle();
+
+      expect(browser.opened).toEqual(["https://pantip.com/"]);
+    });
+
+    it("สั่งด้วยเสียง: แสดงในกรอบแล้วอ่านคำตอบตามปกติ ไม่บอกว่าเบราว์เซอร์บล็อก และกลับมาฟังต่อ", async () => {
+      const { recognizer, synthesizer, chat, browser, controller } = setup({ canFrame: true, canLeave: true });
+      browser.succeeds = false;
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("เข้าเว็บพันทิป");
+      await settle();
+      chat.current.options.onEvent({ ...PANTIP, embed: true });
+      chat.reply("ได้เลยครับ นี่คือหน้า พันทิป ครับ");
+      await settle();
+
+      expect(browser.framed).toHaveLength(1);
+      expect(browser.left).toEqual([]);
+      expect(synthesizer.spoken).toEqual(["ได้เลยครับ นี่คือหน้า พันทิป ครับ"]);
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+    });
+  });
+
+  describe("ฟังตลอดเวลา", () => {
+    /** ระบบฟังของเบราว์เซอร์รอเสียงพูดราวนี้ก่อนจบเองเมื่อเงียบ */
+    const SILENT_LISTEN_MS = 8000;
+
+    /** เปิดไมโครโฟนในโหมดฟังตลอดเวลา จนอยู่ในจังหวะกำลังฟัง */
+    async function startHandsFree() {
+      const context = setup({ handsFree: true });
+      void context.controller.start();
+      await settle();
+      return context;
+    }
+
+    it("ไม่ได้ยินเสียงพูด: ฟังต่อเอง ไม่จบโหมดเสียง และไม่ขึ้นข้อความเตือน", async () => {
+      const { recognizer, chat, clock, waits, controller } = await startHandsFree();
+
+      clock.time += SILENT_LISTEN_MS;
+      recognizer.current.result.resolve("   ");
+      await settle();
+
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true, notice: null });
+      expect(recognizer.listens).toHaveLength(2);
+      expect(waits).toHaveLength(0);
+      expect(chat.calls).toHaveLength(0);
+    });
+
+    it("เงียบไปหลายรอบแล้วยังรับคำสั่งได้", async () => {
+      const { recognizer, chat, clock, controller } = await startHandsFree();
+
+      for (let round = 0; round < 5; round += 1) {
+        clock.time += SILENT_LISTEN_MS;
+        recognizer.current.result.resolve("");
+        await settle();
+      }
+      recognizer.current.result.resolve("ตอนนี้กี่โมงแล้ว");
+      await settle();
+
+      expect(recognizer.listens).toHaveLength(6);
+      expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+      expect(controller.getState()).toMatchObject({ phase: "thinking", active: true });
+    });
+
+    it("ระบบฟังจบเองเร็วผิดปกติ: เว้นจังหวะก่อนฟังใหม่ ไม่วนถี่", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      // นาฬิกาไม่เดิน: การฟังจบทันทีโดยไม่ได้ยินอะไร
+      recognizer.current.result.resolve("");
+      await settle();
+
+      expect(waits.map((wait) => wait.ms)).toEqual([QUICK_LISTEN_PAUSE_MS]);
+      expect(recognizer.listens).toHaveLength(1);
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true, notice: null });
+
+      waits[0].done.resolve();
+      await settle();
+      expect(recognizer.listens).toHaveLength(2);
+    });
+
+    it("ระบบฟังจบเองเร็วผิดปกติติดกันหลายครั้ง: ปิดไมโครโฟนและบอกผู้ใช้ ไม่วนต่อไปเรื่อย ๆ", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      for (let round = 0; round < QUICK_LISTEN_LIMIT * 3 && controller.getState().active; round += 1) {
+        recognizer.current.result.resolve("");
+        await settle();
+        waits.at(-1)?.done.resolve();
+        await settle();
+      }
+
+      expect(controller.getState()).toMatchObject({
+        phase: "idle",
+        active: false,
+        notice: { tone: "error", text: NOTICE_TEXT.listenUnstable }
+      });
+      expect(recognizer.listens).toHaveLength(QUICK_LISTEN_LIMIT);
+    });
+
+    it("การฟังที่ยาวตามปกติคั่นกลาง: เริ่มนับการจบเร็วผิดปกติใหม่", async () => {
+      const { recognizer, clock, waits, controller } = await startHandsFree();
+
+      for (let round = 0; round < QUICK_LISTEN_LIMIT * 3; round += 1) {
+        // สลับการฟังที่จบทันทีกับการฟังที่รอเสียงพูดตามปกติ
+        if (round % 2 === 1) clock.time += SILENT_LISTEN_MS;
+        recognizer.current.result.resolve("");
+        await settle();
+        if (round % 2 === 0) waits.at(-1)?.done.resolve();
+        await settle();
+      }
+
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+    });
+
+    it("ระบบฟังขัดข้องชั่วคราว: บอกว่ากำลังลองใหม่ รอ แล้วกลับมาฟังเอง", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      recognizer.current.result.reject(new SpeechError("network"));
+      await settle();
+
+      expect(controller.getState()).toMatchObject({
+        phase: "starting",
+        active: true,
+        notice: { tone: "info", text: NOTICE_TEXT.listenRetrying }
+      });
+      expect(waits.map((wait) => wait.ms)).toEqual([1000]);
+      expect(recognizer.listens).toHaveLength(1);
+
+      waits[0].done.resolve();
+      await settle();
+
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true, notice: null });
+      expect(recognizer.listens).toHaveLength(2);
+    });
+
+    it("ขัดข้องติดกัน: รอนานขึ้นทีละเท่าตัว แล้วปิดไมโครโฟนพร้อมบอกสาเหตุเมื่อเกินจำนวนครั้ง", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      for (let round = 0; round < LISTEN_RETRY_LIMIT * 3 && controller.getState().active; round += 1) {
+        recognizer.current.result.reject(new SpeechError("network"));
+        await settle();
+        waits.at(-1)?.done.resolve();
+        await settle();
+      }
+
+      expect(waits.map((wait) => wait.ms)).toEqual([1000, 2000, 4000, 8000, 15000]);
+      expect(recognizer.listens).toHaveLength(LISTEN_RETRY_LIMIT + 1);
+      expect(controller.getState()).toMatchObject({
+        phase: "idle",
+        active: false,
+        notice: { tone: "error", text: SPEECH_ERROR_TEXT.network }
+      });
+    });
+
+    it("กลับมาฟังได้ตามปกติแล้ว: ครั้งถัดไปที่ขัดข้องเริ่มนับใหม่", async () => {
+      const { recognizer, clock, waits } = await startHandsFree();
+
+      for (let round = 0; round < 2; round += 1) {
+        recognizer.current.result.reject(new SpeechError("network"));
+        await settle();
+        waits.at(-1)?.done.resolve();
+        await settle();
+      }
+      clock.time += SILENT_LISTEN_MS;
+      recognizer.current.result.resolve("");
+      await settle();
+      recognizer.current.result.reject(new SpeechError("network"));
+      await settle();
+
+      expect(waits.map((wait) => wait.ms)).toEqual([1000, 2000, 1000]);
+    });
+
+    it("เบราว์เซอร์ยกเลิกการฟังเอง: ลองใหม่ ไม่ปิดไมโครโฟนไปเงียบ ๆ", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      recognizer.current.result.reject(new SpeechError("aborted"));
+      await settle();
+      expect(controller.getState().active).toBe(true);
+      expect(waits).toHaveLength(1);
+
+      waits[0].done.resolve();
+      await settle();
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+      expect(recognizer.listens).toHaveLength(2);
+    });
+
+    it("เบราว์เซอร์ยกเลิกการฟังเองซ้ำจนเกินจำนวนครั้ง: ปิดไมโครโฟนและบอกว่าถูกขัดจังหวะ", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      for (let round = 0; round < LISTEN_RETRY_LIMIT * 3 && controller.getState().active; round += 1) {
+        recognizer.current.result.reject(new SpeechError("aborted"));
+        await settle();
+        waits.at(-1)?.done.resolve();
+        await settle();
+      }
+
+      expect(controller.getState()).toMatchObject({
+        phase: "idle",
+        active: false,
+        notice: { tone: "error", text: NOTICE_TEXT.listenInterrupted }
+      });
+    });
+
+    it.each(["permission-denied", "no-microphone", "not-supported"] as const)(
+      "ใช้ไมโครโฟนไม่ได้ (%s): ปิดโหมดเสียงทันที ไม่ลองใหม่",
+      async (code) => {
+        const { recognizer, waits, controller } = await startHandsFree();
+
+        recognizer.current.result.reject(new SpeechError(code));
+        await settle();
+
+        expect(controller.getState()).toMatchObject({
+          phase: "idle",
+          active: false,
+          notice: { tone: "error", text: SPEECH_ERROR_TEXT[code] }
+        });
+        expect(waits).toHaveLength(0);
+      }
+    );
+
+    it("ผู้ใช้ปิดไมโครโฟนระหว่างรอลองใหม่: ไม่กลับมาฟังเอง", async () => {
+      const { recognizer, waits, controller } = await startHandsFree();
+
+      recognizer.current.result.reject(new SpeechError("network"));
+      await settle();
+      controller.stop();
+      waits[0].done.resolve();
+      await settle();
+
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
+      expect(recognizer.listens).toHaveLength(1);
+    });
+
+    it("ขอคำตอบไม่สำเร็จ: แสดงข้อผิดพลาดแล้วฟังต่อ ไม่ปิดไมโครโฟน และไม่ทิ้งกล่องคำตอบเปล่าไว้", async () => {
+      const { recognizer, chat, controller } = await startHandsFree();
+
+      recognizer.current.result.resolve("สวัสดี");
+      await settle();
+      chat.current.result.reject(new ChatError("ส่งข้อความถี่เกินไป กรุณารอสักครู่แล้วลองใหม่"));
+      await settle();
+
+      expect(controller.getState()).toMatchObject({
+        phase: "listening",
+        active: true,
+        notice: { tone: "error", text: "ส่งข้อความถี่เกินไป กรุณารอสักครู่แล้วลองใหม่" }
+      });
+      expect(controller.getState().messages.map((message) => message.role)).toEqual(["user"]);
+      expect(recognizer.listens).toHaveLength(2);
+    });
+
+    it("AI ตอบกลับมาว่างเปล่า: แจ้งแล้วฟังต่อ", async () => {
+      const { recognizer, chat, controller } = await startHandsFree();
+
+      recognizer.current.result.resolve("สวัสดี");
+      await settle();
+      chat.current.result.resolve("");
+      await settle();
+
+      expect(controller.getState()).toMatchObject({
+        phase: "listening",
+        active: true,
+        notice: { tone: "error", text: NOTICE_TEXT.emptyReply }
+      });
+    });
+
+    it("ขอคำตอบไม่สำเร็จกลางคำตอบ: หยุดเสียงที่ค้างคิวก่อนกลับมาฟัง เพื่อไม่ให้ Javis ได้ยินเสียงตัวเอง", async () => {
+      const { recognizer, synthesizer, chat, controller } = await startHandsFree();
+      synthesizer.holdSpeech = true;
+
+      recognizer.current.result.resolve("เล่านิทานหน่อย");
+      await settle();
+      chat.current.options.onEvent({ type: "delta", text: "กาลครั้งหนึ่งนานมาแล้ว\nมีกระต่ายตัวหนึ่ง\n" });
+      await settle();
+      const cancelsBefore = synthesizer.cancelCalls;
+      chat.current.result.reject(new ChatError("การเชื่อมต่อหลุดระหว่างตอบ"));
+      await settle();
+
+      expect(synthesizer.cancelCalls).toBeGreaterThan(cancelsBefore);
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+
+      synthesizer.held.forEach((speech) => speech.resolve());
+      await settle();
+      expect(synthesizer.spoken).toEqual(["กาลครั้งหนึ่งนานมาแล้ว"]);
+      expect(controller.getState().phase).toBe("listening");
+    });
+
+    it("แตะคำถามตัวอย่างระหว่างกำลังเตรียมไมโครโฟน: ตอบด้วยเสียงแล้วยังฟังตลอดเวลาต่อ", async () => {
+      const { recognizer, synthesizer, chat, controller } = setup({ handsFree: true });
+      recognizer.prepareGate = deferred<void>();
+
+      void controller.start();
+      await settle();
+      expect(controller.getState()).toMatchObject({ phase: "starting", active: true });
+
+      controller.sendText("ข่าวเด่นวันนี้มีอะไรบ้าง");
+      await settle();
+      expect(controller.getState()).toMatchObject({ phase: "thinking", active: true });
+
+      chat.reply("วันนี้มีข่าวเด่นสามเรื่องครับ");
+      await settle();
+
+      expect(synthesizer.spoken).toEqual(["วันนี้มีข่าวเด่นสามเรื่องครับ"]);
+      expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
+      expect(recognizer.listens).toHaveLength(1);
+    });
+
+    it("ไม่ได้อยู่ในโหมดฟังตลอดเวลา: พิมพ์ระหว่างรอสิทธิ์ไมโครโฟนยังถือว่าไม่ได้เปิดโหมดเสียง", async () => {
+      const { recognizer, chat, controller } = setup();
+      recognizer.prepareGate = deferred<void>();
+
+      void controller.start();
+      await settle();
+      controller.sendText("สวัสดี");
+      await settle();
+      chat.reply("สวัสดีครับ");
+      await settle();
+
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
+      expect(recognizer.listens).toHaveLength(0);
+    });
   });
 });

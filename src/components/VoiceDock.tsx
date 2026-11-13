@@ -12,6 +12,11 @@ interface VoiceDockProps {
   searching: boolean;
   /** เสียงถูกแปลงเป็นข้อความภายในอุปกรณ์ */
   onDeviceListening: boolean;
+  /**
+   * ที่นี่ฟังตลอดเวลาได้: ปุ่มไมโครโฟนเปิดการฟังค้างไว้ และแถบนี้จะหายไประหว่างที่ฟังอยู่
+   * จึงแสดงเฉพาะตอนไมโครโฟนปิดหรือใช้ไม่ได้ เพื่อให้ผู้ใช้เปิดไมโครโฟนหรือพิมพ์แทนได้
+   */
+  alwaysOn: boolean;
   onStart: () => void;
   onStop: () => void;
   onInterrupt: () => void;
@@ -49,6 +54,7 @@ export function VoiceDock({
   partial,
   searching,
   onDeviceListening,
+  alwaysOn,
   onStart,
   onStop,
   onInterrupt,
@@ -72,7 +78,14 @@ export function VoiceDock({
   };
 
   const heard = phase === "listening" && partial;
-  const caption = phase === "thinking" && searching ? "กำลังค้นข้อมูลจากเว็บ…" : CAPTION[phase];
+  const idle = phase === "idle";
+  const caption =
+    phase === "thinking" && searching
+      ? "กำลังค้นข้อมูลจากเว็บ…"
+      : idle && alwaysOn
+        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว Javis จะฟังตลอดเวลา หรือพิมพ์ข้อความ"
+        : CAPTION[phase];
+  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ Javis ฟังตลอดเวลา" : ORB_LABEL[phase];
 
   return (
     <div className="dock-inner">
@@ -100,7 +113,7 @@ export function VoiceDock({
             className={`orb ${phase}`}
             onClick={handleOrb}
             disabled={phase === "starting"}
-            aria-label={ORB_LABEL[phase]}
+            aria-label={orbLabel}
           >
             <OrbIcon phase={phase} />
           </button>

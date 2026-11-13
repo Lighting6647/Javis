@@ -1,6 +1,6 @@
 import { Check, Download, Play, RotateCcw, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { micLevelsAvailable } from "../hooks/useMicBars";
+import { micLevelsAvailable } from "../speech/sessionMeter";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { MemorySection } from "./MemorySection";

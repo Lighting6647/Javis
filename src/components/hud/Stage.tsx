@@ -26,13 +26,13 @@ interface StageProps {
 export function Stage({ phase, statusLabel, readouts, compact, offline }: StageProps) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
-  // ธีมเรียบซ่อนแผงนี้ไว้ จึงต้องไม่เปิดไมโครโฟนไว้วัดเสียงให้กับสิ่งที่ผู้ใช้มองไม่เห็น
-  const metering = phase === "listening" && theme === "holo" && micLevels;
+  // วาดตามเสียงจริงเฉพาะตอนฟัง ตอนคิดและตอนตอบใช้จังหวะของแต่ละสถานะ ส่วนธีมเรียบซ่อนแผงนี้ไว้ จึงไม่ต้องวาด
+  const drawing = phase === "listening" && theme === "holo" && micLevels;
 
   return (
     <aside className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}`} data-phase={phase} aria-label="แผงสถานะของ Javis">
       <div className={`core hero ${phase}`} aria-hidden>
-        <ArcCore metering={metering} />
+        <ArcCore drawing={drawing} />
         <span className="core-sweep" />
         <span className="core-heart" />
       </div>

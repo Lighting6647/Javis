@@ -20,6 +20,17 @@ import {
 export const HISTORY_LIMIT = 20;
 export const MESSAGE_LENGTH_LIMIT = 2000;
 
+/** การฟังที่จบโดยไม่ได้ยินอะไรเร็วกว่านี้ถือว่าผิดปกติ: ปกติระบบฟังรอเสียงพูดหลายวินาทีก่อนจบเอง */
+const QUICK_LISTEN_MS = 1500;
+/** โหมดฟังตลอดเวลา: เว้นจังหวะเท่านี้ก่อนฟังใหม่หลังการฟังที่จบเร็วผิดปกติ เพื่อไม่ให้วนถี่ */
+export const QUICK_LISTEN_PAUSE_MS = 1000;
+/** โหมดฟังตลอดเวลา: การฟังจบเร็วผิดปกติติดกันได้กี่ครั้ง ก่อนปิดไมโครโฟน */
+export const QUICK_LISTEN_LIMIT = 8;
+/** โหมดฟังตลอดเวลา: ระบบฟังสะดุดชั่วคราวติดกันได้กี่ครั้ง ก่อนปิดไมโครโฟน แต่ละครั้งรอนานขึ้นทีละเท่าตัว */
+export const LISTEN_RETRY_LIMIT = 5;
+const LISTEN_RETRY_BASE_MS = 1000;
+const LISTEN_RETRY_MAX_MS = 15_000;
+
 export interface ConversationDeps {
   recognizer: SpeechRecognizer;
   synthesizer: SpeechSynthesizer;
@@ -31,14 +42,26 @@ export interface ConversationDeps {
    * ผู้ให้มาต้องเก็บบทสนทนาไว้เองก่อนออกจากหน้า ถ้าไม่ให้มา ผู้ใช้ต้องแตะลิงก์ในบทสนทนาเอง
    */
   leaveToPage?: (url: string) => boolean;
+  /**
+   * แสดงหน้าเว็บในกรอบของแอปเอง คืน false ถ้าแสดงไม่ได้ มีเฉพาะเว็บในเบราว์เซอร์
+   * ใช้กับหน้าที่เซิร์ฟเวอร์ตรวจแล้วว่าเจ้าของเว็บยอมให้แสดงในกรอบ ผู้ใช้จึงเห็นหน้านั้นโดยไม่ต้องออกจาก Javis
+   */
+  showPage?: (url: string, title: string) => boolean;
   /** อ่านหน้าเว็บที่เปิดอยู่ในเบราว์เซอร์ในตัว มีเฉพาะในแอปเดสก์ท็อป */
   getPageContext?: () => Promise<PageContext | null>;
   /** กรอกค่าลงฟอร์มของหน้าเว็บที่เปิดอยู่ เรียกหลังผู้ใช้ยืนยันแล้วเท่านั้น */
   fillPage?: (pageUrl: string, values: FillValue[]) => Promise<FillResult>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
-  /** นาฬิกาของตัวจับเวลารอคำตอบ (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
+  /** นาฬิกาของตัวควบคุม (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
   now?: () => number;
+  /**
+   * ฟังตลอดเวลา: ไม่ได้ยินอะไรก็ฟังต่อ ระบบฟังสะดุดชั่วคราวก็ลองใหม่เอง และคำตอบที่ล้มเหลวไม่จบโหมดเสียง
+   * เพราะผู้ใช้ไม่มีปุ่มไมโครโฟนให้แตะเริ่มใหม่ทุกครั้ง ถ้าไม่ตั้ง การฟังที่เงียบหรือล้มเหลวจะจบโหมดเสียงตามเดิม
+   */
+  handsFree?: boolean;
+  /** หน่วงเวลา (มิลลิวินาที) ก่อนลองฟังใหม่ ค่าเริ่มต้นใช้ตัวจับเวลาของเครื่อง แยกไว้เพื่อให้ทดสอบได้โดยไม่ต้องรอจริง */
+  wait?: (ms: number) => Promise<void>;
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -88,6 +111,10 @@ export class ConversationController {
   private filling = false;
   /** ลิงก์ที่รอพาแท็บนี้ไปเมื่อคำตอบจบ ถ้าผู้ใช้เปลี่ยนจังหวะหรือแตะเปิดเองก่อนถึงตอนนั้น จะไม่พาไป */
   private leaving: { messageId: string; url: string } | null = null;
+  /** โหมดฟังตลอดเวลา: จำนวนครั้งติดกันที่ระบบฟังสะดุดชั่วคราว */
+  private listenFailures = 0;
+  /** โหมดฟังตลอดเวลา: จำนวนครั้งติดกันที่การฟังจบเร็วผิดปกติโดยไม่ได้ยินอะไร */
+  private quickListens = 0;
 
   constructor(private readonly deps: ConversationDeps) {}
 
@@ -100,15 +127,25 @@ export class ConversationController {
 
   getState = (): ConversationState => this.state;
 
-  /** เริ่มสนทนาด้วยเสียง ต้องเรียกจากจังหวะที่ผู้ใช้แตะหน้าจอ */
+  /**
+   * เริ่มสนทนาด้วยเสียง บนมือถือต้องเรียกจากจังหวะที่ผู้ใช้แตะหน้าจอ
+   * ส่วนโหมดฟังตลอดเวลาบนคอมพิวเตอร์เรียกได้เองตอนเปิดหน้า เมื่อผู้ใช้อนุญาตไมโครโฟนไว้แล้ว
+   */
   start = async (): Promise<void> => {
     if (this.state.active) return;
 
     const epoch = this.halt();
+    this.listenFailures = 0;
+    this.quickListens = 0;
     this.update({ active: true, phase: "starting", notice: null });
 
     // สั่งเตรียมตัวพูดก่อน await ใด ๆ เพื่อให้ยังอยู่ในจังหวะแตะของผู้ใช้
     const voiceReady = this.deps.synthesizer.prepare().catch(() => false);
+    // อุปกรณ์มีเสียงพูดหรือไม่ ไม่ขึ้นกับว่ารอบนี้ถูกแทรกไหม จึงจดไว้เสมอ
+    // เช่นผู้ใช้แตะคำถามตัวอย่างระหว่างกำลังเตรียมไมโครโฟนในโหมดฟังตลอดเวลา คำตอบยังต้องออกเสียงได้
+    void voiceReady.then((ready) => {
+      this.voiceReplies = ready;
+    });
 
     try {
       await this.deps.recognizer.prepare();
@@ -168,7 +205,8 @@ export class ConversationController {
 
     const epoch = this.halt();
     // พิมพ์แทรกระหว่างรอสิทธิ์ไมโครโฟน: ถือว่ายังไม่ได้เปิดโหมดเสียง
-    if (this.state.phase === "starting") this.update({ active: false });
+    // ยกเว้นโหมดฟังตลอดเวลา ซึ่งต้องกลับมาฟังต่อเองหลังตอบ เพราะไม่มีปุ่มให้ผู้ใช้แตะเปิดใหม่
+    if (this.state.phase === "starting" && !this.deps.handsFree) this.update({ active: false });
     void this.handle(clean, epoch);
   };
 
@@ -273,7 +311,49 @@ export class ConversationController {
     this.fail(code === "aborted" ? null : { tone: "error", text: SPEECH_ERROR_TEXT[code] });
   }
 
+  /**
+   * จบรอบที่ขอคำตอบไม่สำเร็จ พร้อมข้อความแจ้งผู้ใช้
+   * โหมดฟังตลอดเวลา: หยุดเสียงที่ค้างคิวอยู่แล้วฟังต่อ เพราะไม่มีปุ่มให้ผู้ใช้แตะเริ่มใหม่ ที่อื่น: จบโหมดเสียง
+   */
+  private async failTurn(notice: Notice): Promise<void> {
+    if (!this.deps.handsFree || !this.state.active) {
+      this.fail(notice);
+      return;
+    }
+    await this.listen(this.halt(), notice);
+  }
+
+  private clock(): number {
+    return (this.deps.now ?? (() => performance.now()))();
+  }
+
+  private wait(ms: number): Promise<void> {
+    return (this.deps.wait ?? ((delay) => new Promise<void>((resolve) => setTimeout(resolve, delay))))(ms);
+  }
+
+  /**
+   * ฟังจนได้คำพูดหนึ่งช่วง แล้วส่งต่อไปตอบ
+   * โหมดฟังตลอดเวลาฟังซ้ำเองเมื่อเงียบหรือระบบฟังสะดุดชั่วคราว จึงวนในนี้ ไม่เรียกตัวเองซ้อนไปเรื่อย ๆ
+   * @param notice ข้อความแจ้งที่ต้องแสดงค้างไว้ระหว่างการฟังรอบแรก
+   */
   private async listen(epoch: number, notice: Notice | null = null): Promise<void> {
+    let pendingNotice = notice;
+    for (;;) {
+      const heard = await this.listenOnce(epoch, pendingNotice);
+      if (heard === null) return;
+      if (heard) {
+        await this.handle(heard, epoch);
+        return;
+      }
+      pendingNotice = null;
+    }
+  }
+
+  /**
+   * ฟังหนึ่งรอบ คืนข้อความที่ได้ยิน สตริงว่างเมื่อควรฟังใหม่ (เกิดเฉพาะโหมดฟังตลอดเวลา)
+   * หรือ null เมื่อการฟังจบลงแล้ว (ล้มเหลว ถูกปิด หรือผู้ใช้เปลี่ยนจังหวะไปแล้ว)
+   */
+  private async listenOnce(epoch: number, notice: Notice | null): Promise<string | null> {
     this.update({
       phase: "listening",
       partial: "",
@@ -281,23 +361,66 @@ export class ConversationController {
       onDeviceListening: this.deps.recognizer.isOnDevice()
     });
 
+    const startedAt = this.clock();
     let heard: string;
     try {
       heard = await this.deps.recognizer.listen((partial) => {
         if (epoch === this.epoch) this.update({ partial });
       });
     } catch (error) {
-      if (epoch === this.epoch) this.failSpeech(error);
-      return;
+      if (epoch !== this.epoch) return null;
+      return (await this.recoverListening(error, epoch)) ? "" : null;
     }
-    if (epoch !== this.epoch) return;
+    if (epoch !== this.epoch) return null;
+    this.listenFailures = 0;
 
     const text = heard.trim().slice(0, MESSAGE_LENGTH_LIMIT);
-    if (!text) {
-      this.fail({ tone: "info", text: NOTICE_TEXT.noSpeech });
-      return;
+    if (text) {
+      this.quickListens = 0;
+      return text;
     }
-    await this.handle(text, epoch);
+    if (!this.deps.handsFree) {
+      this.fail({ tone: "info", text: NOTICE_TEXT.noSpeech });
+      return null;
+    }
+
+    // เงียบจนระบบฟังจบเองตามปกติ: ฟังต่อได้เลย
+    if (this.clock() - startedAt >= QUICK_LISTEN_MS) {
+      this.quickListens = 0;
+      return "";
+    }
+    // จบเร็วผิดปกติ: เว้นจังหวะก่อน และถ้าเป็นซ้ำ ๆ ให้หยุด ดีกว่าวนเปิดปิดไมโครโฟนไม่รู้จบ
+    this.quickListens += 1;
+    if (this.quickListens >= QUICK_LISTEN_LIMIT) {
+      this.fail({ tone: "error", text: NOTICE_TEXT.listenUnstable });
+      return null;
+    }
+    await this.wait(QUICK_LISTEN_PAUSE_MS);
+    return epoch === this.epoch ? "" : null;
+  }
+
+  /**
+   * ระบบฟังล้มเหลวระหว่างฟัง คืน true เมื่อควรฟังใหม่ ซึ่งเกิดเฉพาะโหมดฟังตลอดเวลากับอาการชั่วคราว
+   * (เครือข่ายสะดุด เบราว์เซอร์ยกเลิกการฟังเอง หรือเริ่มฟังไม่ติด) โดยรอนานขึ้นทีละเท่าตัวในแต่ละครั้ง
+   * นอกนั้นจบโหมดเสียงพร้อมบอกสาเหตุ แล้วคืน false
+   */
+  private async recoverListening(error: unknown, epoch: number): Promise<boolean> {
+    const code = error instanceof SpeechError ? error.code : "unknown";
+    const transient = code === "network" || code === "aborted" || code === "unknown";
+    if (!this.deps.handsFree || !transient) {
+      this.failSpeech(error);
+      return false;
+    }
+
+    this.listenFailures += 1;
+    if (this.listenFailures > LISTEN_RETRY_LIMIT) {
+      this.fail({ tone: "error", text: code === "aborted" ? NOTICE_TEXT.listenInterrupted : SPEECH_ERROR_TEXT[code] });
+      return false;
+    }
+
+    this.update({ phase: "starting", partial: "", notice: { tone: "info", text: NOTICE_TEXT.listenRetrying } });
+    await this.wait(Math.min(LISTEN_RETRY_BASE_MS * 2 ** (this.listenFailures - 1), LISTEN_RETRY_MAX_MS));
+    return epoch === this.epoch;
   }
 
   /** รับคำพูดหรือข้อความของผู้ใช้: ถ้าเป็นคำยืนยัน/ยกเลิกรายการกรอกฟอร์มให้จัดการเอง ไม่เช่นนั้นส่งไปถาม AI */
@@ -410,8 +533,7 @@ export class ConversationController {
       });
     });
 
-    const now = this.deps.now ?? (() => performance.now());
-    const askedAt = now();
+    const askedAt = this.clock();
     let answered = false;
 
     let reply: string;
@@ -420,6 +542,7 @@ export class ConversationController {
         signal: request.signal,
         page,
         memories: this.deps.memory?.list().map(({ id, text }) => ({ id, text })),
+        frames: Boolean(this.deps.showPage),
         onEvent: (event) => {
           if (epoch !== this.epoch) return;
 
@@ -428,7 +551,7 @@ export class ConversationController {
               if (!answered) {
                 // ผู้ใช้รู้สึกว่าได้คำตอบตั้งแต่ข้อความแรกโผล่ จึงวัดถึงตรงนี้ ไม่ใช่จนตอบจบ
                 answered = true;
-                this.update({ lastReplyMs: Math.max(0, Math.round(now() - askedAt)) });
+                this.update({ lastReplyMs: Math.max(0, Math.round(this.clock() - askedAt)) });
               }
               if (this.state.searching) this.update({ searching: false });
               this.patchMessage(replyId, (message) => ({ ...message, text: message.text + event.text }));
@@ -449,14 +572,16 @@ export class ConversationController {
 
             case "open": {
               // เปิดให้เองเฉพาะเมื่อ backend ยืนยันว่าลิงก์มาจากคำสั่งของผู้ใช้โดยตรง
-              const opened = event.auto && this.deps.openPage(event.url);
+              // เจ้าของเว็บยอมให้แสดงในกรอบ และแอปมีกรอบ: แสดงในแอปเลย ผู้ใช้ไม่ต้องออกจากหน้านี้และ Javis ยังฟังต่อได้
+              const framed = event.auto && event.embed === true && (this.deps.showPage?.(event.url, event.title) ?? false);
+              const opened = framed || (event.auto && this.deps.openPage(event.url));
               // เปิดแท็บใหม่ไม่ได้: พาแท็บนี้ไปแทนเมื่อคำตอบจบ ผู้ใช้สั่งให้เปิดแล้ว จึงไม่ควรต้องแตะลิงก์เองอีก
               const inPlace = event.auto && !opened && Boolean(this.deps.leaveToPage);
               const blocked = event.auto && !opened && !inPlace;
               if (inPlace) this.leaving = { messageId: replyId, url: event.url };
               this.patchMessage(replyId, (message) => ({
                 ...message,
-                link: { title: event.title, url: event.url, opened, blocked, inPlace }
+                link: { title: event.title, url: event.url, opened, blocked, inPlace, ...(framed ? { framed: true } : {}) }
               }));
               // ผู้ใช้ที่สั่งด้วยเสียงไม่ได้มองจอ: ต้องได้ยินว่ายังไม่ได้เปิด ไม่เช่นนั้นจะรอหน้าเว็บที่ไม่มา
               if (blocked && speakReply) chunker.push(`\n${NOTICE_TEXT.popupBlocked}`);
@@ -500,7 +625,7 @@ export class ConversationController {
       });
     } catch (error) {
       if (epoch !== this.epoch) return;
-      this.fail({
+      await this.failTurn({
         tone: "error",
         text: error instanceof ChatError ? error.message : NOTICE_TEXT.chatFailed
       });
@@ -510,7 +635,7 @@ export class ConversationController {
     if (this.state.searching) this.update({ searching: false });
 
     if (!reply.trim()) {
-      this.fail({ tone: "error", text: NOTICE_TEXT.emptyReply });
+      await this.failTurn({ tone: "error", text: NOTICE_TEXT.emptyReply });
       return;
     }
 

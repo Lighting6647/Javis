@@ -92,6 +92,11 @@ export const config = {
    * null = ไม่ได้ตั้งกุญแจ TAVILY_API_KEY
    */
   webSearch: resolveWebSearchProvider(process.env),
+  /**
+   * ตรวจให้หน้าเว็บว่าหน้าที่ผู้ใช้สั่งเปิดแสดงในกรอบของ Javis ได้ไหม (server/frameCheck.ts) ปิดได้ด้วย WEB_FRAMES_ENABLED=false
+   * เมื่อปิด หน้าเว็บจะเปิดทุกหน้าแบบเดิม (แท็บใหม่) และเซิร์ฟเวอร์ไม่ติดต่อเว็บปลายทางเลย
+   */
+  webFrames: process.env.WEB_FRAMES_ENABLED?.trim().toLowerCase() !== "false",
   /** ตรวจกุญแจ API และโมเดลตอนเริ่มเซิร์ฟเวอร์ (ไม่มีค่าใช้จ่าย) ปิดได้ด้วย AI_STARTUP_CHECK=false */
   aiStartupCheck: process.env.AI_STARTUP_CHECK?.trim().toLowerCase() !== "false",
   /** ระหว่างที่บัญชี AI ยังมีปัญหา ตรวจซ้ำทุกกี่วินาที เพื่อให้สถานะกลับมาปกติเองหลังผู้ดูแลแก้ไข */

@@ -6,6 +6,8 @@
  * ตัววัดเป็นของแถม: ถ้าวัดไม่ได้ด้วยเหตุใดก็ตาม การฟังต้องทำงานตามเดิม และวงคลื่นเสียงกลับไปขยับตามจังหวะแทน
  */
 
+import { isHandheld } from "./device";
+
 /** ขนาด FFT ของตัววิเคราะห์: ได้ 256 ช่องความถี่ กว้างช่องละราว 94 เฮิรตซ์ที่อัตราสุ่ม 48 กิโลเฮิรตซ์ */
 export const METER_FFT_SIZE = 512;
 /** จำนวนช่องความถี่ที่ใช้ ไม่นับช่องแรก ครอบคลุมย่านเสียงพูดถึงราว 5.6 กิโลเฮิรตซ์ */
@@ -93,9 +95,7 @@ export interface MeterEnvironment {
  */
 export function canMeterMicrophone(env: MeterEnvironment): boolean {
   if (env.native || env.desktopApp || !env.mediaDevices || env.reducedMotion) return false;
-  if (/Android|iPhone|iPad|iPod/.test(env.userAgent)) return false;
-  if (/Macintosh/.test(env.userAgent) && env.touchPoints > 1) return false;
-  return true;
+  return !isHandheld(env.userAgent, env.touchPoints);
 }
 
 function release(stream: MeterStream): void {

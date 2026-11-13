@@ -8,7 +8,7 @@ const BARS = Array.from({ length: BAR_COUNT }, (_unused, index) => index);
 
 interface ArcCoreProps {
   /** Javis กำลังฟังและแผงสถานะกำลังแสดง: ให้วงคลื่นเสียงขยับตามเสียงไมโครโฟนจริงถ้าอุปกรณ์วัดได้ */
-  metering: boolean;
+  drawing: boolean;
 }
 
 /**
@@ -17,9 +17,9 @@ interface ArcCoreProps {
  * วงคลื่นเสียงขยับตามเสียงไมโครโฟนจริงระหว่างฟัง เมื่อวัดได้ (เบราว์เซอร์บนคอมพิวเตอร์ที่อนุญาตไมโครโฟนแล้ว)
  * นอกนั้นขยับตามจังหวะ (ฟัง คิด ตอบ) เพื่อบอกสถานะ ไม่ได้วัดระดับเสียง
  */
-export function ArcCore({ metering }: ArcCoreProps) {
+export function ArcCore({ drawing }: ArcCoreProps) {
   const bars = useRef<SVGGElement>(null);
-  useMicBars(bars, metering);
+  useMicBars(bars, drawing);
 
   return (
     <svg className="arc" viewBox="0 0 400 400" aria-hidden focusable="false">

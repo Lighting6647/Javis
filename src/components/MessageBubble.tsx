@@ -13,6 +13,11 @@ interface MessageBubbleProps {
    * ถ้าไม่ได้ส่งมาหรือคืน false ลิงก์จะเปิดแท็บใหม่ตามปกติ
    */
   onOpenLink?: (url: string) => boolean;
+  /**
+   * แสดงหน้าเว็บในกรอบของแอป (เว็บในเบราว์เซอร์) คืน true ถ้าแสดงให้แล้ว
+   * ใช้เฉพาะกับลิงก์ที่เคยแสดงในกรอบได้ เพราะรู้แล้วว่าเจ้าของเว็บยอม ลิงก์อื่นเปิดแท็บใหม่ตามปกติ
+   */
+  onShowFramed?: (url: string, title: string) => boolean;
   /** ผู้ใช้แตะลิงก์หน้าเว็บของข้อความนี้เอง */
   onLinkOpened?: (messageId: string) => void;
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ในข้อความนี้ */
@@ -48,9 +53,12 @@ const FILL_SUMMARY: Record<FillRequest["status"], { icon: typeof Ban; text: (req
   failed: { icon: CircleAlert, text: () => "กรอกไม่สำเร็จ" }
 };
 
-export function MessageBubble({ message, onOpenLink, onLinkOpened, onUndoMemory }: MessageBubbleProps) {
+export function MessageBubble({ message, onOpenLink, onShowFramed, onLinkOpened, onUndoMemory }: MessageBubbleProps) {
   const fromUser = message.role === "user";
   const fill = message.fill ? FILL_SUMMARY[message.fill.status] : null;
+  const link = message.link;
+  // ลิงก์ที่แสดงในกรอบอยู่: แตะแล้วแสดงในกรอบอีกครั้ง ไม่เปิดแท็บใหม่
+  const openPageLink = link?.framed && onShowFramed ? (url: string) => onShowFramed(url, link.title) : onOpenLink;
 
   return (
     <article className={`message ${message.role}`}>
@@ -80,7 +88,7 @@ export function MessageBubble({ message, onOpenLink, onLinkOpened, onUndoMemory 
         <WebLink
           url={message.link.url}
           className={`page-link${message.link.blocked ? " blocked" : ""}`}
-          onOpenLink={onOpenLink}
+          onOpenLink={openPageLink}
           onOpened={() => onLinkOpened?.(message.id)}
         >
           <ExternalLink size={18} aria-hidden />

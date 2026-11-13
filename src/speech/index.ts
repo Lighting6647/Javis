@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { isDesktopApp } from "../browser/browserStore";
 import { transcribeAudio } from "../services/transcribeApi";
+import { canListenHandsFree } from "./handsFree";
 import { NativeSpeechRecognizer } from "./nativeRecognizer";
 import { NativeSpeechSynthesizer } from "./nativeSynthesizer";
 import { RecorderSpeechRecognizer } from "./recorderRecognizer";
@@ -11,6 +12,20 @@ import { WebSpeechSynthesizer } from "./webSynthesizer";
 export interface SpeechServices {
   recognizer: SpeechRecognizer;
   synthesizer: SpeechSynthesizer;
+}
+
+/** ที่นี่ฟังตลอดเวลาได้ไหม (เปิดหน้าแล้วพูดได้เลย) ดูเงื่อนไขใน src/speech/handsFree.ts */
+export function handsFreeAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  const scope = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
+
+  return canListenHandsFree({
+    userAgent: navigator.userAgent,
+    touchPoints: navigator.maxTouchPoints,
+    recognition: Boolean(scope.SpeechRecognition ?? scope.webkitSpeechRecognition),
+    native: Capacitor.isNativePlatform(),
+    desktopApp: isDesktopApp()
+  });
 }
 
 /** เลือกระบบเสียงให้ตรงกับที่แอปกำลังทำงานอยู่ */

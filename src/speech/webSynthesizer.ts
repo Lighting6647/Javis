@@ -1,3 +1,4 @@
+import { createSpeechBlock } from "./speechBlock";
 import {
   DEFAULT_VOICE_SETTINGS,
   SPEECH_LANGUAGE,
@@ -55,6 +56,12 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
   private settings: VoiceSettings = DEFAULT_VOICE_SETTINGS;
   /** เก็บอ้างอิงไว้ ไม่เช่นนั้นบางเบราว์เซอร์จะเก็บกวาดก่อนพูดจบ */
   private readonly pending = new Set<SpeechSynthesisUtterance>();
+  /** เบราว์เซอร์ยอมให้หน้านี้พูดหรือยัง รู้จากผลของการสั่งพูดแต่ละครั้ง */
+  private readonly block = createSpeechBlock();
+
+  isBlocked = (): boolean => this.block.isBlocked();
+
+  onBlockedChange = (listener: () => void): (() => void) => this.block.subscribe(listener);
 
   private get synthesis(): SpeechSynthesis | null {
     return typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
@@ -86,7 +93,14 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
     synthesis.cancel();
     const unlock = new SpeechSynthesisUtterance(" ");
     unlock.volume = 0;
+    // ประโยคเงียบนี้บอกด้วยว่าตอนนี้เบราว์เซอร์ยอมให้พูดไหม: ถ้าไม่ยอม ข้อผิดพลาดมาถึงทันทีระหว่างสั่งพูด (วัดใน Chrome 157)
+    let refused = false;
+    unlock.onerror = (event) => {
+      refused = refused || event.error === "not-allowed";
+      this.block.failed(event.error);
+    };
     synthesis.speak(unlock);
+    if (!refused) this.block.started();
 
     return this.listVoices().then((voices) => voices.length > 0);
   }
@@ -113,8 +127,12 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
         (WATCHDOG_BASE_MS + text.length * WATCHDOG_PER_CHARACTER_MS) / this.settings.rate
       );
 
+      utterance.onstart = () => this.block.started();
       utterance.onend = finish;
-      utterance.onerror = finish;
+      utterance.onerror = (event) => {
+        this.block.failed(event.error);
+        finish();
+      };
       this.pending.add(utterance);
       synthesis.speak(utterance);
     });

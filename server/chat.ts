@@ -7,6 +7,7 @@ import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsR
 import { startClaudeReply } from "./claudeClient.js";
 import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
+import { decideFraming } from "./frameCheck.js";
 import {
   createGeminiInteractionTranslator,
   geminiInteractionsHeaders,
@@ -402,6 +403,11 @@ export const chatRequestSchema = z.object({
     .optional(),
   /** ความจำของผู้ใช้ที่เก็บอยู่ในอุปกรณ์ */
   memories: z.array(memorySchema).max(MAX_MEMORIES).optional(),
+  /**
+   * หน้าเว็บของผู้ใช้แสดงหน้าเว็บอื่นในกรอบของตัวเองได้ (เว็บในเบราว์เซอร์)
+   * เซิร์ฟเวอร์จึงตรวจให้ว่าหน้าที่จะเปิดยอมให้แสดงในกรอบไหม แอปเดสก์ท็อปและแอปมือถือไม่ส่งค่านี้ เพราะมีวิธีเปิดหน้าของตัวเอง
+   */
+  frames: z.boolean().optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
   diagnose: z.string().max(200).optional(),
   /** โมเดลค้นเว็บที่ผู้ถือรหัสวินิจฉัยขอลองในคำขอนี้ คำขอที่ไม่มีรหัสจะถูกเมิน */
@@ -1064,7 +1070,10 @@ export const chatHandler: RequestHandler = async (request, response) => {
       if (!followedUp) send({ type: "delta", text: reducer.memoryFallbackText });
     }
 
-    reducer.finish().forEach(send);
+    for (const event of reducer.finish()) {
+      // หน้าเว็บของผู้ใช้แสดงหน้าอื่นในกรอบได้: ตรวจก่อนว่าเจ้าของเว็บยอมไหม เพื่อไม่ให้ผู้ใช้เจอกรอบว่าง
+      send(event.type === "open" && parsed.data.frames && config.webFrames ? await decideFraming(event) : event);
+    }
     if (diagnosing) {
       send({
         type: "diagnostic",

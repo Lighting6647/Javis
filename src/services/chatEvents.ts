@@ -60,7 +60,9 @@ export function parseChatEventLine(line: string): ChatEvent | null {
         type: "open",
         url,
         title: typeof value.title === "string" && value.title ? value.title : url,
-        auto: value.auto === true
+        auto: value.auto === true,
+        // แสดงในกรอบได้เฉพาะหน้า https เพราะหน้า Javis เป็น https และเบราว์เซอร์ไม่ยอมให้ใส่หน้า http ไว้ข้างใน
+        ...(value.embed === true && url.startsWith("https://") ? { embed: true } : {})
       };
     }
 

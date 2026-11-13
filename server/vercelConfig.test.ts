@@ -51,6 +51,13 @@ describe("vercel.json", () => {
     expect(directives(pageHeaders.get("content-security-policy")).length).toBeGreaterThan(8);
   });
 
+  it("ใส่หน้าเว็บอื่นไว้ในกรอบได้เฉพาะหน้า https (สำหรับแสดงหน้าที่ผู้ใช้สั่งเปิด) และยังห้ามเว็บอื่นนำ Javis ไปใส่กรอบ", () => {
+    for (const policy of [pageHeaders.get("content-security-policy"), server.get("content-security-policy")]) {
+      expect(directives(policy)).toContain("frame-src https:");
+      expect(directives(policy)).toContain("frame-ancestors 'none'");
+    }
+  });
+
   it("หน้าเว็บบน HTTPS บังคับให้ทุกคำขอเป็น HTTPS", () => {
     expect(pageHeaders.get("content-security-policy")).toContain("upgrade-insecure-requests");
   });
