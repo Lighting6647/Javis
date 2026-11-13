@@ -28,6 +28,14 @@ export function handsFreeAvailable(): boolean {
   });
 }
 
+/**
+ * ระบบฟังสำหรับจดคำพูดต่อเนื่องของโหมดสรุปการประชุม ซึ่งใช้ได้เฉพาะที่ที่ฟังตลอดเวลาได้ (handsFreeAvailable)
+ * เป็นคนละตัวกับระบบฟังของบทสนทนา เพื่อให้การหยุดบทสนทนาตอนสลับโหมดไม่ไปยกเลิกการจดที่เพิ่งเริ่ม
+ */
+export function createDictationRecognizer(): SpeechRecognizer {
+  return new WebSpeechRecognizer();
+}
+
 /** เลือกระบบเสียงให้ตรงกับที่แอปกำลังทำงานอยู่ */
 export function createSpeechServices(): SpeechServices {
   if (Capacitor.isNativePlatform()) {

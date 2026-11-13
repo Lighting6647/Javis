@@ -5,7 +5,7 @@ import { listeningLock } from "../services/listeningLock";
 import { micLevelStore } from "../services/micLevelStore";
 import { themeStore } from "../services/themeStore";
 import { handsFreeAvailable } from "../speech";
-import { getSessionMeter, queryMicrophonePermission } from "../speech/sessionMeter";
+import { getSessionMeter, queryMicrophonePermission, sessionMeterWanted } from "../speech/sessionMeter";
 
 /** รอให้การเริ่มฟังเองสำเร็จนานสุดเท่านี้ก่อนแสดงแถบสั่งงาน เพื่อไม่ให้ผู้ใช้ค้างอยู่กับหน้าที่สั่งงานไม่ได้ ถ้าการเริ่มฟังค้าง */
 const START_PATIENCE_MS = 4000;
@@ -33,9 +33,6 @@ export interface HandsFree {
 
 /** สิทธิ์ไมโครโฟนเท่าที่หน้าจอต้องรู้: ยังไม่ทราบ อนุญาตแล้ว หรืออย่างอื่น (ยังไม่ได้ถาม ถูกปฏิเสธ หรือเบราว์เซอร์ไม่บอก) */
 type MicPermission = "unknown" | "granted" | "other";
-
-/** ควรเปิดไมโครโฟนเส้นที่ใช้วัดเสียงไว้ระหว่างฟังไหม: เฉพาะธีมที่มีวงคลื่นเสียง และผู้ใช้ไม่ได้ปิดตัวเลือกไว้ */
-const meterWanted = (): boolean => themeStore.get() === "holo" && micLevelStore.get();
 
 /**
  * โหมดฟังตลอดเวลา: เปิดหน้าแล้ว Javis ฟังเอง ไม่ต้องแตะไมโครโฟนก่อนพูดทุกครั้ง
@@ -66,7 +63,7 @@ export function useHandsFree({ ready, paused, controller }: HandsFreeOptions): H
   const syncMeter = useCallback((): Promise<boolean> => {
     const meter = getSessionMeter();
     if (!meter) return Promise.resolve(false);
-    if (listening.current && meterWanted()) return meter.start();
+    if (listening.current && sessionMeterWanted()) return meter.start();
     meter.stop();
     return Promise.resolve(false);
   }, []);
@@ -167,6 +164,9 @@ export function useHandsFree({ ready, paused, controller }: HandsFreeOptions): H
       listening.current = false;
       void syncMeter();
       listeningLock.release();
+      // เงื่อนไขเปลี่ยนแล้ว (เช่นพักไว้ระหว่างเปิดหน้าตั้งค่าหรือจดการประชุม): รอบถัดไปจะลองเริ่มฟังใหม่
+      // จึงไม่ถือว่าโหมดเสียงจบลงเองอีก ไม่เช่นนั้นแถบสั่งงานจะโผล่มาแวบหนึ่งตอนกลับมาฟัง
+      setEnded(false);
     };
   }, [attempt, capable, controller, enabled, paused, ready, syncMeter]);
 

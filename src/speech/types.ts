@@ -15,6 +15,14 @@ export class SpeechError extends Error {
   }
 }
 
+/** ตัวรับผลของการฟังต่อเนื่อง */
+export interface DictationHandlers {
+  /** คำที่กำลังได้ยินของช่วงคำพูดที่ยังไม่จบ */
+  onPartial: (text: string) => void;
+  /** ข้อความของช่วงคำพูดที่จบแล้ว */
+  onFinal: (text: string) => void;
+}
+
 /** ตัวฟัง: แปลงเสียงพูดเป็นข้อความด้วยระบบเสียงของอุปกรณ์ */
 export interface SpeechRecognizer {
   /** ตรวจว่าใช้งานได้และขอสิทธิ์ไมโครโฟน ล้มเหลวด้วย SpeechError */
@@ -26,6 +34,12 @@ export interface SpeechRecognizer {
    * ล้มเหลวด้วย SpeechError โดยรหัส "aborted" หมายถึงถูกยกเลิกด้วย cancel()
    */
   listen(onPartial: (text: string) => void): Promise<string>;
+  /**
+   * ฟังต่อเนื่องเพื่อจดคำพูดยาว ๆ (โหมดสรุปการประชุม): ส่งข้อความทีละช่วงคำพูดโดยไม่จบการฟังเมื่อผู้พูดหยุด
+   * จบเมื่อระบบฟังจบการฟังเอง ซึ่งผู้เรียกควรเรียกใหม่เพื่อฟังต่อ ล้มเหลวด้วย SpeechError เหมือน listen
+   * มีเฉพาะระบบฟังที่ทำได้ ที่อื่นผู้เรียกใช้ listen ทีละช่วงคำพูดแทน
+   */
+  dictate?(handlers: DictationHandlers): Promise<void>;
   /** จบการฟังทันทีและส่งข้อความเท่าที่ได้ยิน */
   stop(): void;
   /** ยกเลิกการฟังและทิ้งผลลัพธ์ */

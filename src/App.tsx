@@ -1,11 +1,12 @@
 import { Capacitor } from "@capacitor/core";
-import { Globe, LogOut, MessageSquare, Mic, MicOff, Settings2, Square } from "lucide-react";
+import { Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { BrowserView } from "./components/BrowserView";
 import { FillCard } from "./components/FillCard";
 import { FrameView } from "./components/FrameView";
+import { MeetingPanel } from "./components/MeetingPanel";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { Transcript } from "./components/Transcript";
@@ -19,8 +20,10 @@ import { useConversation } from "./hooks/useConversation";
 import { useHandsFree } from "./hooks/useHandsFree";
 import { useHudTelemetry } from "./hooks/useHudTelemetry";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
+import { useMeeting } from "./hooks/useMeeting";
 import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
+import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
 
 const PRIVACY_NOTE = "เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของอุปกรณ์หรือเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
 const HANDS_FREE_PRIVACY_NOTE =
@@ -52,16 +55,20 @@ export default function App() {
   const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [desktop] = useState(isDesktopApp);
-  // หน้าตั้งค่ามีเสียงตัวอย่างที่ไมโครโฟนไม่ควรได้ยิน จึงพักการฟังไว้ระหว่างที่เปิดอยู่
-  const handsFree = useHandsFree({ ready, paused: settingsOpen, controller });
+  const meeting = useMeeting({ ready, controller });
+  // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
+  const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
+  const inMeeting = meetingStatus !== null;
+  // หน้าตั้งค่ามีเสียงตัวอย่างที่ไมโครโฟนไม่ควรได้ยิน จึงพักการฟังไว้ระหว่างที่เปิดอยู่ เช่นเดียวกับตลอดการประชุม
+  const handsFree = useHandsFree({ ready, paused: settingsOpen || meeting.active, controller });
   const speechBlocked = useSpeechBlocked(synthesizer);
 
   const pageOpen = ready && browser.requestedUrl !== null;
-  const showingWeb = pageOpen && browser.visible;
+  const showingWeb = pageOpen && browser.visible && !inMeeting;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;
   const ai = useAiStatus(ready, desktop);
   // บอกสถานะจริงตอนว่างอยู่ ระหว่างฟังหรือคิดยังแสดงจังหวะการสนทนาตามปกติ
-  const aiDown = ai.problem?.scope === "chat" && phase === "idle";
+  const aiDown = ai.problem?.scope === "chat" && phase === "idle" && !inMeeting;
   // ฟังตลอดเวลาอยู่: ผู้ใช้พูดได้เลย จึงไม่มีแถบสั่งงาน แถบกลับมาเมื่อไมโครโฟนปิดหรือใช้ไม่ได้ เพื่อให้ยังพิมพ์สั่งได้เสมอ
   const alwaysListening = handsFree.capable && active;
   // ระหว่างที่กำลังจะเริ่มฟังเอง (เช่นตอนเปิดหน้า) ก็ยังไม่แสดงแถบ ไม่เช่นนั้นจะโผล่มาแวบหนึ่งแล้วหายไป
@@ -70,8 +77,17 @@ export default function App() {
   const answering = phase === "thinking" || phase === "speaking";
   // ที่ที่ฟังตลอดเวลาได้ การว่างอยู่โดยไม่ได้ฟังแปลว่าไมโครโฟนปิดอยู่ ซึ่งผู้ใช้ควรรู้
   const micOff = handsFree.capable && !micOn && phase === "idle";
-  const statusLabel =
-    phase === "thinking" && searching ? "กำลังค้นเว็บ" : aiDown ? "AI ใช้งานไม่ได้" : micOff ? "ไมโครโฟนปิดอยู่" : PHASE_LABEL[phase];
+  // ระหว่างการประชุม แถบบนและแกนกลางบอกจังหวะของการจด แทนจังหวะของบทสนทนาซึ่งหยุดอยู่
+  const shownPhase = meetingStatus ? MEETING_PHASE[meetingStatus] : phase;
+  const statusLabel = meetingStatus
+    ? MEETING_STATUS_LABEL[meetingStatus]
+    : phase === "thinking" && searching
+      ? "กำลังค้นเว็บ"
+      : aiDown
+        ? "AI ใช้งานไม่ได้"
+        : micOff
+          ? "ไมโครโฟนปิดอยู่"
+          : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
   const readouts = useHudTelemetry({ platformLabel, messageCount: messages.length, lastReplyMs });
@@ -83,7 +99,10 @@ export default function App() {
   const heard = alwaysListening && phase === "listening" ? partial : "";
   const speechHint = alwaysListening && speechBlocked;
   const elsewhereHint = handsFree.heldElsewhere && !active;
-  const footerShown = dockShown || Boolean(replyStrip || pendingFill || notice || speechHint || heard);
+  // เริ่มจดการประชุมไม่สำเร็จ: ไม่มีแผงการประชุมให้แสดงสาเหตุ จึงแจ้งที่แถบล่าง
+  const meetingNotice = inMeeting ? null : meeting.state.notice;
+  // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
+  const footerShown = !inMeeting && (dockShown || Boolean(replyStrip || pendingFill || notice || meetingNotice || speechHint || heard));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
   useEffect(() => {
@@ -118,7 +137,7 @@ export default function App() {
           <strong>Javis</strong>
         </div>
 
-        {pageOpen && (
+        {pageOpen && !inMeeting && (
           <div className="view-switch" role="group" aria-label="สลับมุมมอง">
             <button type="button" aria-pressed={!showingWeb} onClick={browserStore.hide}>
               <MessageSquare size={15} aria-hidden /> สนทนา
@@ -131,17 +150,29 @@ export default function App() {
 
         <div className="header-actions">
           {ready && (
-            <div className={`status-pill ${phase}${aiDown ? " offline" : ""}`} role="status">
+            <div className={`status-pill ${shownPhase}${aiDown ? " offline" : ""}`} role="status">
               <span className="status-dot" />
               <span className="status-text">{statusLabel}</span>
             </div>
+          )}
+          {ready && meeting.capable && !inMeeting && (
+            <button
+              type="button"
+              className="meeting-entry"
+              onClick={meeting.begin}
+              aria-label="เริ่มโหมดสรุปการประชุม"
+              title="โหมดสรุปการประชุม: Javis ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
+            >
+              <NotebookPen size={16} aria-hidden />
+              <span>ประชุม</span>
+            </button>
           )}
           {ready && alwaysListening && answering && (
             <button type="button" className="icon-button stop-reply" onClick={interrupt} aria-label="หยุดคำตอบ" title="หยุดคำตอบแล้วกลับไปฟัง (Esc)">
               <Square size={13} fill="currentColor" aria-hidden />
             </button>
           )}
-          {ready && handsFree.capable && (
+          {ready && handsFree.capable && !inMeeting && (
             <button
               type="button"
               className={`icon-button mic-toggle${micOn ? " on" : ""}`}
@@ -153,7 +184,8 @@ export default function App() {
               {micOn ? <Mic size={17} aria-hidden /> : <MicOff size={17} aria-hidden />}
             </button>
           )}
-          {ready && (
+          {/* หน้าตั้งค่ามีเสียงตัวอย่าง ซึ่งจะถูกจดลงบันทึกการประชุม จึงเปิดไม่ได้ระหว่างประชุม */}
+          {ready && !inMeeting && (
             <button type="button" className="icon-button" onClick={openSettings} aria-label="ตั้งค่า">
               <Settings2 size={18} aria-hidden />
             </button>
@@ -170,14 +202,20 @@ export default function App() {
       </header>
 
       {stageShown && (
-        <Stage phase={phase} statusLabel={statusLabel} readouts={readouts} compact={messages.length > 0 || showingWeb} offline={aiDown} />
+        <Stage
+          phase={shownPhase}
+          statusLabel={statusLabel}
+          readouts={readouts}
+          compact={messages.length > 0 || showingWeb || inMeeting}
+          offline={aiDown}
+        />
       )}
 
       <main className="app-main">
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
         )}
-        <div className="scroll-area" hidden={showingWeb}>
+        <div className="scroll-area" hidden={showingWeb || inMeeting}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}
           {session.phase === "signed-out" && <AccessGate onSignIn={session.signIn} />}
@@ -185,6 +223,7 @@ export default function App() {
             <Transcript
               messages={messages}
               listening={alwaysListening}
+              meetingAvailable={meeting.capable}
               onSuggest={sendText}
               onOpenLink={desktop ? browserStore.open : undefined}
               onShowFramed={desktop ? undefined : browserStore.showFramed}
@@ -196,6 +235,15 @@ export default function App() {
         </div>
         {/* แอปเดสก์ท็อปมีเบราว์เซอร์ในตัว ส่วนเว็บในเบราว์เซอร์แสดงหน้าที่เจ้าของเว็บยอมไว้ในกรอบ */}
         {pageOpen && (desktop ? <BrowserView browser={browser} /> : <FrameView browser={browser} />)}
+        {inMeeting && (
+          <MeetingPanel
+            state={meeting.state}
+            onPause={meeting.pause}
+            onResume={meeting.resume}
+            onFinish={meeting.finish}
+            onCancel={meeting.cancel}
+          />
+        )}
       </main>
 
       {ready && footerShown && (
@@ -207,6 +255,11 @@ export default function App() {
           {notice && (
             <div className={`toast ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
               {notice.text}
+            </div>
+          )}
+          {meetingNotice && (
+            <div className={`toast ${meetingNotice.tone}`} role={meetingNotice.tone === "error" ? "alert" : "status"}>
+              {meetingNotice.text}
             </div>
           )}
           {elsewhereHint && (

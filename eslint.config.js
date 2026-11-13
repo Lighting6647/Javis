@@ -29,6 +29,12 @@ export default tseslint.config(
     languageOptions: { globals: globals.node }
   },
   {
+    // ชุดตรวจในเบราว์เซอร์จริง: โค้ดส่วนหนึ่งรันใน Node อีกส่วนถูกส่งไปรันในหน้าเว็บ จึงใช้ตัวแปรของทั้งสองที่ และพิมพ์ผลออกทางคอนโซล
+    files: ["e2e/**/*.mjs"],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { "no-console": "off" }
+  },
+  {
     // โปรเซสหลักของแอปเดสก์ท็อป (Electron) เป็น CommonJS
     files: ["desktop/**/*.cjs"],
     languageOptions: { sourceType: "commonjs", globals: globals.node },

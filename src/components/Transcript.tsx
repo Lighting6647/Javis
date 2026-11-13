@@ -1,4 +1,4 @@
-import { CloudSun, ListChecks, Newspaper } from "lucide-react";
+import { CloudSun, ListChecks, Newspaper, NotebookPen } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ConversationMessage } from "../conversation/types";
 import { MessageBubble } from "./MessageBubble";
@@ -7,6 +7,8 @@ interface TranscriptProps {
   messages: ConversationMessage[];
   /** Javis ฟังตลอดเวลาอยู่: หน้าเริ่มต้นบอกผู้ใช้ว่าพูดได้เลย เพราะไม่มีปุ่มไมโครโฟนให้แตะ */
   listening: boolean;
+  /** ที่นี่ใช้โหมดสรุปการประชุมได้: หน้าเริ่มต้นจึงมีทางเข้าโหมดนี้ให้เห็น */
+  meetingAvailable: boolean;
   /** ผู้ใช้เลือกคำถามตัวอย่าง */
   onSuggest: (text: string) => void;
   /** เปิดลิงก์ในเบราว์เซอร์ในตัว (เฉพาะแอปเดสก์ท็อป) */
@@ -27,8 +29,22 @@ const SUGGESTIONS = [
   { icon: ListChecks, text: "ช่วยวางแผนงานสัปดาห์นี้" }
 ];
 
-export function Transcript({ messages, listening, onSuggest, onOpenLink, onShowFramed, onLinkOpened, onUndoMemory, privacyNote }: TranscriptProps) {
+/** คำสั่งนี้แอปทำเองทันทีโดยไม่ถาม AI (src/meeting/commands.ts) จึงแสดงเฉพาะที่ที่ใช้โหมดสรุปการประชุมได้ */
+const MEETING_SUGGESTION = { icon: NotebookPen, text: "เริ่มโหมดสรุปการประชุม" };
+
+export function Transcript({
+  messages,
+  listening,
+  meetingAvailable,
+  onSuggest,
+  onOpenLink,
+  onShowFramed,
+  onLinkOpened,
+  onUndoMemory,
+  privacyNote
+}: TranscriptProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const suggestions = meetingAvailable ? [...SUGGESTIONS, MEETING_SUGGESTION] : SUGGESTIONS;
 
   // เลื่อนตามข้อความล่าสุดเสมอ รวมถึงตอนคำตอบกำลังทยอยเข้ามา
   useEffect(() => {
@@ -47,7 +63,7 @@ export function Transcript({ messages, listening, onSuggest, onOpenLink, onShowF
         <p>ถามได้ทุกเรื่อง Javis ค้นข้อมูลล่าสุดจากเว็บและเปิดหน้าเว็บให้ได้</p>
 
         <ul className="suggestions" aria-label="คำถามตัวอย่าง">
-          {SUGGESTIONS.map(({ icon: Icon, text }) => (
+          {suggestions.map(({ icon: Icon, text }) => (
             <li key={text}>
               <button type="button" onClick={() => onSuggest(text)}>
                 <Icon size={17} aria-hidden />

@@ -156,6 +156,8 @@ interface SetupOptions {
   handsFree?: boolean;
   /** แอปมีกรอบสำหรับแสดงหน้าเว็บในตัว (เว็บในเบราว์เซอร์) */
   canFrame?: boolean;
+  /** คำสั่งที่แอปทำเองโดยไม่ถาม AI: คืน true เมื่อรับคำสั่งนั้นไปทำแล้ว */
+  onCommand?: (text: string) => boolean;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -173,6 +175,7 @@ function setup(options: SetupOptions = {}) {
     chat: chat.stream,
     now: () => clock.time,
     handsFree: options.handsFree,
+    onCommand: options.onCommand,
     wait: (ms) => {
       const done = deferred<void>();
       waits.push({ ms, done });
@@ -1238,6 +1241,98 @@ describe("ConversationController", () => {
     await settle();
     controller.finishListening();
     expect(recognizer.stopCalls).toBe(1);
+  });
+
+  describe("คำสั่งที่แอปทำเองโดยไม่ถาม AI", () => {
+    /** แอปรับเฉพาะคำสั่งเริ่มโหมดประชุม และจดว่าถูกถามด้วยคำใดบ้าง */
+    function commands() {
+      const asked: string[] = [];
+      const onCommand = (text: string) => {
+        asked.push(text);
+        return text === "เริ่มโหมดประชุม";
+      };
+      return { asked, onCommand };
+    }
+
+    it("สั่งด้วยเสียง: ไม่ถาม AI ไม่เพิ่มข้อความ และออกจากโหมดเสียงเพื่อให้โหมดนั้นใช้ไมโครโฟนต่อได้", async () => {
+      const { asked, onCommand } = commands();
+      const { recognizer, synthesizer, chat, controller } = setup({ handsFree: true, onCommand });
+
+      void controller.start();
+      await settle();
+      recognizer.current.result.resolve("เริ่มโหมดประชุม");
+      await settle();
+
+      expect(asked).toEqual(["เริ่มโหมดประชุม"]);
+      expect(chat.calls).toHaveLength(0);
+      expect(synthesizer.spoken).toEqual([]);
+      expect(controller.getState()).toMatchObject({ phase: "idle", active: false, messages: [], notice: null });
+      expect(recognizer.listens).toHaveLength(1);
+    });
+
+    it("พิมพ์สั่ง: ไม่ถาม AI เหมือนกัน", async () => {
+      const { onCommand } = commands();
+      const { chat, controller } = setup({ onCommand });
+
+      controller.sendText("เริ่มโหมดประชุม");
+      await settle();
+
+      expect(chat.calls).toHaveLength(0);
+      expect(controller.getState()).toMatchObject({ phase: "idle", messages: [] });
+    });
+
+    it("คำพูดอื่น: ส่งไปถาม AI ตามปกติ", async () => {
+      const { asked, onCommand } = commands();
+      const { chat, controller } = setup({ onCommand });
+
+      controller.sendText("พรุ่งนี้มีประชุมกี่โมง");
+      await settle();
+
+      expect(asked).toEqual(["พรุ่งนี้มีประชุมกี่โมง"]);
+      expect(chat.current.messages).toEqual([{ role: "user", content: "พรุ่งนี้มีประชุมกี่โมง" }]);
+    });
+  });
+
+  describe("บทสนทนาที่มาจากโหมดอื่น", () => {
+    const MEETING = { transcript: "[00:05] วันนี้คุยเรื่องเปิดตัวสินค้าใหม่", minutes: 12, startedAt: 1_000_000 };
+
+    it("เพิ่มคำขอของผู้ใช้กับคำตอบ (เช่นคำสรุปการประชุม) ลงบทสนทนา โดยไม่ถาม AI และไม่เปลี่ยนจังหวะ", () => {
+      const { chat, controller } = setup();
+
+      controller.addExchange("  สรุปการประชุม (12 นาที)  ", { text: "ภาพรวม: คุยเรื่องเปิดตัวสินค้า\n", meeting: MEETING });
+
+      const { messages, phase } = controller.getState();
+      expect(messages.map(({ role, text, meeting }) => ({ role, text, meeting }))).toEqual([
+        { role: "user", text: "สรุปการประชุม (12 นาที)", meeting: undefined },
+        { role: "assistant", text: "ภาพรวม: คุยเรื่องเปิดตัวสินค้า", meeting: MEETING }
+      ]);
+      expect(new Set(messages.map((message) => message.id)).size).toBe(2);
+      expect(phase).toBe("idle");
+      expect(chat.calls).toHaveLength(0);
+    });
+
+    it("คำถามถัดไปเห็นคำสรุปเป็นประวัติ จึงถามต่อจากการประชุมได้", async () => {
+      const { chat, controller } = setup();
+
+      controller.addExchange("สรุปการประชุม (12 นาที)", { text: "ภาพรวม: คุยเรื่องเปิดตัวสินค้า", meeting: MEETING });
+      controller.sendText("ใครรับผิดชอบเรื่องใบเสนอราคา");
+      await settle();
+
+      expect(chat.current.messages).toEqual([
+        { role: "user", content: "สรุปการประชุม (12 นาที)" },
+        { role: "assistant", content: "ภาพรวม: คุยเรื่องเปิดตัวสินค้า" },
+        { role: "user", content: "ใครรับผิดชอบเรื่องใบเสนอราคา" }
+      ]);
+    });
+
+    it("คำขอหรือคำตอบว่าง: ไม่เพิ่มอะไร", () => {
+      const { controller } = setup();
+
+      controller.addExchange("   ", { text: "คำตอบ" });
+      controller.addExchange("คำขอ", { text: "   " });
+
+      expect(controller.getState().messages).toEqual([]);
+    });
   });
 
   describe("แสดงหน้าเว็บในกรอบของแอป", () => {

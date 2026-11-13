@@ -76,6 +76,22 @@ export interface ConversationMessage {
   link?: PageLink;
   fill?: FillRequest;
   memoryNotes?: MemoryNote[];
+  /** ข้อความนี้คือคำสรุปการประชุม: บันทึกคำพูดทั้งหมดที่ใช้สรุป ให้ผู้ใช้คัดลอกหรือดาวน์โหลดได้ */
+  meeting?: MeetingRecord;
+}
+
+/** บันทึกการประชุมที่ส่งให้ AI สรุป */
+export interface MeetingTranscript {
+  /** คำพูดทั้งหมดที่จดได้ บรรทัดละช่วงคำพูด */
+  transcript: string;
+  /** ความยาวของการประชุมเป็นนาที */
+  minutes: number;
+}
+
+/** บันทึกของการประชุมที่สรุปแล้ว แนบไว้กับข้อความคำสรุป */
+export interface MeetingRecord extends MeetingTranscript {
+  /** เวลาที่เริ่มประชุม (มิลลิวินาทีของนาฬิกาเครื่อง) */
+  startedAt: number;
 }
 
 /**
@@ -137,6 +153,8 @@ export interface ChatStreamOptions {
   memories?: MemoryEntry[];
   /** แอปแสดงหน้าเว็บในกรอบของตัวเองได้ ขอให้เซิร์ฟเวอร์ตรวจมาด้วยว่าหน้าที่จะเปิดยอมให้แสดงในกรอบไหม */
   frames?: boolean;
+  /** ขอให้สรุปบันทึกการประชุมนี้ แทนการตอบบทสนทนา (โหมดสรุปการประชุม) */
+  meeting?: MeetingTranscript;
 }
 
 /** ส่งประวัติบทสนทนาไปขอคำตอบ เรียก onEvent ทีละเหตุการณ์ และคืนข้อความคำตอบเต็มเมื่อจบ */

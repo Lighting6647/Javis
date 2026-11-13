@@ -8,6 +8,7 @@ import { startClaudeReply } from "./claudeClient.js";
 import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
 import { decideFraming } from "./frameCheck.js";
+import { buildMeetingInstructions, buildMeetingPrompt, MAX_MEETING_TOKENS, meetingSchema } from "./meeting.js";
 import {
   createGeminiInteractionTranslator,
   geminiInteractionsHeaders,
@@ -408,6 +409,11 @@ export const chatRequestSchema = z.object({
    * เซิร์ฟเวอร์จึงตรวจให้ว่าหน้าที่จะเปิดยอมให้แสดงในกรอบไหม แอปเดสก์ท็อปและแอปมือถือไม่ส่งค่านี้ เพราะมีวิธีเปิดหน้าของตัวเอง
    */
   frames: z.boolean().optional(),
+  /**
+   * โหมดสรุปการประชุม: บันทึกคำพูดที่หน้าเว็บจดไว้ ขอให้ AI สรุปครั้งเดียว (server/meeting.ts)
+   * คำขอแบบนี้ไม่ใช้ประวัติบทสนทนา ไม่ค้นเว็บ และไม่ให้ AI เรียกเครื่องมือใด
+   */
+  meeting: meetingSchema.optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
   diagnose: z.string().max(200).optional(),
   /** โมเดลค้นเว็บที่ผู้ถือรหัสวินิจฉัยขอลองในคำขอนี้ คำขอที่ไม่มีรหัสจะถูกเมิน */
@@ -553,8 +559,10 @@ interface ReplyOptions {
   tools: boolean;
   /** ส่งตัวเลือกเสริมของผู้ให้บริการไปด้วย (เช่น ระดับการคิด) */
   extras: boolean;
-  /** คำสั่งระบบที่ใช้แทนชุดปกติ สำหรับขั้นตอบจากผลค้นของบริการค้นเว็บภายนอก */
+  /** คำสั่งระบบที่ใช้แทนชุดปกติ สำหรับขั้นตอบจากผลค้นของบริการค้นเว็บภายนอก และการสรุปการประชุม */
   instructions?: string;
+  /** เพดานโทเค็นของคำตอบที่ใช้แทนค่าปกติ สำหรับคำตอบที่ยาวกว่าการสนทนา เช่นคำสรุปการประชุม */
+  maxTokens?: number;
 }
 
 /**
@@ -580,7 +588,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const clientGone = new AbortController();
   response.on("close", () => clientGone.abort());
 
-  const { messages, page, memories, diagnose } = parsed.data;
+  const { messages, page, memories, diagnose, meeting } = parsed.data;
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
@@ -699,7 +707,10 @@ export const chatHandler: RequestHandler = async (request, response) => {
     const target = `${ai.apiStyle} ${ai.chatModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
 
     if (ai.apiStyle === "claude") {
-      const { fixed, personal } = buildInstructionParts(page, memories, options.webSearch, describeToday());
+      // คำสั่งที่ใช้แทนชุดปกติ (การสรุปการประชุม) ไม่มีส่วนเฉพาะตัวผู้ใช้ แต่ Claude ไม่รับส่วนที่ว่างเปล่า
+      const { fixed, personal } = options.instructions
+        ? { fixed: options.instructions, personal: "เขียนคำตอบเป็นภาษาไทย" }
+        : buildInstructionParts(page, memories, options.webSearch, describeToday());
       return tracked(target, () =>
         startClaudeReply({
           connection: { apiKey, baseUrl: ai.baseUrl },
@@ -751,7 +762,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
               instructions,
               messages: turns,
               tools: options.tools ? tools : [],
-              maxTokens: MAX_CHAT_STYLE_TOKENS,
+              maxTokens: options.maxTokens ?? MAX_CHAT_STYLE_TOKENS,
               reasoningEffort: options.extras ? ai.reasoningEffort : undefined
             })
           }),
@@ -769,7 +780,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
           stream: true,
           // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
           store: false,
-          max_output_tokens: MAX_REPLY_TOKENS,
+          max_output_tokens: options.maxTokens ?? MAX_REPLY_TOKENS,
           instructions,
           input,
           tools,
@@ -782,18 +793,27 @@ export const chatHandler: RequestHandler = async (request, response) => {
   /** ผู้ให้บริการรายนี้มีตัวเลือกเสริมที่โมเดลบางรุ่นอาจไม่รับ */
   const hasOptionalSettings = ai.apiStyle === "claude" || (ai.apiStyle === "chat" && Boolean(ai.reasoningEffort));
 
+  /**
+   * คำขอแรกของรอบนี้: การสนทนาปกติ หรือการสรุปการประชุม
+   * ซึ่งส่งบันทึกการประชุมแทนประวัติบทสนทนา ใช้คำสั่งของตัวเอง ตอบได้ยาวกว่า และไม่ให้ AI ค้นเว็บหรือเรียกเครื่องมือใด
+   */
+  const input = meeting ? [{ role: "user", content: buildMeetingPrompt(meeting) }] : messages;
+  const base: Pick<ReplyOptions, "tools" | "instructions" | "maxTokens"> = meeting
+    ? { tools: false, instructions: buildMeetingInstructions(describeToday()), maxTokens: MAX_MEETING_TOKENS }
+    : { tools: true };
+
   /** คำขอนี้ให้ AI ค้นเว็บได้ (ยังไม่ถูกปิดหรือพักไว้) */
-  const searching = ai.webSearch && (probing || (webSearchUsable && Date.now() >= webSearchPausedUntil));
+  const searching = !meeting && ai.webSearch && (probing || (webSearchUsable && Date.now() >= webSearchPausedUntil));
   /** เครื่องมือค้นของผู้ให้บริการอยู่ในคำขอแรก การถูกปฏิเสธจึงอาจมาจากการค้น */
   const searchingInline = searching && !separateSearch;
 
   let reply: ReplyStart;
   try {
-    reply = await startReply(messages, { webSearch: searching, tools: true, extras: optionalSettingsUsable });
+    reply = await startReply(input, { ...base, webSearch: searching, extras: optionalSettingsUsable });
 
     // คำขอถูกปฏิเสธตั้งแต่ต้น: สาเหตุที่พบบ่อยคือโมเดลหรือบัญชีไม่รับการค้นเว็บ ลองใหม่หนึ่งครั้งโดยไม่ค้นเว็บ
     if (searchingInline && (isRejectedShape(reply) || isSearchUnavailable(reply))) {
-      const retry = await startReply(messages, { webSearch: false, tools: true, extras: optionalSettingsUsable });
+      const retry = await startReply(input, { ...base, webSearch: false, extras: optionalSettingsUsable });
       if (probing) {
         // การลองของผู้ถือรหัสวินิจฉัยไม่เปลี่ยนสถานะการค้น
       } else if (retry.ok && reply.status === 429) {
@@ -814,7 +834,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
     // โมเดลบางรุ่นไม่รับตัวเลือกเสริมของคำขอ ลองใหม่หนึ่งครั้งแบบพื้นฐาน
     // (การขอค้นเป็นขั้นแยกเป็นแค่เครื่องมือของ Javis อีกตัวหนึ่ง จึงคงไว้ได้ ส่วนเครื่องมือค้นของผู้ให้บริการตัดออก)
     if (isRejectedShape(reply) && hasOptionalSettings && optionalSettingsUsable) {
-      const retry = await startReply(messages, { webSearch: searching && separateSearch, tools: true, extras: false });
+      const retry = await startReply(input, { ...base, webSearch: searching && separateSearch, extras: false });
       if (retry.ok) {
         optionalSettingsUsable = false;
         console.warn(

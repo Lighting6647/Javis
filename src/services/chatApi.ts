@@ -15,7 +15,7 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 /** ส่งประวัติบทสนทนาไปที่ backend และรับคำตอบแบบสตรีมทีละเหตุการณ์ */
-export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, memories, frames }) => {
+export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, memories, frames, meeting }) => {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/api/chat`, {
@@ -25,7 +25,8 @@ export const streamChatReply: StreamChat = async (messages, { signal, onEvent, p
         messages,
         ...(page ? { page } : {}),
         ...(memories && memories.length > 0 ? { memories } : {}),
-        ...(frames ? { frames: true } : {})
+        ...(frames ? { frames: true } : {}),
+        ...(meeting ? { meeting } : {})
       }),
       signal
     });

@@ -6,6 +6,8 @@ import type { IncomingHttpHeaders } from "node:http";
 import { config, normalizeOrigin } from "./config.js";
 
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+/** จำนวนครั้งที่ขอสรุปการประชุมได้ในช่วงเวลาเดียวกัน พอสำหรับลองสรุปซ้ำเมื่อพลาด แต่ไม่พอให้ใช้เผาโควตา */
+const MEETING_RATE_LIMIT_MAX = 6;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILED_ATTEMPTS = 10;
 
@@ -84,6 +86,26 @@ export const chatRateLimiter = rateLimit({
   },
   handler: (_request, response) => {
     response.status(429).json({ error: "ส่งข้อความถี่เกินไป กรุณารอสักครู่แล้วลองใหม่" });
+  }
+});
+
+/**
+ * การสรุปการประชุม: หนึ่งคำขอส่งบันทึกยาวได้ถึงหลายหมื่นโทเค็น มากกว่าข้อความสนทนาหลายสิบเท่า
+ * จึงมีเพดานจำนวนครั้งของตัวเองซ้อนจากเพดานของข้อความ เพื่อไม่ให้ใครใช้ทางนี้เผาโควตา AI ของผู้ดูแล
+ * คำขอสนทนาปกติ (ไม่มีบันทึกการประชุม) ไม่ถูกนับ
+ */
+export const meetingRateLimiter = rateLimit({
+  windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
+  limit: MEETING_RATE_LIMIT_MAX,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skip: (request) => !(typeof request.body === "object" && request.body !== null && "meeting" in request.body),
+  keyGenerator: (request, response) => {
+    const userName: unknown = response.locals.userName;
+    return typeof userName === "string" ? `meeting:user:${userName}` : `meeting:${ipKeyGenerator(request.ip ?? "")}`;
+  },
+  handler: (_request, response) => {
+    response.status(429).json({ error: "ขอสรุปการประชุมถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ บันทึกที่จดไว้ยังอยู่ครบ" });
   }
 });
 

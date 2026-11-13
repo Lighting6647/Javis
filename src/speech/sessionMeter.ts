@@ -1,5 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { isDesktopApp } from "../browser/browserStore";
+import { micLevelStore } from "../services/micLevelStore";
+import { themeStore } from "../services/themeStore";
 import { browserMeterDeps, canMeterMicrophone, createMicMeter, type MicMeter } from "./micMeter";
 
 /** อุปกรณ์และเบราว์เซอร์นี้วัดระดับเสียงไมโครโฟนให้วงคลื่นเสียงได้ไหม (ใช้ซ่อนตัวเลือกในหน้าตั้งค่าเมื่อวัดไม่ได้ด้วย) */
@@ -29,6 +31,11 @@ let meter: MicMeter | null | undefined;
 export function getSessionMeter(): MicMeter | null {
   if (meter === undefined) meter = micLevelsAvailable() ? createMicMeter(browserMeterDeps()) : null;
   return meter;
+}
+
+/** ควรเปิดไมโครโฟนเส้นที่ใช้วัดเสียงไว้ระหว่างฟังไหม: เฉพาะธีมที่มีวงคลื่นเสียง และผู้ใช้ไม่ได้ปิดตัวเลือกไว้ */
+export function sessionMeterWanted(): boolean {
+  return themeStore.get() === "holo" && micLevelStore.get();
 }
 
 /** สถานะสิทธิ์ไมโครโฟนของเว็บนี้ โดยไม่ทำให้เบราว์เซอร์ถามผู้ใช้ หรือ null ถ้าเบราว์เซอร์ไม่บอก */

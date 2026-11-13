@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "../browser/browserStore";
+import { appCommands } from "../conversation/appCommands";
 import { ConversationController } from "../conversation/controller";
 import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
@@ -39,6 +40,8 @@ export function useConversation({ ready }: ConversationOptions) {
       chat: streamChatReply,
       // เบราว์เซอร์บนคอมพิวเตอร์ฟังตลอดเวลา: เงียบก็ฟังต่อ ไม่ต้องให้ผู้ใช้แตะไมโครโฟนใหม่ทุกครั้ง
       handsFree: handsFreeAvailable(),
+      // คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" (ลงทะเบียนที่ src/hooks/useMeeting.ts)
+      onCommand: appCommands.handle,
       // แอปเดสก์ท็อปเปิดหน้าเว็บในเบราว์เซอร์ในตัว ที่อื่นเปิดแท็บใหม่หรือเบราว์เซอร์ของระบบ
       openPage: (url) => (isDesktopApp() ? browserStore.open(url) : openExternalPage(url)),
       // เว็บในเบราว์เซอร์: หน้าที่เจ้าของเว็บยอมให้แสดงในกรอบ แสดงในพื้นที่หลักของ Javis เลย ไม่ต้องเปิดแท็บใหม่

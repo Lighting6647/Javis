@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { describeLinkStatus, needsPopupHelp } from "../conversation/pageLink";
 import { hostOf, sourceLabel, splitLinks } from "../conversation/richText";
 import type { ConversationMessage, FillRequest } from "../conversation/types";
+import { MeetingExport } from "./MeetingExport";
 import { PopupHelp } from "./PopupHelp";
 import { SearchSuggestions } from "./SearchSuggestions";
 
@@ -101,6 +102,9 @@ export function MessageBubble({ message, onOpenLink, onShowFramed, onLinkOpened,
         </WebLink>
       )}
       {message.link && needsPopupHelp(message.link) && <PopupHelp />}
+
+      {/* คำสรุปการประชุม: ให้นำคำสรุปและบันทึกคำพูดออกไปเก็บได้ เพราะบทสนทนาไม่ได้ถูกเก็บไว้เมื่อปิดหน้า */}
+      {message.meeting && message.text && <MeetingExport record={{ ...message.meeting, summary: message.text }} />}
 
       {message.fill && fill && (
         <span className={`fill-status ${message.fill.status}`}>

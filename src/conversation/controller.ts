@@ -62,6 +62,11 @@ export interface ConversationDeps {
   handsFree?: boolean;
   /** หน่วงเวลา (มิลลิวินาที) ก่อนลองฟังใหม่ ค่าเริ่มต้นใช้ตัวจับเวลาของเครื่อง แยกไว้เพื่อให้ทดสอบได้โดยไม่ต้องรอจริง */
   wait?: (ms: number) => Promise<void>;
+  /**
+   * คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" ถูกถามด้วยทุกคำพูดและข้อความของผู้ใช้
+   * คืน true เมื่อแอปรับคำสั่งนั้นไปทำแล้ว ซึ่งบทสนทนาจะออกจากโหมดเสียง ให้โหมดนั้นใช้ไมโครโฟนต่อได้
+   */
+  onCommand?: (text: string) => boolean;
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -208,6 +213,24 @@ export class ConversationController {
     // ยกเว้นโหมดฟังตลอดเวลา ซึ่งต้องกลับมาฟังต่อเองหลังตอบ เพราะไม่มีปุ่มให้ผู้ใช้แตะเปิดใหม่
     if (this.state.phase === "starting" && !this.deps.handsFree) this.update({ active: false });
     void this.handle(clean, epoch);
+  };
+
+  /**
+   * เพิ่มคำขอของผู้ใช้กับคำตอบที่ได้จากโหมดอื่นลงบทสนทนา โดยไม่ถาม AI (เช่นคำสรุปการประชุม)
+   * คำถามถัดไปจึงเห็นคำตอบนั้นเป็นประวัติ และถามต่อจากเรื่องเดิมได้
+   */
+  addExchange = (userText: string, reply: Pick<ConversationMessage, "text" | "meeting">): void => {
+    const question = userText.trim();
+    const answer = reply.text.trim();
+    if (!question || !answer) return;
+
+    this.update({
+      messages: [
+        ...this.state.messages,
+        { id: this.nextId(), role: "user", text: question },
+        { id: this.nextId(), role: "assistant", text: answer, ...(reply.meeting ? { meeting: reply.meeting } : {}) }
+      ]
+    });
   };
 
   /** ผู้ใช้กดยืนยันรายการกรอกฟอร์มที่รออยู่ */
@@ -425,6 +448,12 @@ export class ConversationController {
 
   /** รับคำพูดหรือข้อความของผู้ใช้: ถ้าเป็นคำยืนยัน/ยกเลิกรายการกรอกฟอร์มให้จัดการเอง ไม่เช่นนั้นส่งไปถาม AI */
   private async handle(userText: string, epoch: number): Promise<void> {
+    if (this.deps.onCommand?.(userText)) {
+      // แอปรับคำสั่งนี้ไปทำเอง (เช่นเริ่มจดการประชุม): ออกจากโหมดเสียง เพื่อให้โหมดนั้นใช้ไมโครโฟนต่อได้
+      this.stop();
+      return;
+    }
+
     const decision = this.state.pendingFillId ? interpretFillDecision(userText) : null;
     if (!decision) {
       await this.respond(userText, epoch);

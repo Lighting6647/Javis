@@ -307,6 +307,62 @@ iframe.browser-frame { width: 100%; }
 .toast.error { border-color: var(--danger); background: var(--danger-soft); box-shadow: inset 3px 0 0 var(--danger); }
 .toast.info { box-shadow: inset 3px 0 0 var(--accent); }
 
+/* ---------- โหมดสรุปการประชุม ---------- */
+/* ทางเข้าบนแถบบน: มีชื่อกำกับบนจอกว้าง เพราะไอคอนอย่างเดียวบอกไม่ได้ว่าทำอะไร จอแคบเหลือไอคอน */
+.meeting-entry { height: 34px; display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; font-size: 13px; font-weight: 600; white-space: nowrap; transition: color .15s, background .15s, border-color .15s, transform .15s; }
+.meeting-entry:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface); }
+.meeting-entry:active { transform: scale(.96); }
+
+/* แผงการประชุมแทนที่บทสนทนาตลอดการประชุม: หัวแผงและท้ายแผงอยู่กับที่ รายการคำพูดตรงกลางเลื่อนได้เอง */
+.meeting { flex: 1; min-height: 0; width: min(var(--content-width), 100%); display: flex; flex-direction: column; gap: var(--space-3); margin-inline: auto; padding: var(--space-4) var(--space-4) var(--space-3); }
+.meeting > .toast { width: 100%; margin: 0; }
+.meeting-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.meeting-state { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.meeting-badge { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); color: var(--text); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.meeting-badge i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--text-faint); }
+/* จุดแดงกะพริบ: สัญญาณที่คนทั่วไปรู้ว่ากำลังบันทึกอยู่ */
+.meeting-badge.recording i { background: var(--danger); animation: pulse 1.2s infinite; }
+.meeting-badge.paused { color: var(--warning); border-color: var(--warning); }
+.meeting-badge.paused i { background: var(--warning); }
+.meeting-badge.summarizing { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); }
+.meeting-badge.summarizing i { background: var(--accent); animation: pulse 1s infinite; }
+.meeting-clock { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.meeting-count { color: var(--text-muted); font-size: 13px; }
+.meeting-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.meeting-actions .btn { padding: 8px 14px; font-size: 13px; }
+.meeting-actions .btn-quiet { padding: 8px 10px; }
+.meeting-confirm { color: var(--text); font-size: 13px; font-weight: 600; }
+.btn-danger { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+.btn-danger:hover:not(:disabled) { color: var(--bg); background: var(--danger); }
+
+.meeting-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.meeting-lines { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: var(--space-3) var(--space-4); list-style: none; }
+.meeting-lines li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr); align-items: baseline; gap: var(--space-2); }
+.meeting-lines time { color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.meeting-lines p { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+/* คำที่กำลังได้ยินและยังเปลี่ยนได้: สีจางกว่า มีขีดกะพริบท้ายบรรทัด */
+.meeting-lines li.partial p { color: var(--text-muted); }
+.meeting-lines li.partial p::after { content: ""; display: inline-block; width: 6px; height: 1em; margin-left: 4px; vertical-align: text-bottom; background: var(--accent); animation: pulse 1s infinite; }
+.meeting-empty { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-5) var(--space-4); color: var(--text-muted); text-align: center; }
+.meeting-empty svg { color: var(--accent); }
+.meeting-empty strong { color: var(--text); font-size: 17px; font-weight: 600; }
+.meeting-empty p { max-width: 360px; font-size: 14px; }
+.meeting-summary { margin: var(--space-3) var(--space-4) 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--accent-ring); border-radius: var(--radius-md); background: var(--accent-soft); }
+.meeting-summary h2 { display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.meeting-summary p { font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
+.meeting-summary-wait { display: flex; flex-direction: column; gap: var(--space-2); }
+.meeting-foot { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.meeting-foot p { flex: 1 1 300px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
+.meeting-foot .meeting-export { margin-top: 0; }
+
+/* ปุ่มนำบันทึกการประชุมออกไปใช้ อยู่ใต้คำสรุปในบทสนทนา และท้ายแผงการประชุม */
+.meeting-export { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-1); }
+.meeting-export button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); color: var(--text-muted); background: transparent; font-size: 12px; font-weight: 600; transition: color .15s, background .15s, border-color .15s, transform .15s; }
+.meeting-export button:hover { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); }
+.meeting-export button:active { transform: scale(.97); }
+.meeting-export button.done { color: var(--accent); border-color: var(--accent-ring); }
+.meeting-export button.failed { color: var(--danger); border-color: var(--danger); }
+
 /* ---------- แถบแจ้งสถานะบริการ AI: อยู่ใต้หัวจอเต็มความกว้าง เนื้อหาเรียงตรงกับบทสนทนา ---------- */
 .service-banner { flex: none; padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) var(--space-3) max(var(--space-4), env(safe-area-inset-left)); border-bottom: 1px solid var(--danger); background: var(--danger-soft); font-size: 13px; line-height: 1.55; animation: toast-in .25s var(--ease); }
 .service-banner.voice { border-bottom-color: var(--warning); background: rgba(251, 191, 36, .1); }
@@ -388,8 +444,23 @@ iframe.browser-frame { width: 100%; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
+/* แถบบนเริ่มแน่น: ปุ่มเข้าโหมดประชุมเหลือไอคอน ชื่อยังอยู่ให้โปรแกรมอ่านหน้าจอผ่านป้ายของปุ่ม */
+@media (max-width: 720px) {
+  .meeting-entry { width: 34px; justify-content: center; padding: 0; }
+  .meeting-entry span { display: none; }
+}
+
 /* ---------- Small screens ---------- */
 @media (max-width: 640px) {
+  /* โหมดสรุปการประชุม: ปุ่มหลักกว้างเต็มแถว แตะง่าย และตัวอักษรของคำพูดใหญ่เท่าบทสนทนา */
+  .meeting { gap: var(--space-2); padding: 12px 12px 10px; }
+  .meeting-actions { width: 100%; }
+  .meeting-actions .btn-primary { flex: 1; }
+  .meeting-lines { padding: 10px 12px; }
+  .meeting-lines li { grid-template-columns: 3.6em minmax(0, 1fr); }
+  .meeting-lines p, .meeting-summary p { font-size: 16px; }
+  .meeting-summary { margin: 10px 12px 0; padding: 10px 12px; }
+
   /* ชื่อแท็บซ่อนบนจอแคบ เหลือไอคอนพร้อมชื่อสำหรับโปรแกรมอ่านหน้าจอ */
   .view-switch button { padding-inline: 10px; font-size: 0; gap: 0; }
 
@@ -638,6 +709,17 @@ html[data-theme="holo"] .field input { background: rgba(4, 26, 38, .7); }
 html[data-theme="holo"] .browser-bar { background: rgba(4, 26, 38, .85); }
 html[data-theme="holo"] .browser-address { background: rgba(2, 11, 20, .7); }
 html[data-theme="holo"] .skeleton { background: linear-gradient(90deg, rgba(34, 211, 238, .06) 25%, rgba(34, 211, 238, .2) 50%, rgba(34, 211, 238, .06) 75%); background-size: 200% 100%; }
+
+/* ---------- โหมดสรุปการประชุม ---------- */
+html[data-theme="holo"] .meeting-entry:hover { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); box-shadow: var(--glow); }
+html[data-theme="holo"] .meeting-body { background: var(--corners), rgba(4, 26, 38, .62); }
+html[data-theme="holo"] .meeting-badge { letter-spacing: .04em; }
+html[data-theme="holo"] .meeting-badge.recording i { box-shadow: 0 0 8px var(--danger); }
+html[data-theme="holo"] .meeting-clock { color: var(--accent-hover); text-shadow: 0 0 12px rgba(34, 211, 238, .5); }
+html[data-theme="holo"] .meeting-lines time { color: var(--accent); opacity: .8; }
+html[data-theme="holo"] .meeting-summary { background: var(--corners), rgba(34, 211, 238, .09); }
+html[data-theme="holo"] .meeting-export button:hover { box-shadow: var(--glow); }
+html[data-theme="holo"] .btn-danger:hover:not(:disabled) { color: var(--accent-contrast); box-shadow: 0 0 18px rgba(255, 122, 107, .35); }
 
 @keyframes rotate { to { transform: rotate(360deg); } }
 @keyframes rotate-back { to { transform: rotate(-360deg); } }

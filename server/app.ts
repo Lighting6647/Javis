@@ -10,6 +10,7 @@ import {
   corsMiddleware,
   errorHandler,
   loginRateLimiter,
+  meetingRateLimiter,
   originGuard,
   permissionsPolicy,
   securityHeaders,
@@ -19,6 +20,11 @@ import { transcribeHandler } from "./transcribe.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
+/**
+ * ขนาดเนื้อหาสูงสุดของ /api/chat: บันทึกการประชุมยาวสุด 80,000 ตัวอักษร (server/meeting.ts) ซึ่งตัวอักษรไทยใช้ 3 ไบต์
+ * รวมกับประวัติบทสนทนาและความจำเต็มเพดาน ยังไม่ถึงค่านี้
+ */
+const CHAT_BODY_LIMIT = "500kb";
 
 export interface AppOptions {
   /**
@@ -61,7 +67,11 @@ export function createApp(options: AppOptions = {}): Express {
     response.set("Cache-Control", "no-store").json({ ok: true, service: "javis-voice-agent", ai: aiAccount.snapshot() });
   });
 
-  app.use("/api", originGuard, corsMiddleware, express.json({ limit: "200kb" }));
+  app.use("/api", originGuard, corsMiddleware);
+  // บันทึกการประชุมยาวกว่าข้อความสนทนามาก เส้นทางนี้จึงรับเนื้อหาได้ใหญ่กว่าเส้นทางอื่น และต้องอยู่ก่อนตัวอ่านเนื้อหาของเส้นทางทั่วไป
+  // คำขอสรุปการประชุมมีเพดานจำนวนครั้งของตัวเองซ้อนอีกชั้น เพราะแต่ละครั้งใช้โทเค็นมากกว่าข้อความสนทนาหลายสิบเท่า
+  app.post("/api/chat", requireAuth, express.json({ limit: CHAT_BODY_LIMIT }), chatRateLimiter, meetingRateLimiter, chatHandler);
+  app.use("/api", express.json({ limit: "200kb" }));
   // สถานะบัญชี AI สำหรับแอป: ข้อมูลหมวดกว้างชุดเดียวกับ /health แต่อยู่ใต้ /api เพื่อให้แอปมือถือเรียกข้ามต้นทางได้
   app.get("/api/status", async (_request, response) => {
     await settleStatus();
@@ -69,7 +79,6 @@ export function createApp(options: AppOptions = {}): Express {
   });
   app.get("/api/auth/session", sessionHandler);
   app.post("/api/auth/login", loginRateLimiter, loginHandler);
-  app.post("/api/chat", requireAuth, chatRateLimiter, chatHandler);
   app.post(
     "/api/transcribe",
     requireAuth,

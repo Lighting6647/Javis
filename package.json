@@ -14,6 +14,7 @@
     "android": "npm run mobile:sync && cap open android",
     "ios": "npm run mobile:sync && cap open ios",
     "test": "vitest run src server",
+    "e2e": "npm run build && node e2e/meeting.e2e.mjs",
     "lint": "eslint .",
     "desktop": "npm run build && concurrently -k -s first \"npm:start\" \"electron desktop/main.cjs\"",
     "desktop:app": "electron desktop/main.cjs"

@@ -1,8 +1,10 @@
-import { SPEECH_LANGUAGE, SpeechError, type SpeechErrorCode, type SpeechRecognizer } from "./types";
+import { type DictationHandlers, SPEECH_LANGUAGE, SpeechError, type SpeechErrorCode, type SpeechRecognizer } from "./types";
 
 /** ส่วนของ Web Speech API ที่ใช้งานจริง ประกาศเองเพราะยังไม่อยู่ในชนิดมาตรฐานของทุกเบราว์เซอร์ */
 interface WebRecognitionResultEvent {
-  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+  /** ผลลัพธ์แรกที่เปลี่ยนในเหตุการณ์นี้ ผลลัพธ์ก่อนหน้านั้นจบไปแล้วและเคยส่งมาแล้ว */
+  resultIndex?: number;
+  results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }>;
 }
 
 interface WebRecognition {
@@ -105,6 +107,69 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
         this.active = null;
         if (failure) reject(new SpeechError(failure));
         else resolve(transcript);
+      };
+
+      this.active = { recognition, reject };
+
+      try {
+        recognition.start();
+      } catch {
+        this.active = null;
+        reject(new SpeechError("unknown"));
+      }
+    });
+  }
+
+  /**
+   * ฟังต่อเนื่องสำหรับจดคำพูดยาว ๆ: ระบบฟังไม่จบเมื่อผู้พูดหยุด แต่ส่งข้อความของแต่ละช่วงคำพูดที่จบแล้วมาเรื่อย ๆ
+   * จึงไม่เสียคำพูดช่วงรอยต่อเหมือนการเปิดฟังใหม่ทุกประโยค เบราว์เซอร์ยังจบการฟังเองเป็นระยะ (เช่นเมื่อเงียบนาน)
+   * ซึ่งผู้เรียกต้องเรียกใหม่เพื่อฟังต่อ
+   */
+  dictate(handlers: DictationHandlers): Promise<void> {
+    this.cancel();
+
+    return new Promise<void>((resolve, reject) => {
+      const Recognition = getConstructor();
+      if (!Recognition) {
+        reject(new SpeechError("not-supported"));
+        return;
+      }
+
+      const recognition = new Recognition();
+      recognition.lang = SPEECH_LANGUAGE;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      /** คำที่ได้ยินของช่วงที่ยังไม่จบ ถ้าการฟังจบก่อนที่ช่วงนี้จะถูกยืนยัน จะส่งเป็นช่วงสุดท้าย เพื่อไม่ให้คำพูดหาย */
+      let pending = "";
+      let failure: SpeechErrorCode | null = null;
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        for (let index = event.resultIndex ?? 0; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          const text = result?.[0]?.transcript ?? "";
+          if (result?.isFinal) {
+            if (text.trim()) handlers.onFinal(text.trim());
+          } else {
+            interim += text;
+          }
+        }
+        pending = interim.trim();
+        handlers.onPartial(pending);
+      };
+
+      recognition.onerror = (event) => {
+        failure = mapError(event.error);
+      };
+
+      recognition.onend = () => {
+        if (this.active?.recognition !== recognition) return;
+        this.active = null;
+        if (pending) handlers.onFinal(pending);
+        if (failure) reject(new SpeechError(failure));
+        else resolve();
       };
 
       this.active = { recognition, reject };
