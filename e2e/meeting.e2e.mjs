@@ -174,14 +174,16 @@ try {
     await shot(page, "recording-1280");
 
     // จบและสรุป: คำขอเดียว
-    await page.route(
-      "**/api/chat",
-      async (route) => {
+    // หน่วงคำขอสรุปครั้งแรก เพื่อให้เห็นหน้าจอระหว่างรอคำสรุป แล้วปล่อยให้ผู้ตอบตัวถัดไปทำต่อ (เซิร์ฟเวอร์ หรือตัวตอบแทน AI)
+    // ไม่ใช้ตัวเลือก times: เมื่อผู้ตอบของหน้าหมดอายุกลางคำขอ เครื่องมือทดสอบจะปล่อยคำขอนั้นไปเอง ก่อนที่ตัวถัดไปจะได้ตอบ
+    let delayed = false;
+    await page.route("**/api/chat", async (route) => {
+      if (!delayed) {
+        delayed = true;
         await sleep(1200);
-        await route.fallback();
-      },
-      { times: 1 }
-    );
+      }
+      await route.fallback();
+    });
     const ttsBefore = await page.evaluate(() => window.__tts.calls.length);
     await button(page, "จบและสรุป").click();
     await page.waitForSelector(".meeting.summarizing");
