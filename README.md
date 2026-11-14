@@ -195,7 +195,7 @@ Image ตั้ง `NODE_ENV=production` ให้แล้ว รันด้�
 
 ## Deploy ขึ้น Vercel (ลิงก์สาธารณะ)
 
-เว็บสาธารณะของโปรเจกต์อยู่ที่ `https://javis-zeta.vercel.app` Vercel ดึง branch `main` ไป build เองทุกครั้งที่ push
+เว็บสาธารณะของโปรเจกต์อยู่ที่ `https://javis-bice.vercel.app` (project `javis` ในทีม Light) Vercel ดึง branch `main` ไป build เองทุกครั้งที่ push
 
 Javis ต้องมีเซิร์ฟเวอร์ เพราะหน้าเว็บเรียก `/api/...` บนที่อยู่เดียวกัน บน Vercel แบ่งงานกันแบบนี้ (`vercel.json`)
 
