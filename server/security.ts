@@ -39,8 +39,9 @@ export const securityHeaders: RequestHandler = helmet({
     directives: {
       "default-src": ["'self'"],
       "script-src": ["'self'"],
-      "style-src": ["'self'", "https://fonts.googleapis.com", ELECTRON_WEBVIEW_STYLE_HASH],
-      "font-src": ["'self'", "https://fonts.gstatic.com"],
+      // ฟอนต์อยู่ในแอปเอง (src/fonts.ts) จึงไม่ต้องเปิดให้โหลดสไตล์หรือฟอนต์จากที่อื่น
+      "style-src": ["'self'", ELECTRON_WEBVIEW_STYLE_HASH],
+      "font-src": ["'self'"],
       "img-src": ["'self'", "data:"],
       "media-src": ["'self'"],
       "connect-src": ["'self'"],

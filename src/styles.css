@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap");
+/* ฟอนต์ (Plus Jakarta Sans, Noto Sans Thai, Chakra Petch) อยู่ในแอปเอง โหลดจาก src/fonts.ts */
 
 /* ---------- Design tokens: Zinc neutral + emerald accent ---------- */
 :root {
@@ -306,6 +306,14 @@ iframe.browser-frame { width: 100%; }
 .toast { width: min(var(--content-width), 100%); margin: 0 auto var(--space-3); padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); font-size: 13px; line-height: 1.55; animation: toast-in .25s var(--ease); }
 .toast.error { border-color: var(--danger); background: var(--danger-soft); box-shadow: inset 3px 0 0 var(--danger); }
 .toast.info { box-shadow: inset 3px 0 0 var(--accent); }
+/* ส่วนที่แยกไฟล์โหลด (src/components/lazy): ป้ายระหว่างโหลดและข้อความเมื่อโหลดไม่สำเร็จ ลอยใต้แถบบน (สูงราว 59px)
+   เพื่อให้เห็นได้ไม่ว่าส่วนนั้นจะอยู่ตรงไหนของจอ และไม่บังช่องพิมพ์ด้านล่าง ตัวเลือกยาวขึ้นเพื่อชนะกฎ .app > * ของธีมโฮโลแกรม */
+.lazy-note, html[data-theme] .app > .lazy-note { position: fixed; z-index: 20; left: 16px; right: 16px; top: calc(max(var(--space-3), env(safe-area-inset-top)) + 58px); width: auto; max-width: var(--content-width); margin: 0 auto; }
+.lazy-note.info { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-overlay); }
+.lazy-note.error { background: linear-gradient(var(--danger-soft), var(--danger-soft)), var(--surface); box-shadow: inset 3px 0 0 var(--danger), var(--shadow-overlay); }
+.lazy-note-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.lazy-note-actions .btn { padding: 7px 12px; font-size: 13px; }
+.lazy-skeleton-row { width: min(320px, 85%); }
 
 /* ---------- โหมดสรุปการประชุม ---------- */
 /* ทางเข้าบนแถบบน: มีชื่อกำกับบนจอกว้าง เพราะไอคอนอย่างเดียวบอกไม่ได้ว่าทำอะไร จอแคบเหลือไอคอน */
