@@ -1,4 +1,5 @@
 // ตรวจโหมดสรุปการประชุมทั้งเส้นทางในเบราว์เซอร์จริง: เริ่มจด จดเงียบ ๆ พัก จบและสรุปครั้งเดียว นำบันทึกออก กู้บันทึกที่ค้าง และหลายแท็บ
+// รวมถึงส่วนที่แยกไฟล์โหลดเมื่อโหลดไม่สำเร็จ (กรณีที่ 6)
 // รัน: npm run build แล้ว node e2e/meeting.e2e.mjs · ตรวจเว็บที่ปล่อยแล้ว: TARGET_ORIGIN=https://... (จำลองคำตอบของ AI ที่เบราว์เซอร์ ไม่ใช้โควตา)
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -415,6 +416,46 @@ try {
     } finally {
       secured.stop();
     }
+  }
+
+  // ---------- 6. ส่วนที่แยกไฟล์โหลดไม่สำเร็จ (เน็ตหลุด หรือเว็บเพิ่ง deploy รุ่นใหม่): บอกผู้ใช้ ลองใหม่ได้ และไม่วนโหลดเอง ----------
+  if (wanted(6)) {
+    const context = await openContext();
+    let blocked = true;
+    let requests = 0;
+    await context.route(/\/assets\/VoiceSettingsDialog-[^/]+\.js$/, (route) => {
+      requests += 1;
+      return blocked ? route.fulfill({ status: 404, contentType: "text/plain", body: "" }) : route.continue();
+    });
+    // ไฟล์ที่โหลดไม่ได้และข้อผิดพลาดที่ LazyBoundary รับไว้ คือสิ่งที่กรณีนี้ตั้งใจให้เกิด
+    const { page, problems } = await openPage(context, {
+      expected: ["404", "dynamically imported module", "หน้าตั้งค่า", "LazyBoundary"]
+    });
+    // ให้การโหลดล่วงหน้าตอนเครื่องว่างล้มเหลวไปก่อน เหมือนผู้ใช้ที่เน็ตหลุดตั้งแต่เปิดหน้า
+    await sleep(2500);
+    await page.getByRole("button", { name: "ตั้งค่า", exact: true }).click();
+    const alert = page.locator(".lazy-note[role='alert']");
+    await alert.waitFor({ timeout: 5000 });
+    const requestsAtAlert = requests;
+    await sleep(1500);
+    const actions = await alert.getByRole("button").allInnerTexts();
+    check(
+      "โหลดหน้าตั้งค่าไม่สำเร็จ: บอกผู้ใช้พร้อมปุ่มลองอีกครั้ง โหลดหน้าใหม่ และปิด",
+      ["ลองอีกครั้ง", "โหลดหน้าใหม่", "ปิด"].every((name) => actions.some((text) => text.includes(name))),
+      JSON.stringify(actions)
+    );
+    check("โหลดไม่สำเร็จ: ไม่วนขอไฟล์ใหม่เอง", requests === requestsAtAlert && requests <= 3, `ขอไฟล์ ${requests} ครั้ง`);
+    check("โหลดไม่สำเร็จ: ส่วนอื่นของแอปยังใช้ได้", await page.locator(".app-header").isVisible());
+
+    blocked = false;
+    await alert.getByRole("button", { name: "ลองอีกครั้ง" }).click();
+    await page.waitForSelector("dialog.settings-dialog[open]", { timeout: 5000 });
+    check("เน็ตกลับมาแล้วกดลองอีกครั้ง: หน้าตั้งค่าเปิดขึ้นและข้อความแจ้งหายไป", (await page.locator(".lazy-note").count()) === 0);
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("dialog.settings-dialog")?.open);
+    check("ปิดหน้าตั้งค่าแล้วโฟกัสกลับไปที่ปุ่มตั้งค่า", await page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "ตั้งค่า"));
+    check("กรณีที่ 6: คอนโซลไม่มีข้อผิดพลาดอื่น", problems.length === 0, describeProblems(problems));
+    await context.close();
   }
 
   // ---------- 4. จอทุกขนาดและทั้งสองธีม ----------

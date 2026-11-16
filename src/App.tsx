@@ -3,16 +3,21 @@ import { Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Squa
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
-import { BrowserView } from "./components/BrowserView";
 import { FillCard } from "./components/FillCard";
-import { FrameView } from "./components/FrameView";
-import { MeetingPanel } from "./components/MeetingPanel";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { Transcript } from "./components/Transcript";
 import { VoiceDock } from "./components/VoiceDock";
-import { VoiceSettingsDialog } from "./components/VoiceSettingsDialog";
 import { HudFrame } from "./components/hud/HudFrame";
+import { LazyBoundary } from "./components/lazy/LazyBoundary";
+import {
+  BrowserView,
+  FrameView,
+  MainViewSkeleton,
+  MeetingPanel,
+  preloadViews,
+  VoiceSettingsDialog
+} from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
 import { PHASE_LABEL } from "./conversation/messages";
 import { useAiStatus } from "./hooks/useAiStatus";
@@ -54,6 +59,8 @@ export default function App() {
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
   const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
+  const [settingsUsed, setSettingsUsed] = useState(false);
   const [desktop] = useState(isDesktopApp);
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
@@ -111,6 +118,12 @@ export default function App() {
     browserStore.close();
   }, [ready, reset]);
 
+  // เข้าใช้งานได้แล้ว: โหลดหน้าตั้งค่า แผงการประชุม และตัวแสดงหน้าเว็บล่วงหน้าตอนเครื่องว่าง กดเปิดแล้วจึงขึ้นทันที
+  useEffect(() => {
+    if (!ready) return;
+    return preloadViews({ desktop, meeting: meeting.capable });
+  }, [ready, desktop, meeting.capable]);
+
   // โหมดฟังตลอดเวลาไม่มีปุ่มไมโครโฟนให้แตะพูดแทรก: กด Esc เพื่อหยุดคำตอบแล้วกลับไปฟัง
   useEffect(() => {
     if (!alwaysListening || !answering) return;
@@ -125,7 +138,14 @@ export default function App() {
   const openSettings = () => {
     // หยุดสนทนาก่อน ไม่เช่นนั้นไมโครโฟนจะได้ยินเสียงตัวอย่าง
     stop();
+    setSettingsUsed(true);
     setSettingsOpen(true);
+  };
+
+  // โหลดหน้าตั้งค่าไม่สำเร็จแล้วผู้ใช้กดปิด: ถอดออกทั้งหมด เปิดครั้งหน้าจะโหลดใหม่
+  const dismissSettings = () => {
+    setSettingsOpen(false);
+    setSettingsUsed(false);
   };
 
   return (
@@ -234,15 +254,27 @@ export default function App() {
           )}
         </div>
         {/* แอปเดสก์ท็อปมีเบราว์เซอร์ในตัว ส่วนเว็บในเบราว์เซอร์แสดงหน้าที่เจ้าของเว็บยอมไว้ในกรอบ */}
-        {pageOpen && (desktop ? <BrowserView browser={browser} /> : <FrameView browser={browser} />)}
+        {pageOpen && (
+          <LazyBoundary
+            label="หน้าเว็บ"
+            retry={desktop ? BrowserView.preload : FrameView.preload}
+            // หน้าเว็บที่ซ่อนอยู่หลังบทสนทนาไม่ต้องมีโครงร่างมาบังบทสนทนา
+            fallback={showingWeb ? <MainViewSkeleton label="หน้าเว็บ" /> : null}
+            onDismiss={browserStore.close}
+          >
+            {desktop ? <BrowserView browser={browser} /> : <FrameView browser={browser} />}
+          </LazyBoundary>
+        )}
         {inMeeting && (
-          <MeetingPanel
-            state={meeting.state}
-            onPause={meeting.pause}
-            onResume={meeting.resume}
-            onFinish={meeting.finish}
-            onCancel={meeting.cancel}
-          />
+          <LazyBoundary label="แผงการประชุม" retry={MeetingPanel.preload} fallback={<MainViewSkeleton label="แผงการประชุม" />}>
+            <MeetingPanel
+              state={meeting.state}
+              onPause={meeting.pause}
+              onResume={meeting.resume}
+              onFinish={meeting.finish}
+              onCancel={meeting.cancel}
+            />
+          </LazyBoundary>
         )}
       </main>
 
@@ -293,14 +325,18 @@ export default function App() {
         </footer>
       )}
 
-      <VoiceSettingsDialog
-        open={settingsOpen && ready}
-        onClose={() => setSettingsOpen(false)}
-        synthesizer={synthesizer}
-        settings={voiceSettings}
-        installPrompt={installPrompt}
-        desktop={desktop}
-      />
+      {settingsUsed && (
+        <LazyBoundary label="หน้าตั้งค่า" retry={VoiceSettingsDialog.preload} onDismiss={dismissSettings}>
+          <VoiceSettingsDialog
+            open={settingsOpen && ready}
+            onClose={() => setSettingsOpen(false)}
+            synthesizer={synthesizer}
+            settings={voiceSettings}
+            installPrompt={installPrompt}
+            desktop={desktop}
+          />
+        </LazyBoundary>
+      )}
     </div>
   );
 }

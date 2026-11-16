@@ -1,0 +1,84 @@
+name: Uptime
+
+# ถาม /health ของเว็บจริงทุก 5 นาที (GitHub อาจเลื่อนรอบตามคิวได้หลายนาที)
+# ใช้งานไม่ได้ 3 ครั้งติดกัน: เปิด issue ป้าย uptime หนึ่งใบ GitHub แจ้งเตือนเจ้าของ repo ทางอีเมลและแอป
+# ระหว่างที่ยังล่มไม่เปิดใบซ้ำ จึงไม่มีอีเมลรัว ๆ พอกลับมาใช้ได้ ปิด issue นั้นเองพร้อมบอกเวลา
+# เปลี่ยนที่อยู่ที่ตรวจได้ด้วยตัวแปร repo ชื่อ HEALTH_URL (Settings > Secrets and variables > Actions > Variables)
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Check live /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Ask /health (3 tries, 10 s apart)
+        id: check
+        continue-on-error: true
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: node scripts/uptime-check.mjs
+
+      - name: Open or close the outage issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTHY: ${{ steps.check.outputs.healthy }}
+          REASON: ${{ steps.check.outputs.reason }}
+          CHECKED_URL: ${{ steps.check.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HEALTHY" ]; then
+            echo "::error::สคริปต์ตรวจไม่ได้ส่งผลออกมา ดู log ของขั้นก่อนหน้า"
+            exit 1
+          fi
+
+          open_issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label uptime --state open --limit 1 --json number --jq '.[0].number // empty')
+          now=$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          if [ "$HEALTHY" = "true" ]; then
+            if [ -n "$open_issue" ]; then
+              gh issue close "$open_issue" --repo "$GITHUB_REPOSITORY" \
+                --comment "กลับมาใช้งานได้แล้วเมื่อ $now ($CHECKED_URL) รอบตรวจ: $RUN_URL"
+              echo "ปิด issue #$open_issue แล้ว"
+            fi
+            exit 0
+          fi
+
+          if [ -n "$open_issue" ]; then
+            echo "ยังใช้งานไม่ได้ แจ้งไว้แล้วใน issue #$open_issue"
+            exit 0
+          fi
+
+          gh label create uptime --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "แจ้งเตือนจากระบบเฝ้า /health" --force
+          body=$(printf '%s\n' \
+            "ระบบเฝ้าระวังถาม $CHECKED_URL แล้วไม่ผ่าน 3 ครั้งติดกัน" \
+            "" \
+            "- สาเหตุ: $REASON" \
+            "- เวลาที่พบ: $now" \
+            "- รอบตรวจ: $RUN_URL" \
+            "" \
+            "issue นี้ปิดเองเมื่อ /health กลับมาตอบปกติ")
+          gh issue create --repo "$GITHUB_REPOSITORY" --label uptime \
+            --title "Javis ใช้งานไม่ได้: $REASON" --body "$body"
