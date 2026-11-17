@@ -53,3 +53,35 @@ describe("ขนาดเนื้อหาของคำขอ", () => {
     expect((await post("/api/auth/login", 1)).status).not.toBe(413);
   });
 });
+
+/** เซิร์ฟเวอร์ในชุดนี้ไม่มีกุญแจของ Gemini จึงไม่มีเสียงพูดของ Gemini ให้ใช้ */
+describe("เสียงพูดของ Gemini เมื่อเซิร์ฟเวอร์ไม่มี", () => {
+  let origin = "";
+  let close: () => Promise<void> = async () => undefined;
+
+  beforeAll(async () => {
+    const server = createApp().listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    close = () => new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  afterAll(() => close());
+
+  it("/api/status บอกหน้าเว็บว่าไม่มีเสียงพูดของ Gemini หน้าเว็บจึงไม่ลองขอ", async () => {
+    const status = (await (await fetch(`${origin}/api/status`)).json()) as { voice?: { cloud?: unknown } };
+
+    expect(status.voice).toEqual({ cloud: false });
+  });
+
+  it("/api/speech ตอบว่าไม่มี พร้อมรหัสที่หน้าเว็บใช้ตัดสินว่าจะไม่ลองอีก", async () => {
+    const response = await fetch(`${origin}/api/speech`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "สวัสดีครับ" })
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "unavailable" });
+  });
+});

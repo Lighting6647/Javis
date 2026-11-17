@@ -61,9 +61,16 @@ export interface VoiceSettings {
   voiceId: string | null;
   /** ความเร็วในการพูด 1 = ปกติ */
   rate: number;
+  /**
+   * ใช้เสียงพูดของ Gemini เมื่อเซิร์ฟเวอร์มีให้ (ชัดกว่า แต่ต้องใช้อินเทอร์เน็ตและเริ่มพูดช้ากว่าเล็กน้อย)
+   * เมื่อเสียงนั้นใช้ไม่ได้ Javis สลับไปเสียงในอุปกรณ์เอง
+   */
+  cloud: boolean;
+  /** เสียงของ Gemini ที่ผู้ใช้เลือก null = เสียงเริ่มต้นของเซิร์ฟเวอร์ */
+  cloudVoice: string | null;
 }
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voiceId: null, rate: DEFAULT_SPEECH_RATE };
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voiceId: null, rate: DEFAULT_SPEECH_RATE, cloud: true, cloudVoice: null };
 
 /** ตัวพูด: อ่านข้อความออกเสียงด้วยเสียงของอุปกรณ์ */
 export interface SpeechSynthesizer {
@@ -78,6 +85,11 @@ export interface SpeechSynthesizer {
   prepare(): Promise<boolean>;
   /** อ่านข้อความจนจบ ไม่ล้มเหลว: ถ้าพูดไม่ได้หรือถูกยกเลิกจะจบทันที */
   speak(text: string): Promise<void>;
+  /**
+   * บอกล่วงหน้าว่าจะสั่งพูดข้อความนี้ในลำดับถัดไป ตัวพูดที่ต้องขอเสียงจากเซิร์ฟเวอร์ใช้เวลานี้เตรียมเสียงไว้
+   * การพูดจึงต่อเนื่องไม่เว้นช่วงระหว่างประโยค ตัวพูดของอุปกรณ์ไม่ต้องเตรียม จึงไม่มีคำสั่งนี้
+   */
+  preload?(text: string): void;
   cancel(): void;
   /**
    * เบราว์เซอร์ยังไม่ยอมให้หน้านี้พูด เพราะผู้ใช้ยังไม่ได้แตะหรือกดอะไรบนหน้าเลย (กฎกันเว็บส่งเสียงเอง)

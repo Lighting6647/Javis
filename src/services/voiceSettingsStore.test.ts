@@ -4,9 +4,13 @@ import { sanitizeVoiceSettings, voiceSettingsStore } from "./voiceSettingsStore"
 
 describe("sanitizeVoiceSettings", () => {
   it("คงค่าที่ถูกต้องไว้", () => {
-    expect(sanitizeVoiceSettings({ voiceId: "com.apple.voice.kanya", rate: 1.2 })).toEqual({
+    expect(
+      sanitizeVoiceSettings({ voiceId: "com.apple.voice.kanya", rate: 1.2, cloud: false, cloudVoice: "Zephyr" })
+    ).toEqual({
       voiceId: "com.apple.voice.kanya",
-      rate: 1.2
+      rate: 1.2,
+      cloud: false,
+      cloudVoice: "Zephyr"
     });
   });
 
@@ -21,8 +25,10 @@ describe("sanitizeVoiceSettings", () => {
   });
 
   it("ใช้ค่าเริ่มต้นเมื่อความเร็วหรือเสียงไม่ใช่ชนิดที่ถูกต้อง", () => {
-    expect(sanitizeVoiceSettings({ voiceId: 7, rate: "fast" })).toEqual(DEFAULT_VOICE_SETTINGS);
-    expect(sanitizeVoiceSettings({ voiceId: "", rate: Number.NaN })).toEqual(DEFAULT_VOICE_SETTINGS);
+    expect(sanitizeVoiceSettings({ voiceId: 7, rate: "fast", cloud: "yes", cloudVoice: 9 })).toEqual(
+      DEFAULT_VOICE_SETTINGS
+    );
+    expect(sanitizeVoiceSettings({ voiceId: "", rate: Number.NaN, cloudVoice: "  " })).toEqual(DEFAULT_VOICE_SETTINGS);
   });
 });
 
@@ -35,7 +41,7 @@ describe("voiceSettingsStore", () => {
 
     voiceSettingsStore.update({ rate: 1.4 });
     voiceSettingsStore.update({ voiceId: "voice-a" });
-    expect(voiceSettingsStore.get()).toEqual({ voiceId: "voice-a", rate: 1.4 });
+    expect(voiceSettingsStore.get()).toEqual({ ...DEFAULT_VOICE_SETTINGS, voiceId: "voice-a", rate: 1.4 });
 
     voiceSettingsStore.update({ rate: 99 });
     expect(voiceSettingsStore.get().rate).toBe(MAX_SPEECH_RATE);

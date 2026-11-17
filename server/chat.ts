@@ -1,5 +1,4 @@
 import type { RequestHandler } from "express";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { aiAccount } from "./aiAccount.js";
 import { CLAUDE_EFFORTS } from "./aiProvider.js";
@@ -7,6 +6,7 @@ import { createChatCompletionsTranslator, memoryFollowUpNote, toChatCompletionsR
 import { startClaudeReply } from "./claudeClient.js";
 import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
+import { isDiagnosticToken } from "./diagnostics.js";
 import { decideFraming } from "./frameCheck.js";
 import { buildMeetingInstructions, buildMeetingPrompt, MAX_MEETING_TOKENS, meetingSchema } from "./meeting.js";
 import {
@@ -335,17 +335,10 @@ const textDelta = (text: string) => ({ type: "response.output_text.delta", delta
 /** บอกผู้ใช้เมื่อขั้นค้นเว็บไม่ได้คำตอบกลับมาเลย แทนการส่งคำตอบว่าง */
 const SEARCH_FAILED_TEXT = "ขออภัยครับ ผมค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ";
 
-/**
- * ช่องวินิจฉัยของผู้ดูแล: คำขอที่แนบรหัส (diagnose) ซึ่งค่าแฮช SHA-256 ตรงกับค่านี้ จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
+/*
+ * ช่องวินิจฉัยของผู้ดูแล (server/diagnostics.ts): คำขอที่แนบรหัส (diagnose) ที่ถูกต้อง จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
  * บอกว่าเซิร์ฟเวอร์เรียกผู้ให้บริการกี่ครั้ง ได้สถานะอะไร ใช้เวลาเท่าไร และเหตุผลที่ถูกปฏิเสธ (ข้อความที่ปิดบังสิ่งที่ดูเหมือนกุญแจแล้ว)
- * ค่านี้มาจากการตั้งค่าของผู้ดูแลเท่านั้น ถ้าไม่ได้ตั้ง ช่องนี้ปิดสำหรับทุกคำขอ และการตั้งค่าเก็บเฉพาะค่าแฮช จึงอ่านรหัสจากการตั้งค่าไม่ได้
  */
-const DIAGNOSTIC_TOKEN_SHA256 = process.env.DIAGNOSTIC_TOKEN_SHA256?.trim().toLowerCase() ?? "";
-
-function isDiagnosticToken(token: string | undefined): boolean {
-  if (!token || !/^[0-9a-f]{64}$/.test(DIAGNOSTIC_TOKEN_SHA256)) return false;
-  return timingSafeEqual(createHash("sha256").update(token).digest(), Buffer.from(DIAGNOSTIC_TOKEN_SHA256, "hex"));
-}
 
 /**
  * รุ่นของโค้ดที่กำลังทำงาน (รหัสคอมมิตแบบย่อที่โฮสต์อย่าง Vercel ตั้งให้) สำหรับช่องวินิจฉัย
