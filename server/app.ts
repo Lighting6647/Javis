@@ -4,6 +4,7 @@ import { aiAccount } from "./aiAccount.js";
 import { loginHandler, requireAuth, sessionHandler } from "./authRoutes.js";
 import { chatHandler } from "./chat.js";
 import { config } from "./config.js";
+import { isDiagnosticToken } from "./diagnostics.js";
 import {
   apiNotFound,
   chatRateLimiter,
@@ -14,8 +15,10 @@ import {
   originGuard,
   permissionsPolicy,
   securityHeaders,
+  speechRateLimiter,
   transcribeRateLimiter
 } from "./security.js";
+import { createSpeechHandler } from "./speech.js";
 import { transcribeHandler } from "./transcribe.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
@@ -75,7 +78,8 @@ export function createApp(options: AppOptions = {}): Express {
   // สถานะบัญชี AI สำหรับแอป: ข้อมูลหมวดกว้างชุดเดียวกับ /health แต่อยู่ใต้ /api เพื่อให้แอปมือถือเรียกข้ามต้นทางได้
   app.get("/api/status", async (_request, response) => {
     await settleStatus();
-    response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot() });
+    // voice.cloud บอกหน้าเว็บว่าเซิร์ฟเวอร์นี้มีเสียงพูดของ Gemini ให้ใช้ไหม หน้าเว็บจึงไม่ต้องลองขอเมื่อไม่มี
+    response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot(), voice: { cloud: config.cloudVoice !== null } });
   });
   app.get("/api/auth/session", sessionHandler);
   app.post("/api/auth/login", loginRateLimiter, loginHandler);
@@ -86,6 +90,8 @@ export function createApp(options: AppOptions = {}): Express {
     express.raw({ type: "audio/*", limit: MAX_AUDIO_UPLOAD }),
     transcribeHandler
   );
+  // เสียงพูดของ Gemini: รับข้อความหนึ่งช่วง ตอบเป็นไฟล์เสียง (server/speech.ts)
+  app.post("/api/speech", requireAuth, speechRateLimiter, createSpeechHandler({ voice: config.cloudVoice, isDiagnostic: isDiagnosticToken }));
   app.use("/api", apiNotFound);
 
   if (staticDir) {

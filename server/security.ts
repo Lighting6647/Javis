@@ -43,7 +43,8 @@ export const securityHeaders: RequestHandler = helmet({
       "style-src": ["'self'", ELECTRON_WEBVIEW_STYLE_HASH],
       "font-src": ["'self'"],
       "img-src": ["'self'", "data:"],
-      "media-src": ["'self'"],
+      // blob: คือเสียงพูดของ Gemini ที่หน้าเว็บรับมาจากเซิร์ฟเวอร์นี้แล้วเล่นจากหน่วยความจำ (src/speech/audioPlayer.ts)
+      "media-src": ["'self'", "blob:"],
       "connect-src": ["'self'"],
       // หน้าเว็บแสดงหน้าที่ผู้ใช้สั่งเปิดไว้ในกรอบของตัวเองได้ เฉพาะหน้า https และเฉพาะหน้าที่เจ้าของเว็บยอม (ดู server/frameCheck.ts)
       "frame-src": ["https:"],
@@ -111,6 +112,24 @@ export const meetingRateLimiter = rateLimit({
 });
 
 /** การแปลงเสียงมีค่าใช้จ่ายต่อครั้ง จึงจำกัดเท่ากับจำนวนข้อความ (หนึ่งคำพูด = หนึ่งข้อความ) */
+/**
+ * เสียงพูดของ Gemini: คำตอบหนึ่งครั้งขอเสียงได้ราวสองถึงสามคำขอ เพดานจึงเป็นสามเท่าของเพดานข้อความ
+ * รหัส "rate" ให้หน้าเว็บแยกออกจากโควตาของ Google หมด ซึ่งต้องพักนานกว่า
+ */
+export const speechRateLimiter = rateLimit({
+  windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
+  limit: config.chatRateLimitMax * 3,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: (request, response) => {
+    const userName: unknown = response.locals.userName;
+    return typeof userName === "string" ? `speech:user:${userName}` : `speech:${ipKeyGenerator(request.ip ?? "")}`;
+  },
+  handler: (_request, response) => {
+    response.status(429).json({ error: "ขอเสียงพูดถี่เกินไป Javis ใช้เสียงในอุปกรณ์แทนไปก่อน", code: "rate" });
+  }
+});
+
 export const transcribeRateLimiter = rateLimit({
   windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
   limit: config.chatRateLimitMax,

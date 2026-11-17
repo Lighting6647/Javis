@@ -11,13 +11,16 @@ const STORAGE_KEY = "javis.voiceSettings";
 export function sanitizeVoiceSettings(value: unknown): VoiceSettings {
   if (typeof value !== "object" || value === null) return DEFAULT_VOICE_SETTINGS;
 
-  const { voiceId, rate } = value as Record<string, unknown>;
+  const { voiceId, rate, cloud, cloudVoice } = value as Record<string, unknown>;
   const validRate = typeof rate === "number" && Number.isFinite(rate);
+  const cleanCloudVoice = typeof cloudVoice === "string" ? cloudVoice.trim() : "";
   return {
     voiceId: typeof voiceId === "string" && voiceId ? voiceId : null,
     rate: validRate
       ? Math.min(MAX_SPEECH_RATE, Math.max(MIN_SPEECH_RATE, Math.round(rate * 10) / 10))
-      : DEFAULT_VOICE_SETTINGS.rate
+      : DEFAULT_VOICE_SETTINGS.rate,
+    cloud: typeof cloud === "boolean" ? cloud : DEFAULT_VOICE_SETTINGS.cloud,
+    cloudVoice: cleanCloudVoice ? cleanCloudVoice : null
   };
 }
 

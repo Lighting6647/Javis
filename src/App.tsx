@@ -29,6 +29,7 @@ import { useMeeting } from "./hooks/useMeeting";
 import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
 import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
+import { memoryStore } from "./memory/memoryStore";
 
 const PRIVACY_NOTE = "เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของอุปกรณ์หรือเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
 const HANDS_FREE_PRIVACY_NOTE =
@@ -61,7 +62,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
+  const [metricsHidden, setMetricsHidden] = useState(false);
+  const [latenciesMs, setLatenciesMs] = useState<number[]>([]);
   const [desktop] = useState(isDesktopApp);
+  const memories = useSyncExternalStore(memoryStore.subscribe, memoryStore.get);
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
   const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
@@ -124,6 +128,25 @@ export default function App() {
     return preloadViews({ desktop, meeting: meeting.capable });
   }, [ready, desktop, meeting.capable]);
 
+  // เก็บประวัติเวลาตอบสนองจริงของแต่ละรอบในเซสชัน เพื่อวาดกราฟแนวโน้มในโหมด Studio
+  useEffect(() => {
+    if (!ready) return;
+    let lastRecorded: number | null = controller.getState().lastReplyMs;
+    let lastMsgCount = controller.getState().messages.length;
+    return controller.subscribe(() => {
+      const next = controller.getState();
+      if (next.messages.length === 0 && lastMsgCount > 0) {
+        setLatenciesMs([]);
+        lastRecorded = null;
+      } else if (next.lastReplyMs !== null && next.lastReplyMs !== lastRecorded) {
+        lastRecorded = next.lastReplyMs;
+        const recorded = next.lastReplyMs;
+        setLatenciesMs((prev) => [...prev.slice(-11), recorded]);
+      }
+      lastMsgCount = next.messages.length;
+    });
+  }, [controller, ready]);
+
   // โหมดฟังตลอดเวลาไม่มีปุ่มไมโครโฟนให้แตะพูดแทรก: กด Esc เพื่อหยุดคำตอบแล้วกลับไปฟัง
   useEffect(() => {
     if (!alwaysListening || !answering) return;
@@ -153,8 +176,17 @@ export default function App() {
       <HudFrame />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden />
-          <strong>Javis</strong>
+          <span className="brand-mark" aria-hidden>JV</span>
+          <div className="brand-title">
+            <strong>Javis</strong>
+            <span className="brand-sub">CENTRAL VOICE STUDIO</span>
+          </div>
+          {ready && !aiDown && (
+            <span className="live-tag" aria-hidden>
+              <i />
+              LIVE
+            </span>
+          )}
         </div>
 
         {pageOpen && !inMeeting && (
@@ -228,6 +260,7 @@ export default function App() {
           readouts={readouts}
           compact={messages.length > 0 || showingWeb || inMeeting}
           offline={aiDown}
+          metricsHidden={metricsHidden}
         />
       )}
 
@@ -244,6 +277,13 @@ export default function App() {
               messages={messages}
               listening={alwaysListening}
               meetingAvailable={meeting.capable}
+              aiReady={!aiDown}
+              latenciesMs={latenciesMs}
+              lastReplyMs={lastReplyMs}
+              memories={memories}
+              metricsHidden={metricsHidden}
+              onToggleMetricsHidden={() => setMetricsHidden((prev) => !prev)}
+              onRecheckAi={ai.recheck}
               onSuggest={sendText}
               onOpenLink={desktop ? browserStore.open : undefined}
               onShowFramed={desktop ? undefined : browserStore.showFramed}

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { resolveAiProvider } from "./aiProvider.js";
 import { MIN_SESSION_SECRET_LENGTH, parseAccessCodes } from "./auth.js";
+import { resolveCloudVoice } from "./speech.js";
 import { resolveWebSearchProvider } from "./webSearch.js";
 
 // quiet: ไม่ให้ dotenv พิมพ์บรรทัดแนะนำของตัวเองลง log ทุกครั้งที่เริ่ม ซึ่งกลบข้อความที่ผู้ดูแลต้องอ่าน
@@ -92,6 +93,11 @@ export const config = {
    * null = ไม่ได้ตั้งกุญแจ TAVILY_API_KEY
    */
   webSearch: resolveWebSearchProvider(process.env),
+  /**
+   * เสียงพูดของ Gemini สำหรับอ่านคำตอบออกเสียง (server/speech.ts) มีเมื่อใช้ Gemini และผู้ดูแลไม่ได้ปิดด้วย GEMINI_VOICE_ENABLED=false
+   * null = ไม่มี หน้าเว็บใช้เสียงในอุปกรณ์อย่างเดียว
+   */
+  cloudVoice: resolveCloudVoice(process.env, ai),
   /**
    * ตรวจให้หน้าเว็บว่าหน้าที่ผู้ใช้สั่งเปิดแสดงในกรอบของ Javis ได้ไหม (server/frameCheck.ts) ปิดได้ด้วย WEB_FRAMES_ENABLED=false
    * เมื่อปิด หน้าเว็บจะเปิดทุกหน้าแบบเดิม (แท็บใหม่) และเซิร์ฟเวอร์ไม่ติดต่อเว็บปลายทางเลย
