@@ -5,6 +5,7 @@ import { micLevelStore } from "../../services/micLevelStore";
 import { themeStore } from "../../services/themeStore";
 import { ArcCore } from "./ArcCore";
 import { HudClock } from "./HudClock";
+import { NeuralSphere } from "./NeuralSphere";
 import { Telemetry } from "./Telemetry";
 
 interface StageProps {
@@ -16,22 +17,33 @@ interface StageProps {
   compact: boolean;
   /** บริการ AI ใช้งานไม่ได้: แกนกลางเปลี่ยนเป็นสีเตือน */
   offline: boolean;
+  /** ซ่อนค่าสถิติบนแผงตัวเลขเพื่อความเป็นส่วนตัว */
+  metricsHidden?: boolean;
 }
 
 /**
- * แผงสถานะของจอ HUD: แกนกลางที่ขยับตามจังหวะสนทนา สถานะปัจจุบัน และแผงตัวเลขของระบบ
- * อยู่บนจอตลอด (ด้านซ้ายบนจอกว้าง ด้านบนบนจอแคบ) ให้รู้สึกว่า Javis อยู่ตรงนั้นเสมอ ไม่ใช่แค่หน้าต่างแชต
+ * แผงควบคุมหลักของ Javis Studio: แกนกลางโครงข่ายประสาทที่ขยับตามจังหวะสนทนา สถานะปัจจุบัน และแผงตัวเลขของระบบ
+ * อยู่บนจอตลอด (ด้านซ้ายบนจอกว้าง ด้านบนบนจอแคบ)
  * แสดงเฉพาะในธีมโฮโลแกรม ธีมเรียบซ่อนไว้ด้วย CSS
  */
-export function Stage({ phase, statusLabel, readouts, compact, offline }: StageProps) {
+export function Stage({ phase, statusLabel, readouts, compact, offline, metricsHidden = false }: StageProps) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
-  // วาดตามเสียงจริงเฉพาะตอนฟัง ตอนคิดและตอนตอบใช้จังหวะของแต่ละสถานะ ส่วนธีมเรียบซ่อนแผงนี้ไว้ จึงไม่ต้องวาด
   const drawing = phase === "listening" && theme === "holo" && micLevels;
 
   return (
-    <aside className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}`} data-phase={phase} aria-label="แผงสถานะของ Javis">
+    <aside
+      className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}`}
+      data-phase={phase}
+      aria-label="แผงสถานะของ Javis"
+    >
+      <div className="stage-identity" aria-hidden>
+        <span className="stage-id-code">JV-CORE-01</span>
+        <span className="stage-id-sub">System overview</span>
+      </div>
+
       <div className={`core hero ${phase}`} aria-hidden>
+        <NeuralSphere phase={phase} offline={offline} compact={compact} />
         <ArcCore drawing={drawing} />
         <span className="core-sweep" />
         <span className="core-heart" />
@@ -39,12 +51,18 @@ export function Stage({ phase, statusLabel, readouts, compact, offline }: StageP
 
       {/* สถานะเดียวกับป้ายบนแถบบนซึ่งโปรแกรมอ่านหน้าจออ่านอยู่แล้ว ตรงนี้จึงเป็นภาพอย่างเดียว */}
       <div className="stage-status" aria-hidden>
-        <span className="stage-kicker">Javis · ผู้ช่วยส่วนตัว</span>
+        <span className="stage-kicker">Javis · Central Voice Studio</span>
         <strong>{statusLabel}</strong>
         <HudClock />
       </div>
 
-      <Telemetry readouts={readouts} />
+      <div className="stage-traces" aria-hidden>
+        <span />
+        <span />
+        <span />
+      </div>
+
+      <Telemetry readouts={readouts} masked={metricsHidden} />
     </aside>
   );
 }
