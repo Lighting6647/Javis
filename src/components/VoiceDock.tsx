@@ -33,7 +33,7 @@ interface VoiceDockProps {
 }
 
 const ORB_LABEL: Record<Phase, string> = {
-  idle: "เริ่มพูดกับ Javis",
+  idle: "เริ่มพูดกับนีน่า",
   starting: "กำลังเตรียมไมโครโฟน",
   listening: "พูดจบแล้ว ส่งคำถาม",
   thinking: "หยุดคำตอบแล้วพูดใหม่",
@@ -45,7 +45,7 @@ const CAPTION: Record<Phase, string> = {
   starting: "กำลังเตรียมไมโครโฟน…",
   listening: "กำลังฟังคุณอยู่…",
   thinking: "กำลังคิดคำตอบ…",
-  speaking: "Javis กำลังตอบ แตะเพื่อพูดแทรก"
+  speaking: "นีน่ากำลังตอบ แตะเพื่อพูดแทรก"
 };
 
 function OrbIcon({ phase }: { phase: Phase }) {
@@ -95,9 +95,9 @@ export function VoiceDock({
     phase === "thinking" && searching
       ? "กำลังค้นข้อมูลจากเว็บ…"
       : idle && alwaysOn
-        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว Javis จะฟังตลอดเวลา หรือพิมพ์ข้อความ"
+        ? "แตะไมโครโฟนหนึ่งครั้ง แล้วนีน่าจะฟังตลอดเวลา หรือพิมพ์ข้อความ"
         : CAPTION[phase];
-  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ Javis ฟังตลอดเวลา" : ORB_LABEL[phase];
+  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้นีน่าฟังตลอดเวลา" : ORB_LABEL[phase];
 
   return (
     <div className="dock-inner">
@@ -135,8 +135,8 @@ export function VoiceDock({
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={hasAttachment ? "พิมพ์คำถามเกี่ยวกับภาพ หรือกดส่งเพื่อให้ Javis อ่านเลย…" : "พิมพ์ข้อความถึง Javis…"}
-            aria-label="ข้อความถึง Javis"
+            placeholder={hasAttachment ? "พิมพ์คำถามเกี่ยวกับภาพ หรือกดส่งเพื่อให้นีน่าอ่านเลย…" : "พิมพ์ข้อความถึงนีน่า…"}
+            aria-label="ข้อความถึงนีน่า"
             maxLength={MESSAGE_LENGTH_LIMIT}
             enterKeyHint="send"
           />
@@ -146,8 +146,8 @@ export function VoiceDock({
               className="dock-capture-btn"
               onClick={() => void onCaptureScreen()}
               disabled={capturingScreen}
-              aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ Javis อ่าน"
-              title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ Javis อ่าน"
+              aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้นีน่าอ่าน"
+              title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้นีน่าอ่าน"
             >
               <Monitor size={17} aria-hidden />
             </button>

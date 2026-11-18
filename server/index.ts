@@ -18,7 +18,7 @@ function reportAiCheckError(error: unknown): void {
   console.warn("ตรวจบัญชี AI ไม่สำเร็จ", error instanceof Error ? error.message : "unknown");
 }
 
-app.listen(config.port, "0.0.0.0", () => {
+const onListening = () => {
   console.log(`Javis server listening on http://localhost:${config.port}`);
   if (authStatus.misconfigured) {
     console.error(authStatus.misconfiguredLog);
@@ -38,4 +38,11 @@ app.listen(config.port, "0.0.0.0", () => {
     // ไม่ให้ตัวจับเวลานี้ค้างกระบวนการไว้ตอนปิดเซิร์ฟเวอร์
     recheck.unref();
   }
-});
+};
+
+const listenHost = process.env.HOST?.trim();
+if (listenHost) {
+  app.listen(config.port, listenHost, onListening);
+} else {
+  app.listen(config.port, onListening);
+}

@@ -14,7 +14,7 @@ const BADGE_LABEL: Record<ActiveStatus, string> = {
 };
 
 const MEETING_NOTE =
-  "ระหว่างจด Javis ไม่ตอบและไม่ทำตามคำสั่งใด เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของเบราว์เซอร์ และข้อความถูกส่งให้ AI ครั้งเดียวตอนกดจบและสรุป ควรแจ้งผู้ร่วมประชุมว่ามีการจดบันทึก";
+  "ระหว่างจด นีน่าจะไม่ตอบและไม่ทำตามคำสั่งใด เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของเบราว์เซอร์ และข้อความถูกส่งให้ AI ครั้งเดียวตอนกดจบและสรุป ควรแจ้งผู้ร่วมประชุมว่ามีการจดบันทึก";
 
 /** ผู้ใช้เลื่อนขึ้นไปอ่านห่างจากท้ายรายการเกินเท่านี้ (พิกเซล) จะไม่ถูกดึงกลับลงมาเมื่อมีคำพูดใหม่ */
 const STICK_DISTANCE = 80;
@@ -25,6 +25,7 @@ interface MeetingPanelProps {
   onResume: () => void;
   onFinish: () => void;
   onCancel: () => void;
+  onRelabelSpeaker?: (index: number, speaker?: string) => void;
 }
 
 /** เวลาที่ผ่านไปตั้งแต่เริ่มประชุม เดินทุกวินาทีระหว่างจด */
@@ -44,18 +45,97 @@ function MeetingClock({ startedAt }: { startedAt: number }) {
 }
 
 /** ช่วงคำพูดที่จดแล้ว แยกจากคำที่กำลังได้ยิน ซึ่งเปลี่ยนหลายครั้งต่อวินาที เพื่อไม่ต้องวาดรายการยาวใหม่ทุกครั้ง */
-const MeetingLines = memo(function MeetingLines({ entries }: { entries: readonly MeetingEntry[] }) {
-  return entries.map((entry, index) => (
-    <li key={`${entry.at}-${index}`}>
-      <time>{formatClock(entry.at)}</time>
-      <p>
-        {entry.speaker && (
-          <span className={`meeting-speaker${entry.speaker === "คู่สนทนา" ? " peer" : ""}`}>{entry.speaker}</span>
-        )}
-        {entry.text}
-      </p>
-    </li>
-  ));
+const MeetingLines = memo(function MeetingLines({
+  entries,
+  canEditSpeaker,
+  speakerPresets,
+  onRelabelSpeaker
+}: {
+  entries: readonly MeetingEntry[];
+  canEditSpeaker: boolean;
+  speakerPresets: readonly string[];
+  onRelabelSpeaker?: (index: number, speaker?: string) => void;
+}) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [draftName, setDraftName] = useState("");
+
+  const openEditor = (index: number, currentSpeaker?: string) => {
+    setEditingIndex(index);
+    setDraftName(currentSpeaker ?? "");
+  };
+
+  const commit = (index: number, name: string) => {
+    onRelabelSpeaker?.(index, name);
+    setEditingIndex(null);
+  };
+
+  return entries.map((entry, index) => {
+    const showBadge = Boolean(entry.speaker) || (canEditSpeaker && speakerPresets.length > 0);
+    const isEditing = canEditSpeaker && editingIndex === index;
+
+    return (
+      <li key={`${entry.at}-${index}`}>
+        <time>{formatClock(entry.at)}</time>
+        <div className="meeting-line-content">
+          <p>
+            {showBadge &&
+              (canEditSpeaker && onRelabelSpeaker ? (
+                <button
+                  type="button"
+                  className={`meeting-speaker editable${!entry.speaker || entry.speaker === "คู่สนทนา" ? " peer" : ""}`}
+                  onClick={() => (isEditing ? setEditingIndex(null) : openEditor(index, entry.speaker))}
+                  title="แตะเพื่อเปลี่ยนชื่อผู้พูด"
+                >
+                  {entry.speaker ?? "ระบุผู้พูด"}
+                </button>
+              ) : (
+                entry.speaker && (
+                  <span className={`meeting-speaker${entry.speaker === "คู่สนทนา" ? " peer" : ""}`}>{entry.speaker}</span>
+                )
+              ))}
+            {entry.text}
+          </p>
+          {isEditing && (
+            <form
+              className="meeting-speaker-edit"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commit(index, draftName);
+              }}
+            >
+              <div className="meeting-speaker-presets">
+                {speakerPresets.map((label) => (
+                  <button key={label} type="button" className="studio-pill-btn" onClick={() => commit(index, label)}>
+                    {label}
+                  </button>
+                ))}
+                <button type="button" className="studio-pill-btn" onClick={() => commit(index, "คู่สนทนา")}>
+                  คู่สนทนา
+                </button>
+              </div>
+              <div className="meeting-speaker-input-row">
+                <input
+                  type="text"
+                  maxLength={32}
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  placeholder="พิมพ์ชื่อผู้พูด..."
+                  aria-label="แก้ไขชื่อผู้พูด"
+                  autoFocus
+                />
+                <button type="submit" className="studio-pill-btn">
+                  บันทึก
+                </button>
+                <button type="button" className="studio-pill-btn" onClick={() => setEditingIndex(null)}>
+                  ยกเลิก
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </li>
+    );
+  });
 });
 
 /** ปุ่มนำบันทึกคำพูดที่จดได้ออกไปเก็บ ใช้ได้แม้ยังไม่ได้สรุป เช่นตอน AI ใช้งานไม่ได้ ประกอบข้อความใหม่เฉพาะเมื่อจดเพิ่ม */
@@ -69,7 +149,7 @@ const TranscriptExport = memo(function TranscriptExport({ entries, startedAt }: 
  * แผงของโหมดสรุปการประชุม แทนที่บทสนทนาตลอดการประชุม: สถานะและเวลา ปุ่มพัก จบ และยกเลิก
  * กับคำพูดที่จดได้ตามเวลา เพื่อให้เห็นว่า Javis กำลังได้ยินอะไร โดยไม่มีเสียงตอบใด ๆ
  */
-export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: MeetingPanelProps) {
+export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onRelabelSpeaker }: MeetingPanelProps) {
   const { status, startedAt, entries, partial, summary, notice } = state;
   const speakerState = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.getState);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -182,7 +262,12 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: M
           </div>
         ) : (
           <ol className="meeting-lines" aria-label="คำพูดที่จดได้">
-            <MeetingLines entries={entries} />
+            <MeetingLines
+              entries={entries}
+              canEditSpeaker={status !== "summarizing"}
+              speakerPresets={speakerState.profiles.map((p) => p.label)}
+              onRelabelSpeaker={onRelabelSpeaker}
+            />
             {partial && (
               <li className="partial">
                 <time>…</time>

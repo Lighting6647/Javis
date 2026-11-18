@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { classifySpeakerProfiles, classifySpeakerVector, cosineSimilarity, extractSpeakerVectorFromPcm } from "./speakerProfile";
+import {
+  classifySpeakerProfiles,
+  classifySpeakerVector,
+  cosineSimilarity,
+  extractSpeakerVectorFromPcm,
+  scoreSpeakerProfiles,
+  speakerProfileStore
+} from "./speakerProfile";
 
 function sineWave(freqHz: number, seconds = 0.6, sampleRate = 24_000): Float32Array {
   const total = Math.round(seconds * sampleRate);
@@ -48,5 +55,38 @@ describe("speakerProfile acoustic speaker recognition", () => {
   it("เมื่อยังไม่ได้บันทึกโปรไฟล์เสียง: คืน undefined เพื่อคงรูปแบบบันทึกปกติ", () => {
     expect(classifySpeakerVector([0.1, 0.2], null)).toBeUndefined();
     expect(classifySpeakerProfiles([0.1, 0.2], [])).toBeUndefined();
+  });
+
+  it("ให้คะแนนความเหมือนและรองรับการ Export / Import โปรไฟล์ JSON ข้ามอุปกรณ์", () => {
+    speakerProfileStore.clear();
+    const lightSaved = speakerProfileStore.saveFromPcm("ไลท์", sineWave(180), 24_000);
+    const peerSaved = speakerProfileStore.saveFromPcm("คุณเอ", sineWave(1050), 24_000);
+    expect(lightSaved).not.toBeNull();
+    expect(peerSaved).not.toBeNull();
+
+    speakerProfileStore.setThreshold(0.84);
+    const scored = scoreSpeakerProfiles(
+      extractSpeakerVectorFromPcm(sineWave(185), 24_000),
+      speakerProfileStore.getState().profiles,
+      0.84
+    );
+    expect(scored.matchedLabel).toBe("ไลท์");
+    expect(scored.bestScore).toBeGreaterThan(0.95);
+
+    const exported = speakerProfileStore.exportJson();
+    speakerProfileStore.clear();
+    expect(speakerProfileStore.getState().profiles).toHaveLength(0);
+
+    const imported = speakerProfileStore.importJson(exported);
+    expect(imported).toEqual({ added: 2, updated: 0, total: 2 });
+    expect(speakerProfileStore.getThreshold()).toBe(0.84);
+
+    // นำเข้าซ้ำต้องอัปเดตทับตามชื่อ ไม่ซ้ำซ้อน
+    const reimported = speakerProfileStore.importJson(exported);
+    expect(reimported).toEqual({ added: 0, updated: 2, total: 2 });
+
+    expect(() => speakerProfileStore.importJson("{not valid json")).toThrow();
+    expect(() => speakerProfileStore.importJson(JSON.stringify({ profiles: [{ label: "", vector: [] }] }))).toThrow();
+    speakerProfileStore.clear();
   });
 });

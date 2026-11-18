@@ -63,7 +63,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
             className="browser-read-btn"
             onClick={onReadPage}
             aria-label="อ่านหน้านี้ให้ฟัง"
-            title="ให้ Javis ดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
+            title="ให้นีน่าดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
           >
             <Volume2 size={15} aria-hidden />
             <span>อ่านหน้านี้</span>

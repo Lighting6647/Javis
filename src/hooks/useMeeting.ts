@@ -41,6 +41,8 @@ export interface Meeting {
   finish: () => void;
   /** ยกเลิกการประชุมและทิ้งทุกอย่างที่จดไว้ */
   cancel: () => void;
+  /** แก้ชื่อผู้พูดของช่วงคำพูดรายบรรทัดระหว่างประชุม */
+  relabelSpeaker: (index: number, speaker?: string) => void;
 }
 
 /** เจ้าของบันทึกการประชุมในแท็บนี้: ชื่อผู้ใช้ที่เข้าสู่ระบบอยู่ หรือ null เมื่อไม่มีการเข้าสู่ระบบ */
@@ -151,5 +153,5 @@ export function useMeeting({ ready, controller }: MeetingOptions): Meeting {
   const pause = useCallback(() => recorder.pause(), [recorder]);
   const finish = useCallback(() => void recorder.finish(), [recorder]);
 
-  return { capable, state, active, begin, pause, resume: recorder.resume, finish, cancel: recorder.cancel };
+  return { capable, state, active, begin, pause, resume: recorder.resume, finish, cancel: recorder.cancel, relabelSpeaker: recorder.relabelSpeaker };
 }

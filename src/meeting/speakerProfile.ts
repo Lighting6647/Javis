@@ -145,17 +145,25 @@ export function clampThreshold(value: number): number {
   return Math.round(Math.min(MAX_MATCH_THRESHOLD, Math.max(MIN_MATCH_THRESHOLD, value)) * 100) / 100;
 }
 
+export interface SpeakerMatchResult {
+  matchedLabel: string | undefined;
+  bestProfileLabel: string | undefined;
+  bestScore: number;
+  threshold: number;
+}
+
 /**
- * เทียบเวกเตอร์เสียงกับรายการโปรไฟล์ผู้พูดทั้งหมดที่บันทึกไว้ แล้วเลือกผู้ที่คล้ายที่สุดหากผ่านค่า threshold
- * หากไม่มีใครถึงเกณฑ์ คืน "คู่สนทนา" และหากยังไม่มีโปรไฟล์เลย คืน undefined
+ * คำนวณคะแนนความคล้าย (0..1) ของเวกเตอร์เสียงเทียบกับโปรไฟล์ทั้งหมด พร้อมผู้ที่ตรงที่สุดและผลตัดสินตามเกณฑ์
  */
-export function classifySpeakerProfiles(
+export function scoreSpeakerProfiles(
   candidate: readonly number[] | null,
   profiles: readonly Pick<SpeakerProfile, "label" | "vector">[],
   threshold = DEFAULT_MATCH_THRESHOLD
-): string | undefined {
-  if (!profiles.length || !candidate) return undefined;
+): SpeakerMatchResult {
   const effectiveThreshold = clampThreshold(threshold);
+  if (!profiles.length || !candidate) {
+    return { matchedLabel: undefined, bestProfileLabel: undefined, bestScore: 0, threshold: effectiveThreshold };
+  }
 
   let bestLabel: string | undefined;
   let bestScore = -1;
@@ -166,7 +174,25 @@ export function classifySpeakerProfiles(
       bestLabel = profile.label;
     }
   }
-  return bestLabel && bestScore >= effectiveThreshold ? bestLabel : "คู่สนทนา";
+  const safeBest = Math.max(0, bestScore);
+  return {
+    matchedLabel: bestLabel && safeBest >= effectiveThreshold ? bestLabel : "คู่สนทนา",
+    bestProfileLabel: bestLabel,
+    bestScore: safeBest,
+    threshold: effectiveThreshold
+  };
+}
+
+/**
+ * เทียบเวกเตอร์เสียงกับรายการโปรไฟล์ผู้พูดทั้งหมดที่บันทึกไว้ แล้วเลือกผู้ที่คล้ายที่สุดหากผ่านค่า threshold
+ * หากไม่มีใครถึงเกณฑ์ คืน "คู่สนทนา" และหากยังไม่มีโปรไฟล์เลย คืน undefined
+ */
+export function classifySpeakerProfiles(
+  candidate: readonly number[] | null,
+  profiles: readonly Pick<SpeakerProfile, "label" | "vector">[],
+  threshold = DEFAULT_MATCH_THRESHOLD
+): string | undefined {
+  return scoreSpeakerProfiles(candidate, profiles, threshold).matchedLabel;
 }
 
 export function classifySpeakerVector(
@@ -277,6 +303,72 @@ export const speakerProfileStore = {
   },
   clear: (): void => {
     commitState({ profiles: [], threshold: currentState.threshold });
+  },
+  exportJson: (): string =>
+    JSON.stringify(
+      {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        threshold: currentState.threshold,
+        profiles: currentState.profiles
+      },
+      null,
+      2
+    ),
+  importJson: (rawJson: string): { added: number; updated: number; total: number } => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      throw new Error("รูปแบบไฟล์ JSON ไม่ถูกต้องครับ");
+    }
+
+    let rawList: unknown[] = [];
+    let importedThreshold: number | undefined;
+    if (Array.isArray(parsed)) {
+      rawList = parsed;
+    } else if (parsed && typeof parsed === "object") {
+      const box = parsed as Partial<SpeakerProfileState>;
+      if (Array.isArray(box.profiles)) {
+        rawList = box.profiles;
+        if (typeof box.threshold === "number" && Number.isFinite(box.threshold)) {
+          importedThreshold = clampThreshold(box.threshold);
+        }
+      } else if (isValidProfile(parsed)) {
+        rawList = [parsed];
+      }
+    }
+
+    const validIncoming = rawList
+      .filter((item): item is SpeakerProfile => isValidProfile(item) && item.vector.length >= 8 && item.vector.length <= 32)
+      .map((item, idx) => {
+        const normalized = normalizeLoadedProfile(item, idx);
+        return { ...normalized, label: normalized.label.slice(0, 40) };
+      });
+
+    if (validIncoming.length === 0) {
+      throw new Error("ไม่พบข้อมูลโปรไฟล์เสียงที่ใช้งานได้ในไฟล์นี้ครับ");
+    }
+
+    const merged = [...currentState.profiles];
+    let added = 0;
+    let updated = 0;
+    for (const incoming of validIncoming) {
+      const idx = merged.findIndex((p) => p.label.toLowerCase() === incoming.label.toLowerCase());
+      if (idx >= 0) {
+        merged[idx] = { ...incoming, id: merged[idx]!.id };
+        updated += 1;
+      } else if (merged.length < MAX_PROFILES) {
+        merged.push(incoming);
+        added += 1;
+      }
+    }
+
+    commitState({
+      profiles: merged,
+      threshold: importedThreshold ?? currentState.threshold
+    });
+    return { added, updated, total: merged.length };
   },
   subscribe: (listener: () => void): (() => void) => {
     listeners.add(listener);

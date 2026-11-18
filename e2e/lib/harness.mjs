@@ -10,7 +10,7 @@ export const OUTPUT = path.join(PROJECT, "e2e", ".output");
 /** ตั้ง TARGET_ORIGIN เพื่อตรวจเว็บที่ปล่อยแล้วแทนแอปในเครื่อง ชุดที่รองรับจะจำลองคำตอบของ AI ที่เบราว์เซอร์ จึงไม่ใช้โควตา AI ของเว็บจริง */
 export const LIVE = process.env.TARGET_ORIGIN?.replace(/\/$/, "") || null;
 
-export const INPUT = 'input[aria-label="ข้อความถึง Javis"]';
+export const INPUT = 'input[aria-label="ข้อความถึงนีน่า"]';
 export const SETTINGS = 'button[aria-label="ตั้งค่า"]';
 /** Chrome ใช้ไมโครโฟนจำลอง และถือว่าผู้ใช้อนุญาตไมโครโฟนให้ทุกเว็บแล้ว */
 export const MIC_GRANTED = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"];

@@ -23,11 +23,11 @@ export function PopupHelp() {
   return (
     <details className="popup-help" open={openAtFirst}>
       <summary>
-        ให้ Javis เปิดแท็บใหม่เองทุกครั้ง
+        ให้นีน่าเปิดแท็บใหม่เองทุกครั้ง
         <ChevronDown size={14} aria-hidden />
       </summary>
       <div className="popup-help-body">
-        <span>ตั้งครั้งเดียวใน {help.browser} แล้วหน้าเว็บจะเปิดในแท็บใหม่ โดย Javis ยังอยู่ที่แท็บนี้และฟังคำสั่งต่อได้</span>
+        <span>ตั้งครั้งเดียวใน {help.browser} แล้วหน้าเว็บจะเปิดในแท็บใหม่ โดยนีน่ายังอยู่ที่แท็บนี้และฟังคำสั่งต่อได้</span>
         <ol>
           {help.steps.map((step) => (
             <li key={step}>{step}</li>

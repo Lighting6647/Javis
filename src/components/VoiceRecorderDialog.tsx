@@ -1,6 +1,8 @@
-import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Upload, UserPlus, Volume2, X } from "lucide-react";
+import { Activity, Check, Download, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Upload, UserPlus, Volume2, X } from "lucide-react";
 import { type ChangeEvent, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { type CalibrationReading, startSpeakerCalibration } from "../meeting/liveSpeakerMonitor";
 import { MAX_MATCH_THRESHOLD, MIN_MATCH_THRESHOLD, speakerProfileStore } from "../meeting/speakerProfile";
+import { downloadTextFile } from "../services/download";
 import {
   createReplicatedVoice,
   type CustomVoiceRecord,
@@ -59,13 +61,24 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const [notice, setNotice] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibration, setCalibration] = useState<CalibrationReading | null>(null);
 
   const recorderRef = useRef<ActiveVoiceRecording | null>(null);
+  const calibrationStopRef = useRef<(() => void) | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const sourceUploadRef = useRef<HTMLInputElement>(null);
   const consentUploadRef = useRef<HTMLInputElement>(null);
   const speakerUploadRef = useRef<HTMLInputElement>(null);
+  const profileImportRef = useRef<HTMLInputElement>(null);
+
+  const stopCalibration = () => {
+    calibrationStopRef.current?.();
+    calibrationStopRef.current = null;
+    setCalibrating(false);
+    setCalibration(null);
+  };
 
   const stopPreviewAudio = () => {
     if (previewAudioRef.current) {
@@ -89,6 +102,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const closeRecorder = () => {
     recorderRef.current?.cancel();
     recorderRef.current = null;
+    stopCalibration();
     stopPreviewAudio();
     setRecordingSlot(null);
     setLevel(0);
@@ -120,6 +134,8 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
       cancelled = true;
       recorderRef.current?.cancel();
       recorderRef.current = null;
+      calibrationStopRef.current?.();
+      calibrationStopRef.current = null;
       stopPreviewAudio();
     };
   }, [open]);
@@ -161,9 +177,56 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     }
   };
 
+  const handleImportProfiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const text = await file.text();
+      const summary = speakerProfileStore.importJson(text);
+      setNotice(`นำเข้าโปรไฟล์เสียงแล้ว (เพิ่ม ${summary.added}, อัปเดต ${summary.updated} · รวม ${summary.total} คน)`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "นำเข้าไฟล์โปรไฟล์ไม่สำเร็จ");
+    }
+  };
+
+  const toggleCalibration = async () => {
+    if (calibrating) {
+      stopCalibration();
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    stopPreviewAudio();
+    synthesizer.cancel();
+
+    const stopFn = await startSpeakerCalibration(
+      () => speakerProfileStore.getState(),
+      (reading) => {
+        setCalibration((prev) => {
+          if (reading.scorePercent === 0 && prev && prev.scorePercent > 0) {
+            return { ...prev, rms: reading.rms };
+          }
+          return reading;
+        });
+      },
+      (msg) => {
+        stopCalibration();
+        setError(msg);
+      }
+    );
+    if (stopFn) {
+      calibrationStopRef.current = stopFn;
+      setCalibrating(true);
+    }
+  };
+
   const startRecording = async (slot: ClipSlot) => {
     setError(null);
     setNotice(null);
+    stopCalibration();
     stopPreviewAudio();
     synthesizer.cancel();
 
@@ -236,7 +299,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     }
     synthesizer.cancel();
     void synthesizer.speak(`สวัสดีค่ะ ตอนนี้กำลังพูดด้วย${voice.displayName}แล้วนะคะ`);
-    setNotice(`ตั้งค่า "${voice.displayName}" เป็นเสียงพูดของ Javis เรียบร้อยแล้ว`);
+    setNotice(`ตั้งค่า "${voice.displayName}" เป็นเสียงพูดของนีน่าเรียบร้อยแล้ว`);
   };
 
   const handleSaveAndClone = async () => {
@@ -348,7 +411,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
             </span>
           </div>
           <p className="recorder-script">
-            ตัวอย่างบทพูด: &ldquo;สวัสดีจาวิส นี่คือเสียงของไลท์เองนะ วันนี้ฝากช่วยดูสรุปงาน โปรเจกต์ทั้งหมด แล้วก็ช่วยเตือนนัดสำคัญให้ด้วย พูดแบบเป็นธรรมชาติสบาย ๆ ได้เลย&rdquo;
+            ตัวอย่างบทพูด: &ldquo;สวัสดีนีน่า นี่คือเสียงของไลท์เองนะ วันนี้ฝากช่วยดูสรุปงาน โปรเจกต์ทั้งหมด แล้วก็ช่วยเตือนนัดสำคัญให้ด้วย พูดแบบเป็นธรรมชาติสบาย ๆ ได้เลย&rdquo;
           </p>
           {recordingSlot === "source" && (
             <div className="recorder-meter" aria-hidden>
@@ -566,6 +629,67 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
               onChange={(event) => speakerProfileStore.setThreshold(Number(event.target.value))}
             />
           </label>
+
+          <div className="recorder-speaker-tools">
+            <button
+              type="button"
+              className={`btn ${calibrating ? "btn-primary" : "btn-secondary"}`}
+              disabled={recordingSlot !== null || saving || speakerState.profiles.length === 0}
+              onClick={() => void toggleCalibration()}
+            >
+              <Activity size={14} aria-hidden /> {calibrating ? "หยุดทดสอบเสียงสด" : "ทดสอบเทียบเสียงสด"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={speakerState.profiles.length === 0 || recordingSlot !== null}
+              onClick={() => downloadTextFile("javis-speaker-profiles.json", speakerProfileStore.exportJson())}
+            >
+              <Download size={14} aria-hidden /> สำรอง (.json)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={recordingSlot !== null || saving}
+              onClick={() => profileImportRef.current?.click()}
+            >
+              <Upload size={14} aria-hidden /> นำเข้า (.json)
+            </button>
+            <input
+              ref={profileImportRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(event) => void handleImportProfiles(event)}
+            />
+          </div>
+
+          {calibrating && (
+            <div className="recorder-calibration" role="status" aria-live="polite">
+              <div className="recorder-meter" aria-hidden>
+                <div
+                  className="recorder-meter-fill"
+                  style={{ width: `${Math.min(100, Math.round((calibration?.rms ?? 0) * 900))}%` }}
+                />
+              </div>
+              {calibration && calibration.scorePercent > 0 ? (
+                <p className="recorder-calibration-readout">
+                  <strong
+                    className={
+                      calibration.matchedLabel && calibration.matchedLabel !== "คู่สนทนา" ? "match-ok" : "match-peer"
+                    }
+                  >
+                    {calibration.matchedLabel === "คู่สนทนา"
+                      ? `ยังไม่ถึงเกณฑ์ (${calibration.bestProfileLabel ?? "ไม่ทราบ"} ${calibration.scorePercent}%) → นับเป็น คู่สนทนา`
+                      : `ตรงกับ "${calibration.matchedLabel}" (${calibration.scorePercent}%)`}
+                  </strong>{" "}
+                  <span>· เกณฑ์ปัจจุบัน {calibration.thresholdPercent}%</span>
+                </p>
+              ) : (
+                <p className="recorder-calibration-readout">ลองพูดใส่ไมโครโฟน 2–3 วินาที เพื่อดูคะแนนความเหมือนแบบเรียลไทม์...</p>
+              )}
+            </div>
+          )}
         </section>
 
         <div className="settings-actions">

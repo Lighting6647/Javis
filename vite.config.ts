@@ -16,10 +16,18 @@ export default defineConfig({
     }
   },
   server: {
-    host: "0.0.0.0",
+    host: "::",
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8787"
+      "/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: false,
+        configure(proxy) {
+          proxy.on("proxyReq", (proxyReq, req) => {
+            if (req.headers.host) proxyReq.setHeader("host", req.headers.host);
+          });
+        }
+      }
     }
   }
 });

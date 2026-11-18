@@ -1,19 +1,27 @@
 import {
   buildAcousticVectorFromSpectrum,
-  classifySpeakerProfiles,
   DEFAULT_MATCH_THRESHOLD,
+  scoreSpeakerProfiles,
   type SpeakerProfile,
   type SpeakerProfileState
 } from "./speakerProfile";
 
 /**
  * ติดตามลักษณะความถี่เสียงพูดล่าสุดระหว่างเปิดโหมดสรุปการประชุม
- * เพื่อระบุว่าคำพูดแต่ละช่วงน่าจะเป็นเจ้าของเสียงใดที่บันทึกไว้ ("ไลท์", ทีมงาน) หรือ "คู่สนทนา"
+ * และใช้ทดสอบเทียบเสียงสดก่อนประชุม เพื่อระบุผู้พูดที่บันทึกไว้ ("ไลท์", ทีมงาน) หรือ "คู่สนทนา"
  */
 export interface LiveSpeakerMonitor {
   start: () => Promise<void>;
   stop: () => void;
   identifyRecent: () => string | undefined;
+}
+
+export interface CalibrationReading {
+  rms: number;
+  scorePercent: number;
+  bestProfileLabel?: string;
+  matchedLabel?: string;
+  thresholdPercent: number;
 }
 
 type ProfileSource = () => SpeakerProfileState | SpeakerProfile | null;
@@ -24,12 +32,28 @@ function resolveSource(source: ReturnType<ProfileSource>): SpeakerProfileState {
   return { profiles: [source], threshold: DEFAULT_MATCH_THRESHOLD };
 }
 
-export function createLiveSpeakerMonitor(getProfiles: ProfileSource): LiveSpeakerMonitor {
+interface MicSampler {
+  stop: () => void;
+}
+
+async function startMicSpectrumSampler(
+  onSample: (vector: number[] | null, rms: number) => void,
+  onError?: (message: string) => void
+): Promise<MicSampler | null> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    onError?.("เบราว์เซอร์นี้ไม่รองรับการเข้าถึงไมโครโฟนครับ");
+    return null;
+  }
+
+  const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) {
+    onError?.("เบราว์เซอร์นี้ไม่รองรับ Web Audio API ครับ");
+    return null;
+  }
+
   let ctx: AudioContext | null = null;
   let stream: MediaStream | null = null;
   let timer: number | null = null;
-  let lastSpeaker: string | undefined;
-  let lastHeardAt = 0;
 
   const stop = () => {
     if (timer !== null) {
@@ -42,58 +66,75 @@ export function createLiveSpeakerMonitor(getProfiles: ProfileSource): LiveSpeake
     ctx = null;
   };
 
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    ctx = new AudioCtx();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+
+    const timeBuf = new Float32Array(analyser.fftSize);
+    const freqDb = new Float32Array(analyser.frequencyBinCount);
+    const freqMag = new Float32Array(analyser.frequencyBinCount);
+    const sampleRate = ctx.sampleRate;
+
+    timer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(timeBuf);
+      let sq = 0;
+      let crossings = 0;
+      for (let i = 0; i < timeBuf.length; i += 1) {
+        const s = timeBuf[i] ?? 0;
+        sq += s * s;
+        if (i > 0 && ((timeBuf[i - 1] ?? 0) >= 0) !== (s >= 0)) crossings += 1;
+      }
+      const rms = Math.sqrt(sq / timeBuf.length);
+      if (rms < 0.015) {
+        onSample(null, rms);
+        return;
+      }
+
+      analyser.getFloatFrequencyData(freqDb);
+      for (let i = 0; i < freqDb.length; i += 1) {
+        const db = freqDb[i] ?? -120;
+        freqMag[i] = db > -100 ? Math.pow(10, db / 20) : 0;
+      }
+      onSample(buildAcousticVectorFromSpectrum(freqMag, sampleRate, crossings / timeBuf.length), rms);
+    }, 120);
+
+    return { stop };
+  } catch {
+    stop();
+    onError?.("เปิดไมโครโฟนเพื่อทดสอบเทียบเสียงไม่สำเร็จ กรุณาตรวจสิทธิ์ไมโครโฟนครับ");
+    return null;
+  }
+}
+
+export function createLiveSpeakerMonitor(getProfiles: ProfileSource): LiveSpeakerMonitor {
+  let sampler: MicSampler | null = null;
+  let lastSpeaker: string | undefined;
+  let lastHeardAt = 0;
+
+  const stop = () => {
+    sampler?.stop();
+    sampler = null;
+  };
+
   const start = async () => {
     stop();
     const initial = resolveSource(getProfiles());
     if (initial.profiles.length === 0) return;
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
 
-    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      ctx = new AudioCtx();
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      source.connect(analyser);
-
-      const timeBuf = new Float32Array(analyser.fftSize);
-      const freqDb = new Float32Array(analyser.frequencyBinCount);
-      const freqMag = new Float32Array(analyser.frequencyBinCount);
-      const sampleRate = ctx.sampleRate;
-
-      timer = window.setInterval(() => {
-        const current = resolveSource(getProfiles());
-        if (current.profiles.length === 0) return;
-
-        analyser.getFloatTimeDomainData(timeBuf);
-        let sq = 0;
-        let crossings = 0;
-        for (let i = 0; i < timeBuf.length; i += 1) {
-          const s = timeBuf[i] ?? 0;
-          sq += s * s;
-          if (i > 0 && ((timeBuf[i - 1] ?? 0) >= 0) !== (s >= 0)) crossings += 1;
-        }
-        const rms = Math.sqrt(sq / timeBuf.length);
-        if (rms < 0.015) return;
-
-        analyser.getFloatFrequencyData(freqDb);
-        for (let i = 0; i < freqDb.length; i += 1) {
-          const db = freqDb[i] ?? -120;
-          freqMag[i] = db > -100 ? Math.pow(10, db / 20) : 0;
-        }
-        const vec = buildAcousticVectorFromSpectrum(freqMag, sampleRate, crossings / timeBuf.length);
-        const speaker = classifySpeakerProfiles(vec, current.profiles, current.threshold);
-        if (speaker) {
-          lastSpeaker = speaker;
-          lastHeardAt = Date.now();
-        }
-      }, 120);
-    } catch {
-      stop();
-    }
+    sampler = await startMicSpectrumSampler((vec) => {
+      if (!vec) return;
+      const current = resolveSource(getProfiles());
+      if (current.profiles.length === 0) return;
+      const result = scoreSpeakerProfiles(vec, current.profiles, current.threshold);
+      if (result.matchedLabel) {
+        lastSpeaker = result.matchedLabel;
+        lastHeardAt = Date.now();
+      }
+    });
   };
 
   return {
@@ -106,4 +147,34 @@ export function createLiveSpeakerMonitor(getProfiles: ProfileSource): LiveSpeake
       return lastSpeaker;
     }
   };
+}
+
+/** เปิดโหมดทดสอบเทียบเสียงสดกับโปรไฟล์ที่บันทึกไว้ จนกว่าผู้เรียกจะสั่งหยุด */
+export async function startSpeakerCalibration(
+  getProfiles: ProfileSource,
+  onReading: (reading: CalibrationReading) => void,
+  onError: (message: string) => void
+): Promise<(() => void) | null> {
+  const sampler = await startMicSpectrumSampler((vec, rms) => {
+    const current = resolveSource(getProfiles());
+    if (current.profiles.length === 0) return;
+    if (!vec) {
+      onReading({
+        rms,
+        scorePercent: 0,
+        thresholdPercent: Math.round(current.threshold * 100)
+      });
+      return;
+    }
+    const scored = scoreSpeakerProfiles(vec, current.profiles, current.threshold);
+    onReading({
+      rms,
+      scorePercent: Math.round(scored.bestScore * 100),
+      bestProfileLabel: scored.bestProfileLabel,
+      matchedLabel: scored.matchedLabel,
+      thresholdPercent: Math.round(scored.threshold * 100)
+    });
+  }, onError);
+
+  return sampler ? sampler.stop : null;
 }

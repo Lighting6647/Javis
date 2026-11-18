@@ -154,6 +154,20 @@ export class MeetingRecorder {
     void this.record(epoch);
   };
 
+  /** แก้ชื่อผู้พูดของช่วงคำพูดที่จดไว้แล้ว และบันทึกลง draft ทันที */
+  relabelSpeaker = (index: number, nextSpeaker?: string): void => {
+    const { status, startedAt, entries } = this.state;
+    if ((status !== "recording" && status !== "paused") || startedAt === null) return;
+    const target = entries[index];
+    if (!target) return;
+
+    const trimmed = nextSpeaker?.trim().slice(0, 32);
+    const updatedEntry: MeetingEntry = trimmed ? { at: target.at, text: target.text, speaker: trimmed } : { at: target.at, text: target.text };
+    const next = entries.map((entry, idx) => (idx === index ? updatedEntry : entry));
+    this.update({ entries: next });
+    this.deps.draft?.save({ startedAt, entries: next });
+  };
+
   /** จบการประชุม: หยุดฟัง แล้วส่งบันทึกทั้งหมดให้ AI สรุปครั้งเดียว */
   finish = async (): Promise<void> => {
     const { status, startedAt } = this.state;

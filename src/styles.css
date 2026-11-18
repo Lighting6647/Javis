@@ -1258,20 +1258,62 @@ html[data-theme="plain"] .recorder-speaker-enroll input {
   color: var(--muted, #cbd5e1);
 }
 .recorder-threshold input[type="range"] { width: 100%; accent-color: var(--accent, #22d3ee); cursor: pointer; }
+.recorder-speaker-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.recorder-calibration {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+}
+html[data-theme="plain"] .recorder-calibration { background: rgba(148, 163, 184, 0.1); }
+.recorder-calibration-readout { margin: 0; font-size: 12px; color: var(--muted, #cbd5e1); }
+.recorder-calibration-readout .match-ok { color: var(--accent, #22d3ee); }
+.recorder-calibration-readout .match-peer { color: var(--warning, #fbbf24); }
 .meeting-speaker {
   display: inline-block;
   margin-right: 6px;
   padding: 1px 7px;
+  border: 0;
   border-radius: 999px;
+  font: inherit;
   font-size: 11px;
   font-weight: 700;
   background: rgba(34, 211, 238, 0.16);
   color: var(--accent, #22d3ee);
   vertical-align: baseline;
 }
+.meeting-speaker.editable { cursor: pointer; transition: filter .15s, transform .1s; }
+.meeting-speaker.editable:hover { filter: brightness(1.15); }
+.meeting-speaker.editable:active { transform: scale(.96); }
 .meeting-speaker.peer {
   background: rgba(148, 163, 184, 0.18);
   color: var(--muted, #cbd5e1);
+}
+.meeting-line-content { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.meeting-speaker-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+.meeting-speaker-presets,
+.meeting-speaker-input-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.meeting-speaker-input-row input {
+  flex: 1 1 130px;
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
 }
 @media (max-width: 640px) {
   .voice-enroll-entry span { display: none; }

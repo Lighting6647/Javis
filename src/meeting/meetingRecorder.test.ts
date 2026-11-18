@@ -622,4 +622,19 @@ describe("MeetingRecorder", () => {
     expect(`[00:01] ${sent[0]?.text}\n[00:02] ${sent[1]?.text}`.length).toBeLessThanOrEqual(MAX_TRANSCRIPT_LENGTH);
     expect(sent[1]?.text.length).toBeGreaterThan(0);
   });
+
+  it("แก้ชื่อผู้พูดรายบรรทัดแล้วบันทึกลง draft และส่งชื่อใหม่ให้ AI ตอนสรุป", async () => {
+    const { recorder, draft, summaries, say } = await startRecording();
+    say("เริ่มประชุมได้เลย", 2_000);
+    say("รับทราบครับ", 4_000);
+
+    recorder.relabelSpeaker(0, "ไลท์");
+    recorder.relabelSpeaker(1, "คุณเอ");
+    expect(recorder.getState().entries.map((e) => e.speaker)).toEqual(["ไลท์", "คุณเอ"]);
+    expect(draft.saved?.entries.map((e) => e.speaker)).toEqual(["ไลท์", "คุณเอ"]);
+
+    void recorder.finish();
+    await settle();
+    expect(summaries[0]?.request.transcript).toBe("[00:02] ไลท์: เริ่มประชุมได้เลย\n[00:06] คุณเอ: รับทราบครับ");
+  });
 });
