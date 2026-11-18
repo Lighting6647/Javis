@@ -154,16 +154,24 @@ export class MeetingRecorder {
     void this.record(epoch);
   };
 
-  /** แก้ชื่อผู้พูดของช่วงคำพูดที่จดไว้แล้ว และบันทึกลง draft ทันที */
-  relabelSpeaker = (index: number, nextSpeaker?: string): void => {
+  /** แก้ชื่อผู้พูดของช่วงคำพูดที่จดไว้แล้ว (รายบรรทัด หรือเปลี่ยนทุกบรรทัดที่ชื่อตรงกัน) และบันทึกลง draft ทันที */
+  relabelSpeaker = (index: number, nextSpeaker?: string, applyToAllMatching = false): void => {
     const { status, startedAt, entries } = this.state;
     if ((status !== "recording" && status !== "paused") || startedAt === null) return;
     const target = entries[index];
     if (!target) return;
 
     const trimmed = nextSpeaker?.trim().slice(0, 32);
-    const updatedEntry: MeetingEntry = trimmed ? { at: target.at, text: target.text, speaker: trimmed } : { at: target.at, text: target.text };
-    const next = entries.map((entry, idx) => (idx === index ? updatedEntry : entry));
+    const prevKey = target.speaker?.trim().toLowerCase() ?? "";
+    const applyUpdate = (entry: MeetingEntry): MeetingEntry =>
+      trimmed ? { at: entry.at, text: entry.text, speaker: trimmed } : { at: entry.at, text: entry.text };
+
+    const next = entries.map((entry, idx) => {
+      if (idx === index) return applyUpdate(entry);
+      if (!applyToAllMatching) return entry;
+      const entryKey = entry.speaker?.trim().toLowerCase() ?? "";
+      return entryKey === prevKey ? applyUpdate(entry) : entry;
+    });
     this.update({ entries: next });
     this.deps.draft?.save({ startedAt, entries: next });
   };

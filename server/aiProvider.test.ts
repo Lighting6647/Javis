@@ -15,7 +15,7 @@ describe("resolveAiProvider", () => {
       apiKey: undefined,
       keyVariable: "OPENAI_API_KEY",
       baseUrl: "https://api.openai.com/v1",
-      chatModel: "gpt-4.1-mini",
+      chatModel: "gpt-6-luna",
       transcribeModel: "gpt-transcribe",
       webSearch: true,
       creditCheck: true
@@ -257,7 +257,7 @@ describe("resolveAiProvider", () => {
         (message) => warnings.push(message)
       );
 
-      expect(provider).toMatchObject({ chatModel: "gpt-4.1-mini", transcribeModel: "gpt-transcribe" });
+      expect(provider).toMatchObject({ chatModel: "gpt-6-luna", transcribeModel: "gpt-transcribe" });
       expect(warnings).toHaveLength(2);
       expect(warnings.join(" ")).not.toContain("TESTONLY");
     });

@@ -216,11 +216,59 @@ export const cloudVoiceStore = {
   set: setCloudVoiceAvailable
 };
 
+export interface RetiringModelNotice {
+  service: "chat" | "transcribe";
+  model: string;
+  date: string;
+}
+
+/** อ่านรายการโมเดลที่ใกล้ปิดให้บริการจาก /api/status */
+export function parseRetiringModels(payload: unknown): RetiringModelNotice[] {
+  if (typeof payload !== "object" || payload === null) return [];
+  const { retiring } = payload as { retiring?: unknown };
+  if (!Array.isArray(retiring)) return [];
+  return retiring.filter((item): item is RetiringModelNotice => {
+    if (!item || typeof item !== "object") return false;
+    const rec = item as Partial<RetiringModelNotice>;
+    return (
+      (rec.service === "chat" || rec.service === "transcribe") &&
+      typeof rec.model === "string" &&
+      rec.model.length > 0 &&
+      typeof rec.date === "string" &&
+      rec.date.length > 0
+    );
+  });
+}
+
+let retiringModels: RetiringModelNotice[] = [];
+const retiringListeners = new Set<() => void>();
+
+function setRetiringModels(next: RetiringModelNotice[]): void {
+  const unchanged =
+    retiringModels.length === next.length &&
+    retiringModels.every((item, idx) => item.model === next[idx]?.model && item.date === next[idx]?.date);
+  if (unchanged) return;
+  retiringModels = next;
+  retiringListeners.forEach((listener) => listener());
+}
+
+/** รายการโมเดล AI ที่เซิร์ฟเวอร์แจ้งว่ากำลังจะหมดอายุ/ปิดให้บริการ */
+export const retiringModelsStore = {
+  get: (): RetiringModelNotice[] => retiringModels,
+  subscribe: (listener: () => void): (() => void) => {
+    retiringListeners.add(listener);
+    return () => {
+      retiringListeners.delete(listener);
+    };
+  }
+};
+
 async function loadAiStatus(): Promise<AiStatus | null> {
   const response = await fetchWithTimeout("/api/status", { timeoutMs: STATUS_TIMEOUT_MS });
   if (!response.ok) return null;
   const payload: unknown = await response.json();
   setCloudVoiceAvailable(parseCloudVoiceAvailable(payload));
+  setRetiringModels(parseRetiringModels(payload));
   return parseAiStatus(payload);
 }
 

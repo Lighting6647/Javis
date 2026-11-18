@@ -169,6 +169,46 @@ function groupByKey<T>(items: readonly T[], getKey: (item: T) => string): Map<st
   return map;
 }
 
+export interface SpeakerParticipationStat {
+  speaker: string;
+  turns: number;
+  characters: number;
+  sharePercent: number;
+}
+
+function aggregateSpeakerStats(items: ReadonlyArray<{ speaker: string; text: string }>): SpeakerParticipationStat[] {
+  if (items.length === 0) return [];
+  const totals = new Map<string, { turns: number; characters: number }>();
+  let grandTotal = 0;
+
+  for (const item of items) {
+    const key = item.speaker.trim() || UNASSIGNED_SPEAKER;
+    const len = Math.max(1, item.text.trim().length);
+    grandTotal += len;
+    const prev = totals.get(key);
+    if (prev) {
+      prev.turns += 1;
+      prev.characters += len;
+    } else {
+      totals.set(key, { turns: 1, characters: len });
+    }
+  }
+
+  return [...totals.entries()]
+    .map(([speaker, data]) => ({
+      speaker,
+      turns: data.turns,
+      characters: data.characters,
+      sharePercent: Math.round((data.characters / Math.max(1, grandTotal)) * 100)
+    }))
+    .sort((a, b) => b.characters - a.characters || b.turns - a.turns);
+}
+
+/** คำนวณสถิติสัดส่วนการพูดของผู้ร่วมประชุมแต่ละคนจากบันทึกข้อความ */
+export function computeSpeakerStats(transcript: string): SpeakerParticipationStat[] {
+  return aggregateSpeakerStats(parseTranscriptLines(transcript));
+}
+
 /**
  * สร้างเอกสาร Markdown (.md) แยกงานตามผู้รับผิดชอบและแยกบันทึกคำพูดตามผู้พูด
  */
@@ -178,6 +218,7 @@ export function buildMeetingMarkdown({ summary, transcript, minutes, startedAt }
   const speakerGroups = groupByKey(parsedLines, (line) => line.speaker);
   const knownSpeakers = [...speakerGroups.keys()];
   const actionItems = extractActionItems(summarized, knownSpeakers);
+  const speakerStats = aggregateSpeakerStats(parsedLines);
 
   const md: string[] = [
     `# ${summarized ? "สรุปการประชุม" : "บันทึกการประชุม"}`,
@@ -187,6 +228,14 @@ export function buildMeetingMarkdown({ summary, transcript, minutes, startedAt }
     `- **หมายเหตุ:** จัดทำโดย Javis จากเสียงที่แปลงเป็นข้อความอัตโนมัติ อาจมีคำคลาดเคลื่อน ควรตรวจทานก่อนนำไปใช้`,
     ""
   ];
+
+  if (speakerStats.length > 0 && speakerStats.some((s) => s.speaker !== UNASSIGNED_SPEAKER)) {
+    md.push("## สถิติการมีส่วนร่วมของผู้พูด", "");
+    for (const stat of speakerStats) {
+      md.push(`- **${stat.speaker}:** ${stat.turns} ช่วงคำพูด (${stat.sharePercent}%)`);
+    }
+    md.push("");
+  }
 
   if (summarized) {
     md.push("## คำสรุปจาก AI", "", summarized, "");

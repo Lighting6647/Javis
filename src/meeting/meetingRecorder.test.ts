@@ -637,4 +637,20 @@ describe("MeetingRecorder", () => {
     await settle();
     expect(summaries[0]?.request.transcript).toBe("[00:02] ไลท์: เริ่มประชุมได้เลย\n[00:06] คุณเอ: รับทราบครับ");
   });
+
+  it("แก้ชื่อผู้พูดทั้งกลุ่มเมื่อเปิด applyToAllMatching โดยไม่กระทบผู้พูดชื่ออื่น", async () => {
+    const { recorder, draft, say } = await startRecording();
+    say("ข้อความที่หนึ่ง", 1_000);
+    say("ข้อความที่สอง", 2_000);
+    say("ข้อความที่สาม", 3_000);
+
+    recorder.relabelSpeaker(0, "คู่สนทนา");
+    recorder.relabelSpeaker(1, "ไลท์");
+    recorder.relabelSpeaker(2, "คู่สนทนา");
+
+    // เปลี่ยนทุก "คู่สนทนา" ให้เป็น "คุณบี" ส่วน "ไลท์" ต้องคงเดิม
+    recorder.relabelSpeaker(0, "คุณบี", true);
+    expect(recorder.getState().entries.map((e) => e.speaker)).toEqual(["คุณบี", "ไลท์", "คุณบี"]);
+    expect(draft.saved?.entries.map((e) => e.speaker)).toEqual(["คุณบี", "ไลท์", "คุณบี"]);
+  });
 });

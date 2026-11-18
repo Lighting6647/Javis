@@ -43,7 +43,7 @@ export interface AiProvider {
 type Env = Record<string, string | undefined>;
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
-const OPENAI_CHAT_MODEL = "gpt-4.1-mini";
+const OPENAI_CHAT_MODEL = "gpt-6-luna";
 const OPENAI_TRANSCRIBE_MODEL = "gpt-transcribe";
 
 /** ที่อยู่ของ Gemini API แบบที่เข้ากันได้กับ OpenAI */

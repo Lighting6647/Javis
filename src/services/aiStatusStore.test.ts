@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type AiStatus, createAiStatusStore, describeAiProblem, hasAiProblem, parseAiStatus } from "./aiStatusStore";
+import { type AiStatus, createAiStatusStore, describeAiProblem, hasAiProblem, parseAiStatus, parseRetiringModels } from "./aiStatusStore";
 
 const OK: AiStatus = { chat: "ok", transcribe: "ok" };
 const NO_CREDIT: AiStatus = { chat: "quota", transcribe: "quota" };
@@ -254,5 +254,19 @@ describe("createAiStatusStore", () => {
     stop();
     await vi.advanceTimersByTimeAsync(300_000);
     expect(server.calls()).toBe(1);
+  });
+});
+
+describe("parseRetiringModels", () => {
+  it("อ่านรายการโมเดลใกล้หมดอายุจาก /api/status และข้ามข้อมูลที่ไม่สมบูรณ์", () => {
+    expect(
+      parseRetiringModels({
+        retiring: [
+          { service: "chat", model: "gpt-4.1-mini", date: "2027-01-14" },
+          { service: "other", model: "x", date: "2027-01-14" }
+        ]
+      })
+    ).toEqual([{ service: "chat", model: "gpt-4.1-mini", date: "2027-01-14" }]);
+    expect(parseRetiringModels(null)).toEqual([]);
   });
 });

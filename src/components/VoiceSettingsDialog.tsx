@@ -1,6 +1,7 @@
 import { AudioLines, Check, Download, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useCloudVoiceStatus } from "../hooks/useCloudVoiceStatus";
+import { aiStatusStore, retiringModelsStore } from "../services/aiStatusStore";
 import { customVoicesStore } from "../services/customVoicesStore";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
@@ -67,6 +68,8 @@ function VoiceSection({
   /** null = กำลังโหลดรายการเสียง */
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
   const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
+  const aiStatus = useSyncExternalStore(aiStatusStore.subscribe, aiStatusStore.get);
+  const retiringModels = useSyncExternalStore(retiringModelsStore.subscribe, retiringModelsStore.get);
   const cloudStatus = useCloudVoiceStatus(synthesizer);
   const rateId = useId();
   const cloudVoiceId = useId();
@@ -133,6 +136,18 @@ function VoiceSection({
 
   return (
     <>
+      {(aiStatus?.chat === "quota" || retiringModels.length > 0) && (
+        <div className="toast error" role="status">
+          {aiStatus?.chat === "quota" && (
+            <div>บัญชี AI หลักแจ้งเตือนว่าเครดิตหมดชั่วคราว — กรุณาตรวจสอบโควตา/เครดิตบนเซิร์ฟเวอร์ครับ</div>
+          )}
+          {retiringModels.map((item) => (
+            <div key={`${item.service}-${item.model}`}>
+              แจ้งเตือนโมเดล: <strong>{item.model}</strong> มีกำหนดปิดบริการวันที่ {item.date} ควรสลับเป็นรุ่นใหม่ก่อนวันดังกล่าวครับ
+            </div>
+          ))}
+        </div>
+      )}
       <fieldset className="persona-box">
         <legend>ลีลาการพูด / บุคลิกเสียง (Voice Persona)</legend>
         <div className="persona-list">

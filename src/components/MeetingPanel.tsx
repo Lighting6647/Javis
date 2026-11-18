@@ -1,5 +1,6 @@
 import { FileText, Mic, Pause, Sparkles, Trash2 } from "lucide-react";
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { computeSpeakerStats } from "../meeting/export";
 import type { MeetingState, MeetingStatus } from "../meeting/meetingRecorder";
 import { speakerProfileStore } from "../meeting/speakerProfile";
 import { formatClock, formatTranscript, type MeetingEntry, meetingMinutes } from "../meeting/transcript";
@@ -25,7 +26,7 @@ interface MeetingPanelProps {
   onResume: () => void;
   onFinish: () => void;
   onCancel: () => void;
-  onRelabelSpeaker?: (index: number, speaker?: string) => void;
+  onRelabelSpeaker?: (index: number, speaker?: string, applyToAll?: boolean) => void;
 }
 
 /** เวลาที่ผ่านไปตั้งแต่เริ่มประชุม เดินทุกวินาทีระหว่างจด */
@@ -54,18 +55,20 @@ const MeetingLines = memo(function MeetingLines({
   entries: readonly MeetingEntry[];
   canEditSpeaker: boolean;
   speakerPresets: readonly string[];
-  onRelabelSpeaker?: (index: number, speaker?: string) => void;
+  onRelabelSpeaker?: (index: number, speaker?: string, applyToAll?: boolean) => void;
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [applyToAll, setApplyToAll] = useState(false);
 
   const openEditor = (index: number, currentSpeaker?: string) => {
     setEditingIndex(index);
     setDraftName(currentSpeaker ?? "");
+    setApplyToAll(Boolean(currentSpeaker));
   };
 
   const commit = (index: number, name: string) => {
-    onRelabelSpeaker?.(index, name);
+    onRelabelSpeaker?.(index, name, applyToAll);
     setEditingIndex(null);
   };
 
@@ -130,6 +133,10 @@ const MeetingLines = memo(function MeetingLines({
                   ยกเลิก
                 </button>
               </div>
+              <label className="meeting-speaker-apply-all">
+                <input type="checkbox" checked={applyToAll} onChange={(event) => setApplyToAll(event.target.checked)} />
+                <span>เปลี่ยนทุกบรรทัดที่ชื่อตรงกัน</span>
+              </label>
             </form>
           )}
         </div>
@@ -178,6 +185,9 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
     else setConfirmingCancel(true);
   };
 
+  const hasLabeledSpeakers = entries.some((e) => Boolean(e.speaker));
+  const speakerStats = hasLabeledSpeakers ? computeSpeakerStats(formatTranscript(entries)) : [];
+
   return (
     <section className={`meeting ${status}`} aria-label="โหมดสรุปการประชุม">
       <header className="meeting-head">
@@ -189,6 +199,11 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
           <span className="meeting-count">{entries.length > 0 ? `จดแล้ว ${entries.length} ช่วงคำพูด` : "ยังไม่มีคำพูดที่จดได้"}</span>
           {speakerState.profiles.length > 0 && (
             <span className="recorder-badge">แยกเสียง ({speakerState.profiles.length}): {speakerState.profiles.map((p) => p.label).join(", ")}</span>
+          )}
+          {speakerStats.length > 0 && (
+            <span className="meeting-speaker-stats" aria-label="สัดส่วนการพูด">
+              {speakerStats.map((s) => `${s.speaker} ${s.sharePercent}%`).join(" · ")}
+            </span>
           )}
         </div>
 

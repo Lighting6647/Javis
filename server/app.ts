@@ -96,7 +96,11 @@ export function createApp(options: AppOptions = {}): Express {
   app.get("/api/status", async (_request, response) => {
     await settleStatus();
     // voice.cloud บอกหน้าเว็บว่าเซิร์ฟเวอร์นี้มีเสียงพูดของ Gemini ให้ใช้ไหม หน้าเว็บจึงไม่ต้องลองขอเมื่อไม่มี
-    response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot(), voice: { cloud: config.cloudVoice !== null } });
+    response.set("Cache-Control", "no-store").json({
+      ai: aiAccount.snapshot(),
+      voice: { cloud: config.cloudVoice !== null },
+      retiring: aiAccount.getRetiring()
+    });
   });
   // ยอดใช้การค้นเว็บสำหรับแผงสถานะ: ยอดของเดือนนี้จาก Tavily และการใช้ผลค้นที่จำไว้ ไม่มีข้อความของผู้ใช้
   const readSearchUsage = createSearchUsageReader({ ai: config.ai, external: config.webSearch });

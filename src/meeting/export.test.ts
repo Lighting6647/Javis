@@ -3,6 +3,7 @@ import {
   buildMeetingCsv,
   buildMeetingDocument,
   buildMeetingMarkdown,
+  computeSpeakerStats,
   describeDuration,
   extractActionItems,
   formatMeetingDate,
@@ -122,10 +123,16 @@ describe("speaker-grouped meeting Markdown & CSV export", () => {
     ]);
 
     const md = buildMeetingMarkdown(speakerRecord, BANGKOK);
+    expect(md).toContain("## สถิติการมีส่วนร่วมของผู้พูด");
+    expect(md).toContain("- **ไลท์:** 2 ช่วงคำพูด");
     expect(md).toContain("## งานที่ต้องทำ (แยกตามผู้รับผิดชอบ)");
     expect(md).toContain("### คุณเอ\n\n- [ ] จัดทำสไลด์นำเสนอให้เสร็จก่อนศุกร์");
     expect(md).toContain("### ไลท์ (2 ช่วงคำพูด)");
     expect(md).toContain("- `[00:35]` โอเค เวลา 14:30 ส่งลิงก์ให้ด้วยนะ");
+
+    const stats = computeSpeakerStats(speakerRecord.transcript);
+    expect(stats[0]?.speaker).toBe("ไลท์");
+    expect(stats.reduce((sum, s) => sum + s.sharePercent, 0)).toBeGreaterThanOrEqual(99);
   });
 
   it("สร้าง CSV พร้อมป้องกัน CSV formula injection สำหรับเซลล์ขึ้นต้นด้วย = หรือ +", () => {

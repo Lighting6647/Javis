@@ -43,6 +43,7 @@ function otherService(service: UpstreamService): UpstreamService {
 export function createAiAccountStatus(now: () => Date = () => new Date()) {
   const states: Record<UpstreamService, AiServiceState> = { chat: "unchecked", transcribe: "unchecked" };
   let checkedAt: string | null = null;
+  let retiringModels: RetiringModel[] = [];
 
   const set = (service: UpstreamService, state: AiServiceState) => {
     if (states[service] === state) return;
@@ -55,8 +56,11 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
      * บันทึกผลการตรวจบัญชี (ตอนเริ่มเซิร์ฟเวอร์ และการตรวจซ้ำระหว่างที่ยังมีปัญหา)
      * ผลตรวจที่ไม่ได้ข้อมูลใหม่จะไม่ลบปัญหาที่รู้อยู่แล้วจากคำขอจริงของผู้ใช้
      */
-    apply(result: Pick<AccountCheckResult, UpstreamService | "credits">) {
+    apply(result: Pick<AccountCheckResult, UpstreamService | "credits"> & { retiring?: RetiringModel[] }) {
       const creditsChecked = result.credits === "ok" || result.credits === "exhausted";
+      if (Array.isArray(result.retiring)) {
+        retiringModels = result.retiring.map((item) => ({ ...item }));
+      }
 
       for (const service of SERVICES) {
         const next = result[service];
@@ -68,6 +72,10 @@ export function createAiAccountStatus(now: () => Date = () => new Date()) {
         set(service, next);
       }
       checkedAt = now().toISOString();
+    },
+
+    getRetiring(): RetiringModel[] {
+      return retiringModels;
     },
 
     /** คำขอจริงสำเร็จ: บัญชีใช้งานได้ ปัญหาระดับบัญชีที่เคยบันทึกไว้จึงไม่จริงแล้ว */
