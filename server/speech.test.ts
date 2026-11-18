@@ -66,10 +66,11 @@ const audioPayload = (bytes: Buffer) => ({
 
 describe("resolveCloudVoice", () => {
   it("ใช้ Gemini และมีกุญแจ: เปิดเสียงพูดของ Gemini ด้วยค่าเริ่มต้น และเรียก Interactions API ของที่อยู่เดียวกัน", () => {
-    expect(resolveCloudVoice({}, GEMINI)).toEqual({
+    expect(resolveCloudVoice({}, GEMINI)).toMatchObject({
       apiKey: "test-gemini-key",
       url: "https://generativelanguage.googleapis.com/v1beta/interactions",
       model: "gemini-3.8-flash-tts",
+      fallbackModels: ["gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"],
       voice: "Iapetus",
       style: expect.stringMatching(/Thai/)
     });
@@ -134,6 +135,16 @@ describe("buildSpeechRequest", () => {
     const body = buildSpeechRequest("สวัสดีครับ", VOICE, "Kore") as { generation_config: { speech_config: Array<{ voice: string }> } };
 
     expect(body.generation_config.speech_config).toEqual([{ voice: "Kore" }]);
+  });
+
+  it("เลือกบุคลิกสาวน้อย Gen Z: ใช้เสียง Leda และคำกำกับสไตล์สดใสวัยรุ่น", () => {
+    const body = buildSpeechRequest("ฮายยย", VOICE, undefined, undefined, "genz-girl") as {
+      input: Array<{ content: Array<{ annotations: Array<{ style: string }> }> }>;
+      generation_config: { speech_config: Array<{ voice: string }> };
+    };
+
+    expect(body.generation_config.speech_config).toEqual([{ voice: "Leda" }]);
+    expect(body.input[0]?.content[0]?.annotations[0]?.style).toContain("Gen Z");
   });
 });
 
@@ -359,5 +370,44 @@ describe("createSpeechHandler", () => {
 
     const stranger = await speak({ text: "สวัสดีครับ", diagnose: "wrong-token" });
     expect(await stranger.json()).not.toHaveProperty("upstream");
+  });
+
+  it("โควตาโมเดลหลักหมด (429): สลับไปโมเดล Gemini TTS สำรองในคำขอเดียวกันอัตโนมัติ", async () => {
+    const modelsCalled: string[] = [];
+    const { speak } = await serve({
+      voice: { ...VOICE, fallbackModels: ["gemini-3.8-flash-lite-tts"] },
+      upstream: async (_url, init) => {
+        const parsed = JSON.parse(String(init.body)) as { model: string };
+        modelsCalled.push(parsed.model);
+        if (parsed.model === "gemini-3.8-flash-tts") {
+          return Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+        }
+        return Response.json(audioPayload(wav()));
+      }
+    });
+
+    const response = await speak({ text: "สวัสดีครับ" });
+    expect(response.status).toBe(200);
+    expect(modelsCalled).toEqual(["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]);
+  });
+
+  it("เมื่อ Gemini TTS ถูกจำกัดทั้งหมดและมี OpenAI key สำรอง: สลับขอเสียงจาก OpenAI TTS ได้ทันที", async () => {
+    const { speak } = await serve({
+      voice: {
+        ...VOICE,
+        fallbackModels: ["gemini-3.8-flash-lite-tts"],
+        openaiFallback: { apiKey: "sk-test-openai", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini-tts", voice: "onyx" }
+      },
+      upstream: async (url) => {
+        if (url.includes("openai.com")) {
+          return new Response(new Uint8Array(wav()), { status: 200, headers: { "Content-Type": "audio/wav" } });
+        }
+        return Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+      }
+    });
+
+    const response = await speak({ text: "สวัสดีครับ" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("audio/wav");
   });
 });

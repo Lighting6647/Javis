@@ -1,9 +1,10 @@
 import { Capacitor } from "@capacitor/core";
-import { Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { FolderKanban, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
+import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { Transcript } from "./components/Transcript";
@@ -16,6 +17,7 @@ import {
   MainViewSkeleton,
   MeetingPanel,
   preloadViews,
+  ProjectsPanel,
   VoiceSettingsDialog
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
@@ -62,13 +64,16 @@ export default function App() {
     sendText,
     confirmFill,
     cancelFill,
+    confirmProjectAction,
+    cancelProjectAction,
     undoMemory,
     markLinkOpened
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, lastReplyMs } = state;
+  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
   const [metricsHidden, setMetricsHidden] = useState(false);
@@ -91,6 +96,7 @@ export default function App() {
 
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible && !inMeeting;
+  const showingProjects = ready && projectsOpen && !showingWeb && !inMeeting;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;
   const ai = useAiStatus(ready, desktop);
   // บอกสถานะจริงตอนว่างอยู่ ระหว่างฟังหรือคิดยังแสดงจังหวะการสนทนาตามปกติ
@@ -140,7 +146,10 @@ export default function App() {
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
   const footerShown =
     !inMeeting &&
-    (dockShown || Boolean(replyStrip || pendingFill || shownCapture || captureError || notice || meetingNotice || speechHint || heard));
+    (dockShown ||
+      Boolean(
+        replyStrip || pendingFill || pendingProjectAction || shownCapture || captureError || notice || meetingNotice || speechHint || heard
+      ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
   useEffect(() => {
@@ -154,11 +163,13 @@ export default function App() {
     if (!ready) return null;
     const viewName = showingWeb
       ? `หน้าเว็บ (${browser.title || browser.requestedUrl})`
-      : inMeeting
-        ? "โหมดสรุปการประชุม"
-        : messages.length === 0
-          ? "หน้าหลัก Central Voice Studio"
-          : "หน้าสนทนา";
+      : showingProjects
+        ? "ศูนย์ควบคุมโปรเจกต์ทั้งหมด (Project Control Hub)"
+        : inMeeting
+          ? "โหมดสรุปการประชุม"
+          : messages.length === 0
+            ? "หน้าหลัก Central Voice Studio"
+            : "หน้าสนทนา";
     const stats = metricsHidden ? "ซ่อนค่าสถิติไว้" : readouts.map((r) => `${r.label}: ${r.value}`).join(", ");
     const lines = [`มุมมอง: ${viewName}`, `สถานะ: ${statusLabel}`, `แผงข้อมูล: ${stats}`];
     if (!metricsHidden && memories.length > 0) {
@@ -168,7 +179,7 @@ export default function App() {
       lines.push(`ข้อความล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
-  }, [ready, showingWeb, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
+  }, [ready, showingWeb, showingProjects, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
 
   useEffect(() => {
     controller.setScreenContextProvider(buildScreenSummary);
@@ -306,14 +317,43 @@ export default function App() {
           )}
         </div>
 
-        {pageOpen && !inMeeting && (
+        {ready && !inMeeting && (
           <div className="view-switch" role="group" aria-label="สลับมุมมอง">
-            <button type="button" aria-pressed={!showingWeb} onClick={browserStore.hide}>
+            <button
+              type="button"
+              aria-label="สนทนา"
+              aria-pressed={!showingWeb && !showingProjects}
+              onClick={() => {
+                setProjectsOpen(false);
+                browserStore.hide();
+              }}
+            >
               <MessageSquare size={15} aria-hidden /> สนทนา
             </button>
-            <button type="button" aria-pressed={showingWeb} onClick={browserStore.show}>
-              <Globe size={15} aria-hidden /> หน้าเว็บ
+            <button
+              type="button"
+              aria-label="โปรเจกต์"
+              aria-pressed={showingProjects}
+              onClick={() => {
+                setProjectsOpen(true);
+                browserStore.hide();
+              }}
+            >
+              <FolderKanban size={15} aria-hidden /> โปรเจกต์
             </button>
+            {pageOpen && (
+              <button
+                type="button"
+                aria-label="หน้าเว็บ"
+                aria-pressed={showingWeb}
+                onClick={() => {
+                  setProjectsOpen(false);
+                  browserStore.show();
+                }}
+              >
+                <Globe size={15} aria-hidden /> หน้าเว็บ
+              </button>
+            )}
           </div>
         )}
 
@@ -375,7 +415,7 @@ export default function App() {
           phase={shownPhase}
           statusLabel={statusLabel}
           readouts={readouts}
-          compact={messages.length > 0 || showingWeb || inMeeting}
+          compact={messages.length > 0 || showingWeb || showingProjects || inMeeting}
           offline={aiDown}
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
@@ -386,7 +426,7 @@ export default function App() {
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
         )}
-        <div className="scroll-area" hidden={showingWeb || inMeeting}>
+        <div className="scroll-area" hidden={showingWeb || showingProjects || inMeeting}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}
           {session.phase === "signed-out" && <AccessGate onSignIn={session.signIn} />}
@@ -437,6 +477,27 @@ export default function App() {
             )}
           </LazyBoundary>
         )}
+        {showingProjects && (
+          <LazyBoundary
+            label="ศูนย์ควบคุมโปรเจกต์"
+            retry={ProjectsPanel.preload}
+            fallback={<MainViewSkeleton label="ศูนย์ควบคุมโปรเจกต์" />}
+            onDismiss={() => setProjectsOpen(false)}
+          >
+            <ProjectsPanel
+              onClose={() => setProjectsOpen(false)}
+              onAskJavis={(prompt) => {
+                setProjectsOpen(false);
+                sendMessage(prompt, { speak: true });
+              }}
+              onOpenWeb={(url) => {
+                setProjectsOpen(false);
+                if (desktop) browserStore.open(url);
+                else browserStore.showFramed(url, "หน้าเว็บโปรเจกต์");
+              }}
+            />
+          </LazyBoundary>
+        )}
         {inMeeting && (
           <LazyBoundary label="แผงการประชุม" retry={MeetingPanel.preload} fallback={<MainViewSkeleton label="แผงการประชุม" />}>
             <MeetingPanel
@@ -456,6 +517,13 @@ export default function App() {
             <p className="reply-strip"><strong>Javis</strong> {replyStrip}</p>
           )}
           {pendingFill && <FillCard request={pendingFill} onConfirm={confirmFill} onCancel={cancelFill} />}
+          {pendingProjectAction && (
+            <ProjectActionCard
+              proposal={pendingProjectAction}
+              onConfirm={confirmProjectAction}
+              onCancel={cancelProjectAction}
+            />
+          )}
           {shownCapture && (
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img

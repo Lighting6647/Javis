@@ -1,4 +1,4 @@
-import type { ChatEvent, FillProposal, MemoryEntry, PageField, WebSource } from "./chatProtocol.js";
+import type { ChatEvent, FillProposal, MemoryEntry, PageField, ProjectActionProposal, WebSource } from "./chatProtocol.js";
 import { readUpstreamErrorCodes } from "./upstreamError.js";
 
 export const OPEN_PAGE_TOOL = "open_web_page";
@@ -9,6 +9,10 @@ export const FORGET_TOOL = "forget_memory";
 export const SEARCH_WEB_TOOL = "search_web";
 /** เครื่องมือที่ AI ใช้ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจากหน้าเว็บภายนอกมาอ่านให้ผู้ใช้ฟัง */
 export const READ_PAGE_TOOL = "read_web_page";
+/** เครื่องมืออ่านสถานะโปรเจกต์ทั้งหมดใน workspace / GitHub / Vercel */
+export const INSPECT_PROJECTS_TOOL = "inspect_projects";
+/** เครื่องมือเสนอคำสั่งควบคุมโปรเจกต์ (build / test / lint / redeploy) ให้ผู้ใช้กดยืนยัน */
+export const PROPOSE_PROJECT_ACTION_TOOL = "propose_project_action";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 /**
  * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
@@ -138,6 +142,10 @@ export interface ResponseReducer {
    * AI ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจาก URL ภายนอกมาอ่านให้ผู้ใช้ฟัง (null = ไม่ได้ขอ)
    */
   readonly readRequest: string | null;
+  /**
+   * AI ขอตรวจสถานะโปรเจกต์ของทีม (null = ไม่ได้ขอ)
+   */
+  readonly projectInspectRequest: { project?: string; includeCloud?: boolean } | null;
 }
 
 export interface ResponseReducerOptions {
@@ -169,6 +177,8 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let searchRequest: string | null = null;
   let searchRecency: SearchRecency | null = null;
   let readRequest: string | null = null;
+  let projectInspectRequest: { project?: string; includeCloud?: boolean } | null = null;
+  let projectAction: ProjectActionProposal | null = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
 
@@ -290,6 +300,28 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         readRequest = targetUrl;
         searched = true;
       }
+    } else if (item.type === "function_call" && item.name === INSPECT_PROJECTS_TOOL && !projectInspectRequest) {
+      const args = parseArguments(item.arguments);
+      const project = typeof args.project === "string" ? cleanLine(args.project, 120) : "";
+      projectInspectRequest = {
+        ...(project ? { project } : {}),
+        includeCloud: args.include_cloud === true
+      };
+    } else if (item.type === "function_call" && item.name === PROPOSE_PROJECT_ACTION_TOOL && !projectAction) {
+      const args = parseArguments(item.arguments);
+      const project = typeof args.project === "string" ? cleanLine(args.project, 120) : "";
+      const action = typeof args.action === "string" ? args.action.trim() : "";
+      const reason = typeof args.reason === "string" ? cleanLine(args.reason, 200) : "";
+      if (project && (action === "build" || action === "test" || action === "lint" || action === "redeploy")) {
+        const callId = typeof item.call_id === "string" && item.call_id ? item.call_id : `pa-${Date.now()}`;
+        projectAction = {
+          id: callId,
+          projectId: project,
+          projectName: project,
+          action,
+          reason: reason || `สั่ง ${action} โปรเจกต์ ${project}`
+        };
+      }
     }
   };
 
@@ -358,6 +390,12 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         }
         events.push({ type: "fill", fields: fill });
       }
+      if (projectAction) {
+        if (!text.trim() && !page && !fill) {
+          events.push({ type: "delta", text: `เตรียมคำสั่ง ${projectAction.action} สำหรับโปรเจกต์ ${projectAction.projectName} ให้แล้วครับ กดยืนยันเพื่อเริ่มทำงานได้เลย` });
+        }
+        events.push({ type: "project_action", proposal: projectAction });
+      }
       if (memoryAdds.length > 0 || memoryRemoves.length > 0) {
         events.push({ type: "memory", added: [...memoryAdds], removed: [...memoryRemoves] });
       }
@@ -380,7 +418,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       return memoryCalls;
     },
     get needsFollowUp() {
-      return memoryCalls.length > 0 && !text.trim() && !page && !fill;
+      return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction;
     },
     get memoryFallbackText() {
       if (memoryAdds.length > 0) return "จำไว้แล้วครับ";
@@ -395,6 +433,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get readRequest() {
       return readRequest;
+    },
+    get projectInspectRequest() {
+      return projectInspectRequest;
     }
   };
 }

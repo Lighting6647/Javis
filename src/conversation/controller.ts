@@ -55,6 +55,11 @@ export interface ConversationDeps {
   getScreenContext?: () => string | null;
   /** กรอกค่าลงฟอร์มของหน้าเว็บที่เปิดอยู่ เรียกหลังผู้ใช้ยืนยันแล้วเท่านั้น */
   fillPage?: (pageUrl: string, values: FillValue[]) => Promise<FillResult>;
+  /** รันคำสั่งควบคุมโปรเจกต์หลังผู้ใช้กดยืนยันแล้วเท่านั้น */
+  runProjectAction?: (
+    projectId: string,
+    action: "build" | "test" | "lint" | "redeploy"
+  ) => Promise<{ ok: boolean; summary: string; output?: string }>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
   /** นาฬิกาของตัวควบคุม (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
@@ -91,6 +96,7 @@ const INITIAL_STATE: ConversationState = {
   onDeviceListening: false,
   searching: false,
   pendingFillId: null,
+  pendingProjectAction: null,
   lastReplyMs: null
 };
 
@@ -256,6 +262,20 @@ export class ConversationController {
   /** ผู้ใช้กดยกเลิกรายการกรอกฟอร์มที่รออยู่ */
   cancelFill = (): void => {
     void this.decideFill("cancel").then((notice) => this.update({ notice }));
+  };
+
+  /** ผู้ใช้กดยืนยันคำสั่งควบคุมโปรเจกต์ที่รออยู่ */
+  confirmProjectAction = (): void => {
+    void this.decideProjectAction("confirm").then((notice) => {
+      if (notice) this.update({ notice });
+    });
+  };
+
+  /** ผู้ใช้กดยกเลิกคำสั่งควบคุมโปรเจกต์ที่รออยู่ */
+  cancelProjectAction = (): void => {
+    void this.decideProjectAction("cancel").then((notice) => {
+      if (notice) this.update({ notice });
+    });
   };
 
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ในข้อความนั้น */
@@ -469,14 +489,16 @@ export class ConversationController {
       return;
     }
 
-    const decision = this.state.pendingFillId ? interpretFillDecision(userText) : null;
+    const decision = this.state.pendingFillId || this.state.pendingProjectAction ? interpretFillDecision(userText) : null;
     if (!decision) {
       await this.respond(userText, epoch, options);
       return;
     }
 
     this.update({ partial: "" });
-    const notice = await this.decideFill(decision);
+    const notice = this.state.pendingProjectAction
+      ? await this.decideProjectAction(decision)
+      : await this.decideFill(decision);
     if (epoch !== this.epoch) return;
 
     if (!this.state.active) {
@@ -495,6 +517,43 @@ export class ConversationController {
     this.patchMessage(id, (message) =>
       message.fill ? { ...message, fill: { ...message.fill, status, filledCount } } : message
     );
+  }
+
+  private async decideProjectAction(decision: FillDecision): Promise<Notice | null> {
+    const proposal = this.state.pendingProjectAction;
+    if (!proposal || this.filling) return null;
+
+    if (decision === "cancel") {
+      this.update({ pendingProjectAction: null });
+      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วครับ` };
+    }
+
+    if (!this.deps.runProjectAction) {
+      this.update({ pendingProjectAction: null });
+      return { tone: "error", text: "ระบบยังไม่พร้อมรันคำสั่งโปรเจกต์ครับ" };
+    }
+
+    this.filling = true;
+    this.update({
+      pendingProjectAction: null,
+      notice: { tone: "info", text: `กำลังรัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName}…` }
+    });
+    try {
+      const result = await this.deps.runProjectAction(proposal.projectId, proposal.action);
+      const outputLine = result.output ? `\n\`\`\`\n${result.output}\n\`\`\`` : "";
+      this.update({
+        messages: [
+          ...this.state.messages,
+          { id: this.nextId(), role: "assistant", text: `${result.summary}${outputLine}` }
+        ]
+      });
+      void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
+      return { tone: result.ok ? "info" : "error", text: result.summary };
+    } catch {
+      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
+    } finally {
+      this.filling = false;
+    }
   }
 
   /** ทำตามการตัดสินใจของผู้ใช้ต่อรายการกรอกฟอร์มที่รออยู่ คืนข้อความแจ้งผล */
@@ -543,10 +602,13 @@ export class ConversationController {
   }
 
   private async respond(userText: string, epoch: number, options?: SendTextOptions): Promise<void> {
-    // คำถามใหม่แทนที่รายการกรอกฟอร์มที่ยังไม่ได้ยืนยัน เพื่อไม่ให้มีรายการเก่าค้างรอกดผิด
+    // คำถามใหม่แทนที่รายการกรอกฟอร์มหรือคำสั่งโปรเจกต์ที่ยังไม่ได้ยืนยัน เพื่อไม่ให้ค้างรอกดผิด
     if (this.state.pendingFillId) {
       this.setFillStatus(this.state.pendingFillId, "cancelled");
       this.update({ pendingFillId: null });
+    }
+    if (this.state.pendingProjectAction) {
+      this.update({ pendingProjectAction: null });
     }
 
     const history: ConversationMessage[] = [
@@ -644,6 +706,10 @@ export class ConversationController {
                 fill: { pageUrl: page.url, fields: event.fields, status: "pending" }
               }));
               this.update({ pendingFillId: replyId });
+              break;
+
+            case "project_action":
+              this.update({ pendingProjectAction: event.proposal });
               break;
 
             case "memory": {

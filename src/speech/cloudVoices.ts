@@ -1,7 +1,66 @@
+import type { VoicePersonaId } from "./types";
+
 export interface GeminiVoiceOption {
   id: string;
   label: string;
   hint?: string;
+}
+
+export interface VoicePersonaOption {
+  id: VoicePersonaId;
+  label: string;
+  hint: string;
+  recommendedCloudVoice: string | null;
+  devicePitch: number;
+  sampleText: string;
+}
+
+/**
+ * บุคลิกและลีลาการพูดของ Javis ที่ผู้ใช้เลือกสลับได้ทันทีจากหน้าตั้งค่า
+ */
+export const VOICE_PERSONAS: readonly VoicePersonaOption[] = [
+  {
+    id: "assistant",
+    label: "ผู้ช่วยสุภาพ (Javis ปกติ)",
+    hint: "คมชัด สุขุม เป็นธรรมชาติ เหมาะกับการทำงานทั่วไป",
+    recommendedCloudVoice: null,
+    devicePitch: 1,
+    sampleText: "สวัสดีครับ ผมคือ Javis ผู้ช่วยของคุณ วันนี้ให้ช่วยเรื่องอะไรดีครับ"
+  },
+  {
+    id: "genz-girl",
+    label: "สาวน้อย Gen Z สดใส",
+    hint: "เสียงเด็กสาว Leda + ลีลาสดใส ร่าเริง เป็นกันเอง",
+    recommendedCloudVoice: "Leda",
+    devicePitch: 1.24,
+    sampleText: "ฮายยย~ หวัดดีค่า! วันนี้มีอะไรให้เค้าช่วยเช็กหรือสรุปให้ บอกมาได้เลยน้า!"
+  },
+  {
+    id: "upbeat-buddy",
+    label: "สายลุยกระฉับกระเฉง",
+    hint: "เสียง Zephyr + จังหวะคล่องตัว กระตือรือร้น สั่งงานไว",
+    recommendedCloudVoice: "Zephyr",
+    devicePitch: 1.08,
+    sampleText: "พร้อมลุยแล้วครับ! มีงานด่วนหรือข้อมูลไหนให้ช่วยเช็ก สั่งมาได้เลย!"
+  },
+  {
+    id: "calm-soft",
+    label: "นุ่มนวลผ่อนคลาย",
+    hint: "เสียง Aoede + น้ำเสียงละมุน ฟังสบาย เหมาะอ่านข่าวหรือบทความยาว ๆ",
+    recommendedCloudVoice: "Aoede",
+    devicePitch: 0.94,
+    sampleText: "สวัสดีค่ะ ผ่อนคลายได้เลยนะคะ เดี๋ยวช่วยอ่านและสรุปเรื่องสำคัญให้ฟังแบบสบาย ๆ ค่ะ"
+  }
+];
+
+const PERSONA_BY_ID = new Map(VOICE_PERSONAS.map((persona) => [persona.id, persona]));
+
+export function getVoicePersona(id: VoicePersonaId | undefined): VoicePersonaOption {
+  return (id ? PERSONA_BY_ID.get(id) : undefined) ?? VOICE_PERSONAS[0];
+}
+
+export function isVoicePersonaId(value: string): value is VoicePersonaId {
+  return PERSONA_BY_ID.has(value as VoicePersonaId);
 }
 
 /**

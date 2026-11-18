@@ -32,10 +32,23 @@ export type ChatEvent =
    */
   | { type: "memory"; added: string[]; removed: string[] }
   /**
+   * AI เสนอการดำเนินการกับโปรเจกต์ (build / test / lint / redeploy)
+   * หน้าเว็บต้องแสดงการ์ดให้ผู้ใช้กดยืนยันก่อนรันจริงเสมอ
+   */
+  | { type: "project_action"; proposal: ProjectActionProposal }
+  /**
    * แถบคำค้นที่เกี่ยวข้องของ Google (HTML สำเร็จรูปจาก Google) สำหรับคำตอบที่ได้จากการค้นด้วย Google
    * เงื่อนไขการใช้ของ Google กำหนดให้แสดงคู่กับคำตอบโดยไม่ดัดแปลง หน้าเว็บต้องแสดงแบบที่ HTML นี้รันสคริปต์ไม่ได้
    */
   | { type: "suggestions"; html: string[] };
+
+export interface ProjectActionProposal {
+  id: string;
+  projectId: string;
+  projectName: string;
+  action: "build" | "test" | "lint" | "redeploy";
+  reason: string;
+}
 
 /** ความจำหนึ่งเรื่องที่ผู้ใช้เก็บไว้ในอุปกรณ์ ส่งมากับคำถามเพื่อให้ AI ใช้ตอบ */
 export interface MemoryEntry {

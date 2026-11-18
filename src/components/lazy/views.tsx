@@ -5,6 +5,7 @@ import { lazyWithPreload } from "./lazyWithPreload";
  * แล้วค่อยโหลดล่วงหน้าตอนเครื่องว่าง (preloadViews) ผู้ใช้จึงไม่ต้องรอตอนกดเปิดจริง
  */
 export const MeetingPanel = lazyWithPreload(() => import("../MeetingPanel").then((module) => module.MeetingPanel), "MeetingPanel");
+export const ProjectsPanel = lazyWithPreload(() => import("../ProjectsPanel").then((module) => module.ProjectsPanel), "ProjectsPanel");
 export const VoiceSettingsDialog = lazyWithPreload(
   () => import("../VoiceSettingsDialog").then((module) => module.VoiceSettingsDialog),
   "VoiceSettingsDialog"
@@ -44,7 +45,7 @@ const whenIdle = (task: () => void): (() => void) => {
  */
 export function preloadViews({ desktop, meeting }: PreloadOptions): () => void {
   return whenIdle(() => {
-    const views = [VoiceSettingsDialog, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
+    const views = [VoiceSettingsDialog, ProjectsPanel, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
     for (const view of views) void view.preload().catch(() => undefined);
   });
 }

@@ -56,6 +56,8 @@ export const MIN_SPEECH_RATE = 0.6;
 export const MAX_SPEECH_RATE = 1.6;
 export const DEFAULT_SPEECH_RATE = 1;
 
+export type VoicePersonaId = "assistant" | "genz-girl" | "upbeat-buddy" | "calm-soft";
+
 export interface VoiceSettings {
   /** null = ให้ระบบเลือกเสียงภาษาไทยที่ดีที่สุดเอง */
   voiceId: string | null;
@@ -68,9 +70,17 @@ export interface VoiceSettings {
   cloud: boolean;
   /** เสียงของ Gemini ที่ผู้ใช้เลือก null = เสียงเริ่มต้นของเซิร์ฟเวอร์ */
   cloudVoice: string | null;
+  /** บุคลิกและลีลาการพูดของ Javis */
+  persona: VoicePersonaId;
 }
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voiceId: null, rate: DEFAULT_SPEECH_RATE, cloud: true, cloudVoice: null };
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  voiceId: null,
+  rate: DEFAULT_SPEECH_RATE,
+  cloud: true,
+  cloudVoice: null,
+  persona: "assistant"
+};
 
 /** ตัวพูด: อ่านข้อความออกเสียงด้วยเสียงของอุปกรณ์ */
 export interface SpeechSynthesizer {

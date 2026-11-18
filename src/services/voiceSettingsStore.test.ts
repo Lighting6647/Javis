@@ -5,12 +5,13 @@ import { sanitizeVoiceSettings, voiceSettingsStore } from "./voiceSettingsStore"
 describe("sanitizeVoiceSettings", () => {
   it("คงค่าที่ถูกต้องไว้", () => {
     expect(
-      sanitizeVoiceSettings({ voiceId: "com.apple.voice.kanya", rate: 1.2, cloud: false, cloudVoice: "Zephyr" })
+      sanitizeVoiceSettings({ voiceId: "com.apple.voice.kanya", rate: 1.2, cloud: false, cloudVoice: "Zephyr", persona: "genz-girl" })
     ).toEqual({
       voiceId: "com.apple.voice.kanya",
       rate: 1.2,
       cloud: false,
-      cloudVoice: "Zephyr"
+      cloudVoice: "Zephyr",
+      persona: "genz-girl"
     });
   });
 

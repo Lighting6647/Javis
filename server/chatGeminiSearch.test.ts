@@ -258,6 +258,8 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
       "google_search",
       "open_web_page",
       "read_web_page",
+      "inspect_projects",
+      "propose_project_action",
       "remember",
       "forget_memory"
     ]);
@@ -273,7 +275,14 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
     expect(reply.text).toBe("ตอนนี้ผมไม่มีข้อมูลราคาล่าสุดครับ");
     expect(eventOf(reply, "suggestions")).toBeUndefined();
     expect(app.apis()).toEqual(["chat"]);
-    expect(chatToolNames(app.calls[0])).toEqual(["forget_memory", "open_web_page", "read_web_page", "remember"]);
+    expect(chatToolNames(app.calls[0])).toEqual([
+      "forget_memory",
+      "inspect_projects",
+      "open_web_page",
+      "propose_project_action",
+      "read_web_page",
+      "remember"
+    ]);
     expect(app.calls[0]?.url).toBe(`${GEMINI_ROOT}/openai/chat/completions`);
     expect(app.calls[0]?.headers.get("authorization")).toBe("Bearer test-gemini-key");
     expect(JSON.stringify(app.calls[0]?.body)).toContain("ค้นข้อมูลจากเว็บเองไม่ได้");
@@ -448,7 +457,15 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
 
     expect(app.apis()).toEqual(["chat", "tavily", "chat"]);
     const [request, search, answer] = app.calls;
-    expect(chatToolNames(request)).toEqual(["forget_memory", "open_web_page", "read_web_page", "remember", "search_web"]);
+    expect(chatToolNames(request)).toEqual([
+      "forget_memory",
+      "inspect_projects",
+      "open_web_page",
+      "propose_project_action",
+      "read_web_page",
+      "remember",
+      "search_web"
+    ]);
     expect(search?.url).toBe(`${TAVILY_ROOT}/search`);
     expect(search?.headers.get("authorization")).toBe(`Bearer ${TAVILY_KEY}`);
     expect(search?.body).toMatchObject({ query: "ราคาทองคำวันนี้" });
@@ -760,7 +777,15 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
     const [chat, search] = app.calls;
     // ขั้นแรก: โมเดลสนทนาตัวเดิม ได้เครื่องมือของ Javis ครบ พร้อมเครื่องมือขอค้น
     expect(chat?.body.model).toBe("gemini-3.5-flash-lite");
-    expect(chatToolNames(chat)).toEqual(["forget_memory", "open_web_page", "read_web_page", "remember", "search_web"]);
+    expect(chatToolNames(chat)).toEqual([
+      "forget_memory",
+      "inspect_projects",
+      "open_web_page",
+      "propose_project_action",
+      "read_web_page",
+      "remember",
+      "search_web"
+    ]);
     expect(chatSystemOf(chat)).not.toContain("ค้นข้อมูลจากเว็บเองไม่ได้");
     // ขั้นค้น: โมเดลที่โควตาฟรีค้นด้วย Google ได้ มีแต่เครื่องมือค้นของ Google เพราะรุ่นนี้ใช้ร่วมกับเครื่องมืออื่นไม่ได้
     expect(search?.url).toBe(`${GEMINI_ROOT}/interactions?alt=sse`);

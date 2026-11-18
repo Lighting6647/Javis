@@ -5,6 +5,7 @@ import { appCommands } from "../conversation/appCommands";
 import { ConversationController } from "../conversation/controller";
 import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
+import { runProjectActionRequest } from "../services/projectsApi";
 import { clearConversationSnapshot, restoredConversation, saveConversationSnapshot } from "../services/conversationSnapshot";
 import { leaveToPage, openExternalPage } from "../services/openPage";
 import { sessionStore } from "../services/sessionStore";
@@ -73,6 +74,7 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
           missing: values.map((entry) => entry.id),
           failure: "unavailable"
         },
+      runProjectAction: (projectId, action) => runProjectActionRequest(projectId, action),
       memory: { list: memoryStore.get, add: memoryStore.add, remove: memoryStore.remove }
     });
     return { controller, synthesizer: services.synthesizer };
@@ -120,6 +122,8 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
     sendText: controller.sendText,
     confirmFill: controller.confirmFill,
     cancelFill: controller.cancelFill,
+    confirmProjectAction: controller.confirmProjectAction,
+    cancelProjectAction: controller.cancelProjectAction,
     undoMemory: controller.undoMemory,
     markLinkOpened: controller.markLinkOpened
   };

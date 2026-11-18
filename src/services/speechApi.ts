@@ -1,4 +1,5 @@
 import { CloudVoiceError, type CloudVoiceFailure } from "../speech/cloudVoice";
+import type { VoicePersonaId } from "../speech/types";
 import { cloudVoiceStore } from "./aiStatusStore";
 import { fetchWithTimeout } from "./http";
 import { sessionStore } from "./sessionStore";
@@ -33,13 +34,22 @@ function readFailureCode(response: Response, payload: unknown): CloudVoiceFailur
 }
 
 /** ขอไฟล์เสียงพูดของ Gemini จากเซิร์ฟเวอร์ Javis (/api/speech) */
-export async function fetchCloudSpeech(text: string, voice: string | null, signal: AbortSignal): Promise<Blob> {
+export async function fetchCloudSpeech(
+  text: string,
+  voice: string | null,
+  signal: AbortSignal,
+  persona?: VoicePersonaId
+): Promise<Blob> {
   let response: Response;
   try {
     response = await fetchWithTimeout("/api/speech", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...sessionStore.authHeaders() },
-      body: JSON.stringify(voice ? { text, voice } : { text }),
+      body: JSON.stringify({
+        text,
+        ...(voice ? { voice } : {}),
+        ...(persona && persona !== "assistant" ? { persona } : {})
+      }),
       signal,
       timeoutMs: SPEECH_TIMEOUT_MS
     });

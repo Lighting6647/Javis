@@ -101,6 +101,29 @@ export function parseChatEventLine(line: string): ChatEvent | null {
       return html.length > 0 ? { type: "suggestions", html } : null;
     }
 
+    case "project_action": {
+      if (!isObject(value.proposal)) return null;
+      const { id, projectId, projectName, action, reason } = value.proposal;
+      if (
+        typeof id !== "string" ||
+        typeof projectId !== "string" ||
+        typeof projectName !== "string" ||
+        (action !== "build" && action !== "test" && action !== "lint" && action !== "redeploy")
+      ) {
+        return null;
+      }
+      return {
+        type: "project_action",
+        proposal: {
+          id,
+          projectId,
+          projectName,
+          action,
+          reason: typeof reason === "string" ? reason : ""
+        }
+      };
+    }
+
     default:
       return null;
   }

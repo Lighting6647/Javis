@@ -54,10 +54,10 @@ describe("describeCloudVoiceState", () => {
     expect(describeCloudVoiceState({ mode: "active" }, "Zephyr")).toEqual({ text: "Gemini · Zephyr", tone: "ok" });
   });
 
-  it("แสดงสถานะพักชั่วคราวเมื่อโควตาหรือการเชื่อมต่อสะดุด", () => {
+  it("แสดงสถานะสำรองเสียงในอุปกรณ์เมื่อโควตาหรือการเชื่อมต่อ Cloud สะดุด", () => {
     expect(describeCloudVoiceState({ mode: "paused", reason: "quota", until: 1000 }, "Zephyr")).toEqual({
-      text: "พักชั่วคราว",
-      tone: "wait"
+      text: "สำรอง · ในอุปกรณ์",
+      tone: "ok"
     });
   });
 

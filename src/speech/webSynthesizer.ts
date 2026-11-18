@@ -1,3 +1,4 @@
+import { getVoicePersona } from "./cloudVoices";
 import { createSpeechBlock } from "./speechBlock";
 import {
   DEFAULT_VOICE_SETTINGS,
@@ -107,14 +108,18 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
 
   speak(text: string): Promise<void> {
     const synthesis = this.synthesis;
+    if (!synthesis) return Promise.resolve();
+    if (this.voices.length === 0) {
+      this.voices = thaiVoices(synthesis);
+    }
     const voice = this.voice;
-    if (!synthesis || !voice) return Promise.resolve();
 
     return new Promise<void>((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.voice = voice;
-      utterance.lang = voice.lang || SPEECH_LANGUAGE;
+      if (voice) utterance.voice = voice;
+      utterance.lang = voice?.lang || SPEECH_LANGUAGE;
       utterance.rate = this.settings.rate;
+      utterance.pitch = getVoicePersona(this.settings.persona).devicePitch;
 
       const finish = () => {
         window.clearTimeout(watchdog);
@@ -134,6 +139,8 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
         finish();
       };
       this.pending.add(utterance);
+      // กันสถานะ speechSynthesis ค้าง pause ใน Chrome/Edge
+      if (synthesis.paused) synthesis.resume();
       synthesis.speak(utterance);
     });
   }

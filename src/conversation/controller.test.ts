@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
 import {
@@ -158,6 +158,11 @@ interface SetupOptions {
   canFrame?: boolean;
   /** คำสั่งที่แอปทำเองโดยไม่ถาม AI: คืน true เมื่อรับคำสั่งนั้นไปทำแล้ว */
   onCommand?: (text: string) => boolean;
+  /** รันคำสั่งควบคุมโปรเจกต์จำลอง */
+  runProjectAction?: (
+    projectId: string,
+    action: "build" | "test" | "lint" | "redeploy"
+  ) => Promise<{ ok: boolean; summary: string; output?: string }>;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -176,6 +181,7 @@ function setup(options: SetupOptions = {}) {
     now: () => clock.time,
     handsFree: options.handsFree,
     onCommand: options.onCommand,
+    runProjectAction: options.runProjectAction,
     wait: (ms) => {
       const done = deferred<void>();
       waits.push({ ms, done });
@@ -463,6 +469,7 @@ describe("ConversationController", () => {
       onDeviceListening: false,
       searching: false,
       pendingFillId: null,
+      pendingProjectAction: null,
       lastReplyMs: null
     });
   });
@@ -1763,6 +1770,28 @@ describe("ConversationController", () => {
       expect(chat.calls[1]?.options.image).toBeUndefined();
       chat.reply("ยินดีครับ");
       await settle();
+    });
+
+    it("รองรับการ์ดยืนยันคำสั่งควบคุมโปรเจกต์และการตอบยืนยันด้วยเสียง", async () => {
+      const runProjectAction = vi.fn().mockResolvedValue({ ok: true, summary: "รัน build ของโปรเจกต์ Tamsang ผ่านเรียบร้อยครับ" });
+      const { chat, synthesizer, controller } = setup({ runProjectAction });
+
+      controller.sendText("ช่วย build โปรเจกต์ Tamsang ให้หน่อย");
+      await settle();
+      chat.current.options.onEvent({
+        type: "project_action",
+        proposal: { id: "pa-1", projectId: "tamsang", projectName: "Tamsang", action: "build", reason: "Build Tamsang" }
+      });
+      chat.reply("เตรียมคำสั่ง build แล้วครับ");
+      await settle();
+
+      expect(controller.getState().pendingProjectAction?.projectId).toBe("tamsang");
+      controller.sendText("ยืนยันครับ");
+      await settle();
+
+      expect(runProjectAction).toHaveBeenCalledWith("tamsang", "build");
+      expect(controller.getState().pendingProjectAction).toBeNull();
+      expect(synthesizer.spoken).toContain("รัน build ของโปรเจกต์ Tamsang ผ่านเรียบร้อยครับ");
     });
   });
 });

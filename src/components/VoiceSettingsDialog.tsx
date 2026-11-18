@@ -5,7 +5,7 @@ import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import type { CloudVoiceStatus } from "../speech/cloudVoice";
-import { GEMINI_TTS_VOICES, isGeminiTtsVoice } from "../speech/cloudVoices";
+import { GEMINI_TTS_VOICES, getVoicePersona, isGeminiTtsVoice, VOICE_PERSONAS, type VoicePersonaOption } from "../speech/cloudVoices";
 import { micLevelsAvailable } from "../speech/sessionMeter";
 import {
   DEFAULT_VOICE_SETTINGS,
@@ -17,7 +17,6 @@ import {
 } from "../speech/types";
 import { MemorySection } from "./MemorySection";
 
-const SAMPLE_SENTENCE = "สวัสดีครับ ผมคือ Javis ผู้ช่วยของคุณ วันนี้ให้ช่วยเรื่องอะไรดีครับ";
 const AUTOMATIC_VOICE = "";
 
 interface InstallPrompt {
@@ -83,9 +82,25 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
     };
   }, [synthesizer]);
 
-  const preview = () => {
+  const activePersona = getVoicePersona(settings.persona);
+
+  const preview = (sampleText = activePersona.sampleText) => {
     synthesizer.cancel();
-    void synthesizer.speak(SAMPLE_SENTENCE);
+    if ("retryCloud" in synthesizer && typeof synthesizer.retryCloud === "function") {
+      synthesizer.retryCloud();
+    }
+    void synthesizer.speak(sampleText);
+  };
+
+  const selectAndPreviewPersona = (persona: VoicePersonaOption) => {
+    const next: VoiceSettings = {
+      ...settings,
+      persona: persona.id,
+      cloudVoice: persona.recommendedCloudVoice
+    };
+    voiceSettingsStore.update({ persona: persona.id, cloudVoice: persona.recommendedCloudVoice });
+    synthesizer.applySettings(next);
+    preview(persona.sampleText);
   };
 
   if (voices === null) {
@@ -111,6 +126,38 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
 
   return (
     <>
+      <fieldset className="persona-box">
+        <legend>ลีลาการพูด / บุคลิกเสียง (Voice Persona)</legend>
+        <div className="persona-list">
+          {VOICE_PERSONAS.map((persona) => (
+            <div key={persona.id} className="persona-row">
+              <label className="voice-option">
+                <input
+                  type="radio"
+                  name="voice-persona"
+                  checked={settings.persona === persona.id}
+                  onChange={() =>
+                    voiceSettingsStore.update({ persona: persona.id, cloudVoice: persona.recommendedCloudVoice })
+                  }
+                />
+                <span>
+                  {persona.label}
+                  <small>{persona.hint}</small>
+                </span>
+              </label>
+              <button
+                type="button"
+                className="studio-pill-btn persona-play-btn"
+                onClick={() => selectAndPreviewPersona(persona)}
+                aria-label={`ทดลองฟังเสียง ${persona.label}`}
+              >
+                <Play size={12} aria-hidden /> ฟัง
+              </button>
+            </div>
+          ))}
+        </div>
+      </fieldset>
+
       {cloudStatus && (
         <fieldset className="cloud-voice-box">
           <legend>
@@ -146,6 +193,11 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
                 ))}
               </select>
               {selectedCloudMeta?.hint && <small className="cloud-voice-hint">{selectedCloudMeta.hint}</small>}
+              {cloudStatus.mode === "paused" && (
+                <button type="button" className="btn btn-secondary" onClick={() => preview()}>
+                  ลองเชื่อมต่อเสียง Gemini อีกครั้ง
+                </button>
+              )}
             </div>
           )}
         </fieldset>
@@ -203,7 +255,7 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
           </div>
 
           <div className="settings-actions">
-            <button type="button" className="btn btn-secondary" onClick={preview}>
+            <button type="button" className="btn btn-secondary" onClick={() => preview()}>
               <Play size={16} aria-hidden /> ทดลองฟัง
             </button>
             <button

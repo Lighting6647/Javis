@@ -1,4 +1,4 @@
-import { DEFAULT_VOICE_SETTINGS, type SpeechSynthesizer, type VoiceOption, type VoiceSettings } from "./types";
+import { DEFAULT_VOICE_SETTINGS, type SpeechSynthesizer, type VoiceOption, type VoicePersonaId, type VoiceSettings } from "./types";
 
 /**
  * ความยาวสูงสุดของข้อความต่อคำขอเสียงหนึ่งครั้ง (ตัวอักษร)
@@ -42,7 +42,7 @@ export interface CloudVoiceDeps {
   /** เสียงในอุปกรณ์ ใช้เมื่อเสียงของ Gemini ใช้ไม่ได้ */
   fallback: SpeechSynthesizer;
   /** ขอเสียงพูดของข้อความจากเซิร์ฟเวอร์ ล้มเหลวด้วย CloudVoiceError */
-  fetchSpeech: (text: string, voice: string | null, signal: AbortSignal) => Promise<Blob>;
+  fetchSpeech: (text: string, voice: string | null, signal: AbortSignal, persona?: VoicePersonaId) => Promise<Blob>;
   player: AudioPlayer;
   /** เซิร์ฟเวอร์มีเสียงของ Gemini ไหม: true มี · false ไม่มี · null ยังไม่รู้ (จะลองขอดู) */
   available: () => boolean | null;
@@ -130,6 +130,13 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     if (this.deps.available() === false || this.pause?.reason === "unavailable") return { mode: "unavailable" };
     if (this.pause && this.clock() < this.pause.until) return { mode: "paused", reason: this.pause.reason, until: this.pause.until };
     return { mode: "active" };
+  };
+
+  /** ล้างสถานะพักชั่วคราวเพื่อให้ลองเชื่อมต่อเสียง Cloud TTS ใหม่ทันที */
+  retryCloud = (): void => {
+    if (!this.pause) return;
+    this.pause = null;
+    this.notify();
   };
 
   isBlocked = (): boolean => this.deps.fallback.isBlocked?.() ?? false;
@@ -223,7 +230,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   private request(texts: string[]): Batch {
     const abort = new AbortController();
     const epoch = this.epoch;
-    const audio = this.deps.fetchSpeech(texts.join(" "), this.settings.cloudVoice, abort.signal);
+    const audio = this.deps.fetchSpeech(texts.join(" "), this.settings.cloudVoice, abort.signal, this.settings.persona);
     this.inFlight.add(abort);
     audio
       .catch((error: unknown) => {

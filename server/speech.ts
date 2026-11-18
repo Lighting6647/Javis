@@ -14,8 +14,9 @@ import { readUpstreamErrorCodes, sanitizeUpstreamMessage } from "./upstreamError
 
 /** ความยาวสูงสุดของข้อความต่อคำขอ (ตัวอักษร) ราวครึ่งนาทีของเสียงพูด ซึ่งเป็นไฟล์เสียงราว 1.5 MB */
 export const MAX_SPEECH_TEXT_LENGTH = 400;
-/** โมเดลสร้างเสียงที่พูดภาษาไทยได้ */
+/** โมเดลสร้างเสียงหลักและโมเดลสำรองที่พูดภาษาไทยได้ */
 export const DEFAULT_TTS_MODEL = "gemini-3.8-flash-tts";
+export const DEFAULT_TTS_FALLBACK_MODELS = ["gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"] as const;
 /** เสียงที่ Google บรรยายว่า "ชัด" */
 export const DEFAULT_TTS_VOICE = "Iapetus";
 /** ลีลาการพูดที่ส่งไปกับทุกข้อความ */
@@ -73,13 +74,44 @@ const PCM_SAMPLE_RATE = 24_000;
 const PCM_CHANNELS = 1;
 const PCM_BITS = 16;
 
+export const TTS_PERSONAS = ["assistant", "genz-girl", "upbeat-buddy", "calm-soft"] as const;
+export type TtsPersonaId = (typeof TTS_PERSONAS)[number];
+
+const TTS_PERSONA_CONFIG: Record<TtsPersonaId, { defaultVoice?: (typeof TTS_VOICES)[number]; style?: string; openAiVoice: string }> = {
+  assistant: { openAiVoice: "onyx" },
+  "genz-girl": {
+    defaultVoice: "Leda",
+    style: "Speak in Thai like a cheerful, bright Thai Gen Z teenage girl, energetic, playful, friendly, and natural.",
+    openAiVoice: "nova"
+  },
+  "upbeat-buddy": {
+    defaultVoice: "Zephyr",
+    style: "Speak in Thai in a lively, upbeat, crisp, enthusiastic companion style.",
+    openAiVoice: "alloy"
+  },
+  "calm-soft": {
+    defaultVoice: "Aoede",
+    style: "Speak in Thai in a soft, gentle, warm, relaxing storytelling tone.",
+    openAiVoice: "shimmer"
+  }
+};
+
 export const speechRequestSchema = z.object({
   text: z.string().trim().min(1).max(MAX_SPEECH_TEXT_LENGTH),
   /** เสียงที่ผู้ใช้เลือก ไม่ส่ง = เสียงเริ่มต้นของเซิร์ฟเวอร์ */
   voice: z.enum(TTS_VOICES).optional(),
+  /** บุคลิก/ลีลาการพูดที่ผู้ใช้เลือก */
+  persona: z.enum(TTS_PERSONAS).optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
   diagnose: z.string().max(200).optional()
 });
+
+export interface OpenAiSpeechFallback {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  voice: string;
+}
 
 /** การตั้งค่าเสียงพูดของ Gemini ที่เซิร์ฟเวอร์นี้ใช้ */
 export interface CloudVoice {
@@ -87,6 +119,10 @@ export interface CloudVoice {
   /** ที่อยู่ของ Interactions API */
   url: string;
   model: string;
+  /** โมเดล Gemini TTS สำรอง เมื่อโมเดลหลักโควตาเต็มหรือถูกจำกัดสิทธิ์ */
+  fallbackModels?: string[];
+  /** บริการ OpenAI TTS สำรอง เมื่อตั้งค่า OPENAI_API_KEY ไว้ด้วย */
+  openaiFallback?: OpenAiSpeechFallback;
   /** เสียงเริ่มต้น เมื่อผู้ใช้ไม่ได้เลือกเอง */
   voice: string;
   /** ลีลาการพูด เขียนเป็นคำบรรยาย */
@@ -121,11 +157,25 @@ export function resolveCloudVoice(env: Env, ai: AiProvider, warn: (message: stri
     else warn(`ค่า GEMINI_TTS_VOICE ไม่ใช่ชื่อเสียงที่ Gemini มี จึงใช้ ${DEFAULT_TTS_VOICE} แทน`);
   }
 
+  const openAiKey = env.OPENAI_API_KEY?.trim();
+  const fallbackModels = DEFAULT_TTS_FALLBACK_MODELS.filter((candidate) => candidate !== model);
+
   return {
     apiKey: ai.apiKey,
     // ที่อยู่ที่ตั้งไว้ให้ Gemini เป็นของทางที่เข้ากันได้กับ OpenAI (ลงท้ายด้วย /openai) ส่วน Interactions API อยู่ระดับเดียวกัน
     url: `${ai.baseUrl.replace(/\/openai\/?$/, "")}/interactions`,
     model,
+    fallbackModels,
+    ...(openAiKey
+      ? {
+          openaiFallback: {
+            apiKey: openAiKey,
+            baseUrl: (env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
+            model: "gpt-4o-mini-tts",
+            voice: "onyx"
+          }
+        }
+      : {}),
     voice,
     style: env.GEMINI_TTS_STYLE?.trim().slice(0, MAX_STYLE_LENGTH) || DEFAULT_TTS_STYLE
   };
@@ -135,18 +185,27 @@ export function resolveCloudVoice(env: Env, ai: AiProvider, warn: (message: stri
  * เนื้อหาคำขอเสียงพูดผู้พูดคนเดียวของ Interactions API
  * @param chosenVoice เสียงที่ผู้ใช้เลือก ใช้แทนเสียงเริ่มต้นของเซิร์ฟเวอร์
  */
-export function buildSpeechRequest(text: string, voice: CloudVoice, chosenVoice?: string): Json {
+export function buildSpeechRequest(
+  text: string,
+  voice: CloudVoice,
+  chosenVoice?: string,
+  modelOverride?: string,
+  persona?: TtsPersonaId
+): Json {
+  const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
+  const resolvedStyle = preset?.style ?? voice.style;
+  const resolvedVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
   return {
-    model: voice.model,
+    model: modelOverride ?? voice.model,
     input: [
       {
         type: "user_input",
         // ข้อความถูกอ่านตามตัวอักษร ส่วนลีลาการพูดส่งแยกเป็นคำกำกับ ไม่ปนในข้อความ
-        content: [{ type: "text", text, annotations: [{ type: "speech_metadata", style: voice.style }] }]
+        content: [{ type: "text", text, annotations: [{ type: "speech_metadata", style: resolvedStyle }] }]
       }
     ],
     response_format: { type: "audio" },
-    generation_config: { speech_config: [{ voice: chosenVoice ?? voice.voice }] },
+    generation_config: { speech_config: [{ voice: resolvedVoice }] },
     // ไม่ให้ต้นทางเก็บข้อความของผู้ใช้ไว้
     store: false
   };
@@ -236,7 +295,17 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
   const { voice } = deps;
   const callUpstream = deps.fetch ?? fetch;
   const now = deps.now ?? Date.now;
-  let pause: Pause | null = null;
+  const pauses = new Map<string, Pause>();
+
+  const activePauseOf = (key: string): Pause | null => {
+    const entry = pauses.get(key);
+    if (!entry) return null;
+    if (now() >= entry.until) {
+      pauses.delete(key);
+      return null;
+    }
+    return entry;
+  };
 
   return async (request, response) => {
     response.setHeader("Cache-Control", "no-store");
@@ -251,72 +320,122 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
       response.status(400).json({ error: MESSAGES.invalid, code: "invalid" });
       return;
     }
-    const { text, voice: chosenVoice, diagnose } = parsed.data;
+    const { text, voice: chosenVoice, persona, diagnose } = parsed.data;
     const diagnosing = deps.isDiagnostic?.(diagnose) ?? false;
 
-    const sendQuota = (retryMs: number) => {
+    const sendQuota = (retryMs: number, detail: Record<string, unknown> = {}) => {
       const seconds = Math.max(1, Math.ceil(retryMs / 1000));
-      response.status(429).set("Retry-After", String(seconds)).json({ error: MESSAGES.quota, code: "quota", retryAfterSeconds: seconds });
+      response.status(429).set("Retry-After", String(seconds)).json({ error: MESSAGES.quota, code: "quota", retryAfterSeconds: seconds, ...detail });
     };
 
-    // ผู้ดูแลที่กำลังวินิจฉัยต้องเห็นคำตอบจริงของต้นทาง จึงไม่ถูกการพักขวาง
-    if (pause && !diagnosing) {
-      const remaining = pause.until - now();
-      if (remaining > 0) {
-        if (pause.code === "quota") sendQuota(remaining);
-        else response.status(502).json({ error: MESSAGES.rejected, code: "rejected" });
-        return;
-      }
-      pause = null;
-    }
+    const models = diagnosing ? [voice.model] : [voice.model, ...(voice.fallbackModels ?? [])];
+    let lastErrorKind: "quota" | "rejected" | "failed" | null = null;
+    let lastRetryMs = DEFAULT_QUOTA_PAUSE_MS;
+    let lastDetail: Record<string, unknown> = {};
 
-    let upstream: Response;
-    try {
-      upstream = await callUpstream(voice.url, {
-        method: "POST",
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-        headers: { "x-goog-api-key": voice.apiKey, "Api-Revision": GEMINI_API_REVISION, "Content-Type": "application/json" },
-        body: JSON.stringify(buildSpeechRequest(text, voice, chosenVoice))
-      });
-    } catch (error) {
-      console.error("Speech upstream error", error instanceof Error ? error.name : "unknown");
-      response.status(502).json({ error: MESSAGES.failed, code: "failed" });
+    for (const candidate of models) {
+      if (!diagnosing) {
+        const paused = activePauseOf(candidate);
+        if (paused) {
+          lastErrorKind = paused.code;
+          lastRetryMs = Math.max(1000, paused.until - now());
+          continue;
+        }
+      }
+
+      let upstream: Response;
+      try {
+        upstream = await callUpstream(voice.url, {
+          method: "POST",
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+          headers: { "x-goog-api-key": voice.apiKey, "Api-Revision": GEMINI_API_REVISION, "Content-Type": "application/json" },
+          body: JSON.stringify(buildSpeechRequest(text, voice, chosenVoice, candidate, persona))
+        });
+      } catch (error) {
+        console.error("Speech upstream error", error instanceof Error ? error.name : "unknown");
+        lastErrorKind = "failed";
+        continue;
+      }
+
+      const payload: unknown = await upstream.json().catch(() => null);
+
+      if (!upstream.ok) {
+        const codes = readUpstreamErrorCodes(payload);
+        const message = sanitizeUpstreamMessage(isObject(payload) && isObject(payload.error) ? payload.error.message : undefined);
+        console.error("Speech upstream failed", candidate, upstream.status, codes.join(","), upstream.status === 400 ? message : "");
+        const detail = diagnosing ? { upstream: { httpStatus: upstream.status, codes, message } } : {};
+        lastDetail = detail;
+
+        if (upstream.status === 429) {
+          const wait = Math.min(MAX_QUOTA_PAUSE_MS, Math.max(MIN_QUOTA_PAUSE_MS, readRetryDelayMs(payload) ?? DEFAULT_QUOTA_PAUSE_MS));
+          pauses.set(candidate, { code: "quota", until: now() + wait });
+          lastErrorKind = "quota";
+          lastRetryMs = wait;
+          continue;
+        }
+        if (upstream.status === 401 || upstream.status === 403 || upstream.status === 404) {
+          pauses.set(candidate, { code: "rejected", until: now() + REJECTED_PAUSE_MS });
+          lastErrorKind = "rejected";
+          continue;
+        }
+        lastErrorKind = "failed";
+        break;
+      }
+
+      const audio = readSpeechAudio(payload);
+      if (!audio) {
+        console.error("Speech upstream returned no audio", candidate);
+        const steps = isObject(payload) && Array.isArray(payload.steps) ? payload.steps.map((step) => (isObject(step) ? String(step.type) : "?")) : [];
+        lastDetail = diagnosing ? { upstream: { httpStatus: upstream.status, codes: steps, message: "no audio in response" } } : {};
+        lastErrorKind = "failed";
+        continue;
+      }
+
+      response.status(200).type("audio/wav").send(audio);
       return;
     }
 
-    const payload: unknown = await upstream.json().catch(() => null);
-
-    if (!upstream.ok) {
-      const codes = readUpstreamErrorCodes(payload);
-      const message = sanitizeUpstreamMessage(isObject(payload) && isObject(payload.error) ? payload.error.message : undefined);
-      console.error("Speech upstream failed", upstream.status, codes.join(","), upstream.status === 400 ? message : "");
-      // รายละเอียดของต้นทางให้เฉพาะผู้ดูแลที่แนบรหัสวินิจฉัย ผู้ใช้ทั่วไปได้เฉพาะข้อความที่เขียนไว้เอง
-      const detail = diagnosing ? { upstream: { httpStatus: upstream.status, codes, message } } : {};
-
-      if (upstream.status === 429) {
-        const wait = Math.min(MAX_QUOTA_PAUSE_MS, Math.max(MIN_QUOTA_PAUSE_MS, readRetryDelayMs(payload) ?? DEFAULT_QUOTA_PAUSE_MS));
-        pause = { code: "quota", until: now() + wait };
-        const seconds = Math.ceil(wait / 1000);
-        response.status(429).set("Retry-After", String(seconds)).json({ error: MESSAGES.quota, code: "quota", retryAfterSeconds: seconds, ...detail });
-        return;
+    // ถ้าโมเดล Gemini TTS ไม่พร้อมใช้งานและมี OPENAI_API_KEY ตั้งไว้ด้วย ให้สลับไปขอเสียงจาก OpenAI TTS อัตโนมัติ
+    if (!diagnosing && voice.openaiFallback && !activePauseOf("openai-tts")) {
+      const fb = voice.openaiFallback;
+      const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
+      try {
+        const oaRes = await callUpstream(`${fb.baseUrl}/audio/speech`, {
+          method: "POST",
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+          headers: { Authorization: `Bearer ${fb.apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: fb.model,
+            voice: preset?.openAiVoice ?? fb.voice,
+            input: text,
+            response_format: "wav",
+            instructions: preset?.style ?? "Speak clearly in natural, courteous Thai."
+          })
+        });
+        if (oaRes.ok) {
+          const bytes = Buffer.from(await oaRes.arrayBuffer());
+          if (bytes.length > 44) {
+            response.status(200).type("audio/wav").send(bytes);
+            return;
+          }
+        } else if (oaRes.status === 429) {
+          pauses.set("openai-tts", { code: "quota", until: now() + DEFAULT_QUOTA_PAUSE_MS });
+        } else if (oaRes.status === 401 || oaRes.status === 403 || oaRes.status === 404) {
+          pauses.set("openai-tts", { code: "rejected", until: now() + REJECTED_PAUSE_MS });
+        }
+      } catch {
+        // ข้ามไปคืนผลให้หน้าเว็บสลับเป็นเสียงในอุปกรณ์
       }
-      if (upstream.status === 401 || upstream.status === 403 || upstream.status === 404) {
-        pause = { code: "rejected", until: now() + REJECTED_PAUSE_MS };
-        response.status(502).json({ error: MESSAGES.rejected, code: "rejected", ...detail });
-        return;
-      }
-      response.status(502).json({ error: MESSAGES.failed, code: "failed", ...detail });
-      return;
     }
 
-    const audio = readSpeechAudio(payload);
-    if (!audio) {
-      console.error("Speech upstream returned no audio");
-      const steps = isObject(payload) && Array.isArray(payload.steps) ? payload.steps.map((step) => (isObject(step) ? String(step.type) : "?")) : [];
-      response.status(502).json({ error: MESSAGES.failed, code: "failed", ...(diagnosing ? { upstream: { httpStatus: upstream.status, codes: steps, message: "no audio in response" } } : {}) });
+    if (lastErrorKind === "quota") {
+      sendQuota(lastRetryMs, lastDetail);
       return;
     }
-
-    response.status(200).type("audio/wav").send(audio);
+    if (lastErrorKind === "rejected") {
+      response.status(502).json({ error: MESSAGES.rejected, code: "rejected", ...lastDetail });
+      return;
+    }
+    response.status(502).json({ error: MESSAGES.failed, code: "failed", ...lastDetail });
   };
 }

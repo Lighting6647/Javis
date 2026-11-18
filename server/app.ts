@@ -22,6 +22,10 @@ import { createSpeechHandler } from "./speech.js";
 import { transcribeHandler } from "./transcribe.js";
 import { getJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
 import { createSearchUsageReader } from "./searchUsage.js";
+import { z } from "zod";
+import { fetchProjectCloudStatus } from "./cloudControl.js";
+import { runProjectAction } from "./projectRunner.js";
+import { findProject, listProjects } from "./projects.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
@@ -116,6 +120,50 @@ export function createApp(options: AppOptions = {}): Express {
   );
   // เสียงพูดของ Gemini: รับข้อความหนึ่งช่วง ตอบเป็นไฟล์เสียง (server/speech.ts)
   app.post("/api/speech", requireAuth, speechRateLimiter, createSpeechHandler({ voice: config.cloudVoice, isDiagnostic: isDiagnosticToken }));
+
+  // Project Control Center (Registry + GitHub/Vercel Cloud + Allowlisted Local Runner)
+  app.get("/api/projects", requireAuth, async (_request, response) => {
+    const listing = await listProjects();
+    response.set("Cache-Control", "no-store").json({
+      ok: true,
+      mode: listing.mode,
+      githubConfigured: Boolean(process.env.GITHUB_TOKEN?.trim()),
+      vercelConfigured: Boolean(process.env.VERCEL_TOKEN?.trim()),
+      projects: listing.projects
+    });
+  });
+
+  app.get("/api/projects/:id/status", requireAuth, async (request, response) => {
+    const listing = await listProjects();
+    const project = findProject(String(request.params.id ?? ""), listing.projects);
+    if (!project) {
+      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนครับ" });
+      return;
+    }
+    const cloud = project.githubRepo || project.vercelProject ? await fetchProjectCloudStatus(project) : null;
+    response.set("Cache-Control", "no-store").json({ ok: true, mode: listing.mode, project, cloud });
+  });
+
+  const projectActionBodySchema = z.object({
+    action: z.enum(["cloud-status", "build", "test", "lint", "redeploy"])
+  });
+
+  app.post("/api/projects/:id/action", requireAuth, async (request, response) => {
+    const parsedBody = projectActionBodySchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      response.status(400).json({ ok: false, error: "คำสั่งโปรเจกต์ไม่อยู่ในรายการที่อนุญาต" });
+      return;
+    }
+    const listing = await listProjects();
+    const project = findProject(String(request.params.id ?? ""), listing.projects);
+    if (!project) {
+      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนครับ" });
+      return;
+    }
+    const result = await runProjectAction(project, parsedBody.data.action, { rootDir: listing.rootDir });
+    response.status(result.ok ? 200 : 400).json(result);
+  });
+
   app.use("/api", apiNotFound);
 
   if (staticDir) {

@@ -5,6 +5,7 @@ import {
   createResponseReducer,
   FILL_FORM_TOOL,
   FORGET_TOOL,
+  INSPECT_PROJECTS_TOOL,
   isSensitiveMemory,
   MAX_FILL_VALUE_LENGTH,
   MAX_MEMORIES_PER_REPLY,
@@ -13,6 +14,7 @@ import {
   MAX_SUGGESTION_BLOCKS,
   MAX_SUGGESTION_LENGTH,
   OPEN_PAGE_TOOL,
+  PROPOSE_PROJECT_ACTION_TOOL,
   READ_PAGE_TOOL,
   REMEMBER_TOOL,
   safeHttpUrl,
@@ -665,5 +667,48 @@ describe("การขออ่านหน้าเว็บภายนอก 
     });
 
     expect(reducer.finish()).toEqual([]);
+  });
+});
+
+describe("การควบคุมโปรเจกต์ (inspect_projects & propose_project_action)", () => {
+  it("เก็บคำขอตรวจสถานะโปรเจกต์จาก inspect_projects ได้ครบ", () => {
+    const reducer = createResponseReducer();
+    reducer.push({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        name: INSPECT_PROJECTS_TOOL,
+        call_id: "call_p1",
+        arguments: JSON.stringify({ project: "Tamsang", include_cloud: true })
+      }
+    });
+    expect(reducer.projectInspectRequest).toEqual({ project: "Tamsang", includeCloud: true });
+  });
+
+  it("สร้างเหตุการณ์ project_action เฉพาะคำสั่งที่อยู่ใน allowlist เท่านั้น", () => {
+    const reducer = createResponseReducer();
+    reducer.push({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        name: PROPOSE_PROJECT_ACTION_TOOL,
+        call_id: "call_p2",
+        arguments: JSON.stringify({ project: "tamsang", action: "build", reason: "ทดสอบ build ก่อน deploy" })
+      }
+    });
+    const events = reducer.finish();
+    expect(events.some((e) => e.type === "project_action" && e.proposal.action === "build" && e.proposal.projectId === "tamsang")).toBe(true);
+
+    const invalid = createResponseReducer();
+    invalid.push({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        name: PROPOSE_PROJECT_ACTION_TOOL,
+        call_id: "call_p3",
+        arguments: JSON.stringify({ project: "tamsang", action: "rm -rf /", reason: "danger" })
+      }
+    });
+    expect(invalid.finish()).toEqual([]);
   });
 });

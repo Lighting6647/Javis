@@ -22,6 +22,17 @@ describe("fetchCloudSpeech", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ text: "สวัสดีครับ", voice: "Zephyr" });
   });
 
+  it("ส่งบุคลิกเสียง (persona) เมื่อเลือกโทนอื่นที่ไม่ใช่ assistant", async () => {
+    const audioBlob = new Blob(["RIFFtest"], { type: "audio/wav" });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(audioBlob, { status: 200, headers: { "Content-Type": "audio/wav" } })
+    );
+
+    await fetchCloudSpeech("ฮายยย", "Leda", new AbortController().signal, "genz-girl");
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({ text: "ฮายยย", voice: "Leda", persona: "genz-girl" });
+  });
+
   it("แปลง 429 และ Retry-After เป็น CloudVoiceError(quota, retryAfterMs)", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ code: "quota", retryAfterSeconds: 45 }), {

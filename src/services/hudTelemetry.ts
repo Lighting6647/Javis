@@ -73,7 +73,7 @@ export function describeCloudVoiceState(
     return { text: "ในอุปกรณ์" };
   }
   if (status.mode === "paused") {
-    return { text: "พักชั่วคราว", tone: "wait" };
+    return { text: "สำรอง · ในอุปกรณ์", tone: "ok" };
   }
   return { text: cloudVoice ? `Gemini · ${cloudVoice}` : "Gemini", tone: "ok" };
 }

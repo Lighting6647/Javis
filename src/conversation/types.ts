@@ -105,6 +105,14 @@ export interface Notice {
   text: string;
 }
 
+export interface ProjectActionProposal {
+  id: string;
+  projectId: string;
+  projectName: string;
+  action: "build" | "test" | "lint" | "redeploy";
+  reason: string;
+}
+
 export interface ConversationState {
   phase: Phase;
   /** อยู่ในโหมดสนทนาด้วยเสียง: ตอบเสร็จแล้วจะกลับมาฟังต่อเอง */
@@ -119,6 +127,8 @@ export interface ConversationState {
   searching: boolean;
   /** รหัสข้อความที่มีรายการกรอกฟอร์มรอผู้ใช้ยืนยันอยู่ */
   pendingFillId: string | null;
+  /** คำสั่งควบคุมโปรเจกต์ที่รอผู้ใช้ยืนยันก่อนรันจริง */
+  pendingProjectAction: ProjectActionProposal | null;
   /** เวลาที่รอคำตอบครั้งล่าสุด นับจากส่งคำถามจนข้อความแรกมาถึง (มิลลิวินาที) หรือ null ถ้ายังไม่เคยได้คำตอบ */
   lastReplyMs: number | null;
 }
@@ -141,6 +151,8 @@ export type ChatEvent =
   | { type: "fill"; fields: FillValue[] }
   /** AI ขอจำเรื่องใหม่ (ข้อความ) หรือลืมเรื่องเดิม (รหัสความจำ) */
   | { type: "memory"; added: string[]; removed: string[] }
+  /** AI เสนอคำสั่งควบคุมโปรเจกต์ (ต้องให้ผู้ใช้กดยืนยันก่อนรันจริง) */
+  | { type: "project_action"; proposal: ProjectActionProposal }
   /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
   | { type: "suggestions"; html: string[] };
 
