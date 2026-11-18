@@ -95,6 +95,8 @@ describe("isScreenCaptureVoiceCommand", () => {
   it("matches voice triggers to open screen picker", () => {
     expect(isScreenCaptureVoiceCommand("ดูหน้าจอให้หน่อย")).toBe(true);
     expect(isScreenCaptureVoiceCommand("ช่วยส่องหน้าจออื่นให้ที")).toBe(true);
+    expect(isScreenCaptureVoiceCommand("เดลลูน่า จับภาพหน้าจอ")).toBe(true);
+    expect(isScreenCaptureVoiceCommand("DelLuna จับภาพหน้าจอ")).toBe(true);
     expect(isScreenCaptureVoiceCommand("นีน่า จับภาพหน้าจอ")).toBe(true);
     expect(isScreenCaptureVoiceCommand("Nina จับภาพหน้าจอ")).toBe(true);
     expect(isScreenCaptureVoiceCommand("จาวิส จับภาพหน้าจอ")).toBe(true);

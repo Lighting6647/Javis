@@ -36,7 +36,7 @@ export function FillCard({ request, onConfirm, onCancel }: FillCardProps) {
         ))}
       </dl>
 
-      <p>นีน่าจะกรอกเฉพาะช่องด้านบน และไม่กดส่งฟอร์มให้ พูดว่า "ยืนยัน" หรือ "ยกเลิก" ก็ได้</p>
+      <p>เดลลูน่าจะกรอกเฉพาะช่องด้านบน และไม่กดส่งฟอร์มให้ พูดว่า "ยืนยัน" หรือ "ยกเลิก" ก็ได้</p>
 
       <div className="fill-card-actions">
         <button type="button" className="btn btn-primary" onClick={onConfirm}>

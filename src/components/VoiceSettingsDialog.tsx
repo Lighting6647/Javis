@@ -364,9 +364,9 @@ function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
         <p className="settings-note"><Check size={15} aria-hidden /> ติดตั้งเป็นแอปบนอุปกรณ์นี้แล้ว</p>
       ) : canInstall ? (
         <>
-          <p className="settings-note">ติดตั้ง Nina เป็นแอปแยกหน้าต่าง เปิดได้จากหน้าจอหลักโดยไม่ต้องเข้าเบราว์เซอร์</p>
+          <p className="settings-note">ติดตั้ง เดลลูน่า เป็นแอปแยกหน้าต่าง เปิดได้จากหน้าจอหลักโดยไม่ต้องเข้าเบราว์เซอร์</p>
           <button type="button" className="btn btn-secondary" onClick={() => void install()}>
-            <Download size={16} aria-hidden /> ติดตั้งแอป Nina
+            <Download size={16} aria-hidden /> ติดตั้งแอป เดลลูน่า
           </button>
         </>
       ) : (

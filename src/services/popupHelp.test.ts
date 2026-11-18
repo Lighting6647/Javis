@@ -76,7 +76,7 @@ describe("popupHelpFor", () => {
 
       expect(steps.length).toBeGreaterThanOrEqual(2);
       expect(steps.length).toBeLessThanOrEqual(3);
-      expect(steps.at(-1)).toContain("สั่งนีน่าอีกครั้ง");
+      expect(steps.at(-1)).toContain("สั่งเดลลูน่าอีกครั้ง");
     }
   });
 });

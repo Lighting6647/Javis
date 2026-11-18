@@ -271,7 +271,7 @@ export function ProjectsPanel({ onClose, onAskJavis, onOpenWeb }: ProjectsPanelP
                   onClick={() => onAskJavis(`ช่วยสรุปสถานะโปรเจกต์ ${project.name} ทั้ง Git และออนไลน์ให้ฟังหน่อย`)}
                 >
                   <MessageSquare size={13} aria-hidden />
-                  <span>ถามนีน่า</span>
+                  <span>ถามเดลลูน่า</span>
                 </button>
                 {project.webUrl && onOpenWeb && (
                   <button type="button" className="studio-pill-btn" onClick={() => onOpenWeb(project.webUrl!)}>

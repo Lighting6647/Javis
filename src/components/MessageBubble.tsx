@@ -63,10 +63,10 @@ export function MessageBubble({ message, onOpenLink, onShowFramed, onLinkOpened,
 
   return (
     <article className={`message ${message.role}`}>
-      <span className="message-author">{fromUser ? "คุณ" : "Nina"}</span>
+      <span className="message-author">{fromUser ? "คุณ" : "เดลลูน่า"}</span>
 
       {!message.text ? (
-        <p className="typing" aria-label="นีน่ากำลังคิดคำตอบ">
+        <p className="typing" aria-label="เดลลูน่ากำลังคิดคำตอบ">
           <i /><i /><i />
         </p>
       ) : fromUser ? (

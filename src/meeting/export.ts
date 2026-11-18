@@ -52,7 +52,7 @@ export function buildMeetingDocument({ summary, transcript, minutes, startedAt }
   const lines = [
     summarized ? "สรุปการประชุม" : "บันทึกการประชุม",
     `เริ่มประชุม: ${formatMeetingDate(startedAt, timeZone)} · ความยาว: ${describeDuration(minutes)}`,
-    "จัดทำโดย Javis จากเสียงที่แปลงเป็นข้อความอัตโนมัติ อาจมีคำคลาดเคลื่อน ควรตรวจทานก่อนนำไปใช้",
+    "จัดทำโดย เดลลูน่า จากเสียงที่แปลงเป็นข้อความอัตโนมัติ อาจมีคำคลาดเคลื่อน ควรตรวจทานก่อนนำไปใช้",
     ""
   ];
   if (summarized) lines.push("คำสรุป", "------", summarized, "");
@@ -225,7 +225,7 @@ export function buildMeetingMarkdown({ summary, transcript, minutes, startedAt }
     "",
     `- **เริ่มประชุม:** ${formatMeetingDate(startedAt, timeZone)}`,
     `- **ความยาว:** ${describeDuration(minutes)}`,
-    `- **หมายเหตุ:** จัดทำโดย Javis จากเสียงที่แปลงเป็นข้อความอัตโนมัติ อาจมีคำคลาดเคลื่อน ควรตรวจทานก่อนนำไปใช้`,
+    `- **หมายเหตุ:** จัดทำโดย เดลลูน่า จากเสียงที่แปลงเป็นข้อความอัตโนมัติ อาจมีคำคลาดเคลื่อน ควรตรวจทานก่อนนำไปใช้`,
     ""
   ];
 

@@ -51,7 +51,7 @@ const PRIVACY_NOTE = "เสียงถูกแปลงเป็นข้อ�
 const HANDS_FREE_PRIVACY_NOTE =
   "ไมโครโฟนเปิดฟังตลอดเวลาที่เปิดหน้านี้ไว้ ปิดได้ที่ปุ่มไมโครโฟนด้านบน เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
 const DESKTOP_PRIVACY_NOTE =
-  "ในแอปเดสก์ท็อป เสียงที่อัดจะถูกส่งผ่านเซิร์ฟเวอร์ Javis ไปแปลงเป็นข้อความ และเมื่อเปิดหน้าเว็บ Javis จะส่งเฉพาะชื่อช่องกรอกข้อมูลของหน้านั้นให้ AI";
+  "ในแอปเดสก์ท็อป เสียงที่อัดจะถูกส่งผ่านเซิร์ฟเวอร์ เดลลูน่า ไปแปลงเป็นข้อความ และเมื่อเปิดหน้าเว็บ เดลลูน่าจะส่งเฉพาะชื่อช่องกรอกข้อมูลของหน้านั้นให้ AI";
 
 export default function App() {
   const session = useSession();
@@ -187,7 +187,7 @@ export default function App() {
       lines.push(`ความจำที่บันทึกไว้: ${memories.slice(-3).map((m) => m.text).join(" / ")}`);
     }
     if (lastReply) {
-      lines.push(`ข้อความล่าสุดจากนีน่า: ${lastReply.slice(0, 400)}`);
+      lines.push(`ข้อความล่าสุดจากเดลลูน่า: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
   }, [ready, showingWeb, showingProjects, showingRouter, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
@@ -366,9 +366,9 @@ export default function App() {
       <HudFrame />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>NN</span>
+          <span className="brand-mark" aria-hidden>DL</span>
           <div className="brand-title">
-            <strong>Nina</strong>
+            <strong>เดลลูน่า</strong>
             <span className="brand-sub">CENTRAL VOICE STUDIO</span>
           </div>
           {ready && !aiDown && (
@@ -447,7 +447,7 @@ export default function App() {
               className="meeting-entry"
               onClick={meeting.begin}
               aria-label="เริ่มโหมดสรุปการประชุม"
-              title="โหมดสรุปการประชุม: นีน่าฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
+              title="โหมดสรุปการประชุม: เดลลูน่าฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
             >
               <NotebookPen size={16} aria-hidden />
               <span>ประชุม</span>
@@ -459,7 +459,7 @@ export default function App() {
               className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
-              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้นีน่าจดจำและใช้เสียงนี้พูดตอบกลับ"
+              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้เดลลูน่าจดจำและใช้เสียงนี้พูดตอบกลับ"
             >
               <AudioLines size={16} aria-hidden />
               <span>บันทึกเสียง</span>
@@ -477,7 +477,7 @@ export default function App() {
               onClick={micOn ? handsFree.disable : handsFree.enable}
               aria-pressed={micOn}
               aria-label="ไมโครโฟนฟังตลอดเวลา"
-              title={micOn ? "ไมโครโฟนเปิดอยู่ นีน่าฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้นีน่าฟังตลอดเวลา"}
+              title={micOn ? "ไมโครโฟนเปิดอยู่ เดลลูน่าฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้เดลลูน่าฟังตลอดเวลา"}
             >
               {micOn ? <Mic size={17} aria-hidden /> : <MicOff size={17} aria-hidden />}
             </button>
@@ -614,7 +614,7 @@ export default function App() {
       {ready && footerShown && (
         <footer className={`dock${dockShown ? "" : " bare"}`}>
           {replyStrip && (
-            <p className="reply-strip"><strong>Nina</strong> {replyStrip}</p>
+            <p className="reply-strip"><strong>เดลลูน่า</strong> {replyStrip}</p>
           )}
           {pendingFill && <FillCard request={pendingFill} onConfirm={confirmFill} onCancel={cancelFill} />}
           {pendingProjectAction && (
@@ -628,7 +628,7 @@ export default function App() {
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img
                 src={`data:${shownCapture.mimeType};base64,${shownCapture.data}`}
-                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้นีน่าวิเคราะห์"
+                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้เดลลูน่าวิเคราะห์"
                 className="capture-preview-thumb"
               />
               <div className="capture-preview-meta">
@@ -676,12 +676,12 @@ export default function App() {
           )}
           {elsewhereHint && (
             <div className="toast info" role="status">
-              นีน่ากำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
+              เดลลูน่ากำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
             </div>
           )}
           {speechHint && (
             <div className="toast info" role="status">
-              เบราว์เซอร์ยังไม่ให้นีน่าพูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
+              เบราว์เซอร์ยังไม่ให้เดลลูน่าพูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
             </div>
           )}
           {heard && (

@@ -159,7 +159,7 @@ export function Transcript({
     if (!onSendAndSpeak) return;
     const raw = readerUrl.trim();
     if (!raw) {
-      setReaderError("กรุณากรอกลิงก์เว็บไซต์ที่ต้องการให้นีน่าอ่าน");
+      setReaderError("กรุณากรอกลิงก์เว็บไซต์ที่ต้องการให้เดลลูน่าอ่าน");
       return;
     }
     const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -186,7 +186,7 @@ export function Transcript({
           <div className="studio-hero-copy">
             <span className="welcome-kicker">{listening ? "กำลังฟัง พูดได้เลย" : "พร้อมรับคำสั่ง"}</span>
             <h1>
-              Inside the <span className="hero-accent">Nina.</span>
+              Inside the <span className="hero-accent">DelLuna.</span>
             </h1>
             <p>ผู้ช่วย AI ภาษาไทยสั่งงานด้วยเสียง ค้นข้อมูลล่าสุดจากเว็บ และเปิดหน้าเว็บให้ตามสั่ง</p>
           </div>
@@ -260,7 +260,7 @@ export function Transcript({
                     className="studio-pill-btn"
                     onClick={() => void onCaptureScreen()}
                     disabled={capturingScreen}
-                    title="เลือกหน้าจอ แท็บ หรือโปรแกรมอื่นให้นีน่ามองเห็นและอ่านให้ฟัง"
+                    title="เลือกหน้าจอ แท็บ หรือโปรแกรมอื่นให้เดลลูน่ามองเห็นและอ่านให้ฟัง"
                   >
                     <Monitor size={14} aria-hidden />
                     <span>{capturingScreen ? "กำลังจับภาพ..." : "ส่องหน้าจออื่น"}</span>
@@ -315,7 +315,7 @@ export function Transcript({
                   setReaderUrl(event.target.value);
                   if (readerError) setReaderError("");
                 }}
-                placeholder="วางลิงก์ https://... เพื่อให้นีน่าดึงเนื้อหามาอ่านให้ฟัง"
+                placeholder="วางลิงก์ https://... เพื่อให้เดลลูน่าดึงเนื้อหามาอ่านให้ฟัง"
                 aria-label="ลิงก์หน้าเว็บที่จะดึงข้อมูลมาอ่าน"
                 aria-invalid={readerError ? true : undefined}
               />

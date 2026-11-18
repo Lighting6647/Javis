@@ -29,11 +29,11 @@ export const VOICE_PERSONAS: readonly VoicePersonaOption[] = [
   },
   {
     id: "assistant",
-    label: "ผู้ช่วยสาวสุภาพ (Javis หญิง)",
+    label: "ผู้ช่วยสาวสุภาพ (เดลลูน่า)",
     hint: "เสียงผู้หญิง Kore คมชัด สุภาพ เป็นธรรมชาติ เหมาะกับการทำงานทั่วไป",
     recommendedCloudVoice: "Kore",
     devicePitch: 1.12,
-    sampleText: "สวัสดีค่ะ ดิฉันคือ Javis ผู้ช่วยของคุณค่ะ วันนี้ให้ช่วยเรื่องอะไรดีคะ"
+    sampleText: "สวัสดีค่ะ ดิฉันคือ เดลลูน่า ผู้ช่วยของคุณค่ะ วันนี้ให้ช่วยเรื่องอะไรดีคะ"
   },
   {
     id: "upbeat-buddy",

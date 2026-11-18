@@ -159,7 +159,7 @@ export function BrowserView({ browser, onReadPage }: BrowserViewProps) {
             className="browser-read-btn"
             onClick={onReadPage}
             aria-label="อ่านหน้านี้ให้ฟัง"
-            title="ให้นีน่าสรุปและอ่านเนื้อหาหน้าเว็บนี้ให้ฟัง"
+            title="ให้เดลลูน่าสรุปและอ่านเนื้อหาหน้าเว็บนี้ให้ฟัง"
           >
             <Volume2 size={15} aria-hidden />
             <span>อ่านหน้านี้</span>
