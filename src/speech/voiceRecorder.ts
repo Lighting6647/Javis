@@ -5,7 +5,11 @@ export interface RecordedClip {
   blob: Blob;
   base64: string;
   durationSeconds: number;
+  samples24k?: Float32Array;
 }
+
+const MAX_UPLOAD_AUDIO_BYTES = 15 * 1024 * 1024;
+const ALLOWED_AUDIO_EXT = /\.(wav|mp3|m4a|mp4|aac|ogg|webm)$/i;
 
 export interface ActiveVoiceRecording {
   stop: () => Promise<RecordedClip>;
@@ -60,7 +64,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function decodeToWav24kMono(rawBlob: Blob): Promise<RecordedClip> {
+async function decodeToWav24kMono(rawBlob: Blob, maxDurationSeconds?: number): Promise<RecordedClip> {
   const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) {
     throw new Error("เบราว์เซอร์นี้ไม่รองรับการประมวลผลเสียง Web Audio");
@@ -70,14 +74,16 @@ async function decodeToWav24kMono(rawBlob: Blob): Promise<RecordedClip> {
   try {
     const rawBuffer = await rawBlob.arrayBuffer();
     const decoded = await ctx.decodeAudioData(rawBuffer.slice(0));
-    const frameCount = Math.max(1, Math.round(decoded.duration * TARGET_WAV_SAMPLE_RATE));
+    const clippedDuration = maxDurationSeconds ? Math.min(decoded.duration, maxDurationSeconds) : decoded.duration;
+    const frameCount = Math.max(1, Math.round(clippedDuration * TARGET_WAV_SAMPLE_RATE));
     const offline = new OfflineAudioContext(1, frameCount, TARGET_WAV_SAMPLE_RATE);
     const source = offline.createBufferSource();
     source.buffer = decoded;
     source.connect(offline.destination);
-    source.start(0);
+    source.start(0, 0, clippedDuration);
     const rendered = await offline.startRendering();
-    const pcm16 = floatToPcm16(rendered.getChannelData(0));
+    const samples24k = new Float32Array(rendered.getChannelData(0));
+    const pcm16 = floatToPcm16(samples24k);
     const wavBytes = encodeWavFromPcm16(pcm16, TARGET_WAV_SAMPLE_RATE);
     const wavCopy = new Uint8Array(wavBytes.length);
     wavCopy.set(wavBytes);
@@ -85,11 +91,27 @@ async function decodeToWav24kMono(rawBlob: Blob): Promise<RecordedClip> {
     return {
       blob: wavBlob,
       base64: bytesToBase64(wavBytes),
-      durationSeconds: Math.round(decoded.duration * 10) / 10
+      durationSeconds: Math.round(clippedDuration * 10) / 10,
+      samples24k
     };
   } finally {
     await ctx.close().catch(() => undefined);
   }
+}
+
+/**
+ * อ่านไฟล์เสียงที่ผู้ใช้อัปโหลด (.wav, .mp3, .m4a, .ogg, .webm) และแปลงเป็น WAV 24kHz โมโน
+ */
+export async function readUploadedAudioClip(file: File, maxDurationSeconds: number): Promise<RecordedClip> {
+  if (file.size === 0) throw new Error("ไฟล์เสียงว่างเปล่า กรุณาเลือกไฟล์อื่น");
+  if (file.size > MAX_UPLOAD_AUDIO_BYTES) {
+    throw new Error("ไฟล์เสียงมีขนาดใหญ่เกิน 15 MB กรุณาเลือกคลิปสั้นกว่านี้");
+  }
+  const hasAudioMime = file.type.startsWith("audio/") || file.type === "video/mp4";
+  if (!hasAudioMime && !ALLOWED_AUDIO_EXT.test(file.name)) {
+    throw new Error("รองรับเฉพาะไฟล์เสียง (.wav, .mp3, .m4a, .aac, .ogg, .webm)");
+  }
+  return decodeToWav24kMono(file, maxDurationSeconds);
 }
 
 function pickRecorderMimeType(): string | undefined {

@@ -24,10 +24,14 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 
 function readEntry(value: unknown): MeetingEntry | null {
   if (!isObject(value)) return null;
-  const { at, text } = value;
+  const { at, text, speaker } = value;
   if (typeof at !== "number" || !Number.isFinite(at) || at < 0) return null;
   if (typeof text !== "string" || !text.trim()) return null;
-  return { at, text: text.trim() };
+  return {
+    at,
+    text: text.trim(),
+    ...(typeof speaker === "string" && speaker.trim() ? { speaker: speaker.trim() } : {})
+  };
 }
 
 /**

@@ -75,7 +75,7 @@ export interface ConversationDeps {
    * คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" ถูกถามด้วยทุกคำพูดและข้อความของผู้ใช้
    * คืน true เมื่อแอปรับคำสั่งนั้นไปทำแล้ว ซึ่งบทสนทนาจะออกจากโหมดเสียง ให้โหมดนั้นใช้ไมโครโฟนต่อได้
    */
-  onCommand?: (text: string) => boolean;
+  onCommand?: (text: string) => boolean | "keep-listening";
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -483,7 +483,13 @@ export class ConversationController {
 
   /** รับคำพูดหรือข้อความของผู้ใช้: ถ้าเป็นคำยืนยัน/ยกเลิกรายการกรอกฟอร์มให้จัดการเอง ไม่เช่นนั้นส่งไปถาม AI */
   private async handle(userText: string, epoch: number, options?: SendTextOptions): Promise<void> {
-    if (this.deps.onCommand?.(userText)) {
+    const commandResult = this.deps.onCommand?.(userText);
+    if (commandResult === "keep-listening") {
+      if (this.state.active) await this.listen(epoch);
+      else this.update({ phase: "idle", partial: "" });
+      return;
+    }
+    if (commandResult) {
       // แอปรับคำสั่งนี้ไปทำเอง (เช่นเริ่มจดการประชุม): ออกจากโหมดเสียง เพื่อให้โหมดนั้นใช้ไมโครโฟนต่อได้
       this.stop();
       return;

@@ -9,6 +9,8 @@ export interface MeetingEntry {
   /** เวลาที่ผ่านไปตั้งแต่เริ่มประชุมจนจดช่วงนี้ได้ (มิลลิวินาที) */
   at: number;
   text: string;
+  /** ผู้พูดที่ระบบแยกเสียงได้ (เช่น "ไลท์" หรือ "คู่สนทนา") */
+  speaker?: string;
 }
 
 const pad = (value: number): string => String(value).padStart(2, "0");
@@ -22,7 +24,8 @@ export function formatClock(elapsedMs: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
-const formatEntry = (entry: MeetingEntry): string => `[${formatClock(entry.at)}] ${entry.text}`;
+const formatEntry = (entry: MeetingEntry): string =>
+  entry.speaker ? `[${formatClock(entry.at)}] ${entry.speaker}: ${entry.text}` : `[${formatClock(entry.at)}] ${entry.text}`;
 
 /** บันทึกการประชุมเป็นข้อความ บรรทัดละช่วงคำพูด เป็นรูปแบบที่ส่งให้ AI สรุป และที่ผู้ใช้คัดลอกหรือดาวน์โหลด */
 export function formatTranscript(entries: readonly MeetingEntry[]): string {

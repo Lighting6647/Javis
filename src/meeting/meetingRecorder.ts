@@ -73,6 +73,8 @@ export interface MeetingDeps {
   now?: () => number;
   /** หน่วงเวลา (มิลลิวินาที) ก่อนลองฟังใหม่ แยกไว้เพื่อให้ทดสอบได้โดยไม่ต้องรอจริง */
   wait?: (ms: number) => Promise<void>;
+  /** ระบุชื่อผู้พูดของช่วงคำพูดที่เพิ่งจดได้จากโปรไฟล์เสียงที่บันทึกไว้ในเครื่อง */
+  identifySpeaker?: () => string | undefined;
 }
 
 const INITIAL_STATE: MeetingState = { status: "idle", startedAt: null, entries: [], partial: "", summary: "", notice: null };
@@ -279,7 +281,15 @@ export class MeetingRecorder {
     const room = MAX_TRANSCRIPT_LENGTH - transcriptLength(entries) - ENTRY_OVERHEAD;
     if (room <= 0) return;
 
-    const next = [...entries, { at: Math.max(0, this.clock() - startedAt), text: text.slice(0, room) }];
+    const speaker = this.deps.identifySpeaker?.();
+    const next: MeetingEntry[] = [
+      ...entries,
+      {
+        at: Math.max(0, this.clock() - startedAt),
+        text: text.slice(0, room),
+        ...(speaker ? { speaker } : {})
+      }
+    ];
     this.update({ entries: next, partial: "" });
     this.deps.draft?.save({ startedAt, entries: next });
   }

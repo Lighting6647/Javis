@@ -6,7 +6,9 @@ import { isMeetingStartCommand } from "../meeting/commands";
 import { summaryRequestText } from "../meeting/export";
 import { createMeetingDraftStore } from "../meeting/meetingDraft";
 import { meetingLock } from "../meeting/meetingLock";
+import { createLiveSpeakerMonitor } from "../meeting/liveSpeakerMonitor";
 import { MEETING_TEXT, MeetingRecorder, type MeetingState } from "../meeting/meetingRecorder";
+import { speakerProfileStore } from "../meeting/speakerProfile";
 import { streamChatReply } from "../services/chatApi";
 import { listeningLock } from "../services/listeningLock";
 import { sessionStore } from "../services/sessionStore";
@@ -53,11 +55,13 @@ const meetingOwner = (): string | null => sessionStore.get()?.name ?? null;
  */
 export function useMeeting({ ready, controller }: MeetingOptions): Meeting {
   const [capable] = useState(handsFreeAvailable);
+  const [speakerMonitor] = useState(() => createLiveSpeakerMonitor(() => speakerProfileStore.get()));
   const [recorder] = useState(
     () =>
       new MeetingRecorder({
         recognizer: createDictationRecognizer(),
         draft: createMeetingDraftStore(undefined, undefined, meetingOwner),
+        identifySpeaker: () => speakerMonitor.identifyRecent(),
         summarize: ({ transcript, minutes, signal, onDelta }) =>
           streamChatReply([{ role: "user", content: SUMMARY_PROMPT }], {
             signal,
@@ -110,11 +114,13 @@ export function useMeeting({ ready, controller }: MeetingOptions): Meeting {
     void listeningLock.acquire({ steal: true, onLost: () => recorder.pause(MEETING_TEXT.movedElsewhere) });
     const meter = sessionMeterWanted() ? getSessionMeter() : null;
     void meter?.start();
+    void speakerMonitor.start();
     return () => {
+      speakerMonitor.stop();
       meter?.stop();
       listeningLock.release();
     };
-  }, [recorder, recording]);
+  }, [recorder, recording, speakerMonitor]);
 
   const begin = useCallback(() => {
     if (recorder.getState().status !== "idle") return;

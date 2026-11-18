@@ -35,6 +35,9 @@ import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
 import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
 import { appCommands } from "./conversation/appCommands";
+import { matchVoiceSwitchCommand } from "./conversation/voiceCommands";
+import { customVoicesStore } from "./services/customVoicesStore";
+import { voiceSettingsStore } from "./services/voiceSettingsStore";
 import { memoryStore } from "./memory/memoryStore";
 import {
   type CapturedScreenImage,
@@ -317,7 +320,38 @@ export default function App() {
   useEffect(() => {
     if (!ready || inMeeting) return;
     return appCommands.register({
-      matches: (text) => /(?:จดจำ|บันทึก|จำลอง)\s*เสียง/i.test(text),
+      matches: (text) => matchVoiceSwitchCommand(text, customVoicesStore.get()) !== null,
+      run: (text) => {
+        const command = matchVoiceSwitchCommand(text, customVoicesStore.get());
+        if (!command) return "keep-listening";
+        if (command.kind === "open-recorder") {
+          controller.addExchange(text, { text: command.reply });
+          openRecorder();
+          return;
+        }
+        const current = voiceSettingsStore.get();
+        const patch =
+          command.kind === "custom"
+            ? { cloud: true, cloudVoice: command.voice.id }
+            : { cloud: true, persona: command.persona, cloudVoice: command.cloudVoice };
+        const next = { ...current, ...patch };
+        voiceSettingsStore.update(patch);
+        synthesizer.applySettings(next);
+        if ("retryCloud" in synthesizer && typeof synthesizer.retryCloud === "function") {
+          synthesizer.retryCloud();
+        }
+        synthesizer.cancel();
+        controller.addExchange(text, { text: command.reply });
+        void synthesizer.speak(command.reply).catch(() => undefined);
+        return "keep-listening";
+      }
+    });
+  }, [ready, inMeeting, controller, synthesizer, openRecorder]);
+
+  useEffect(() => {
+    if (!ready || inMeeting) return;
+    return appCommands.register({
+      matches: (text) => /(?:จดจำ|บันทึก)\s*เสียง/i.test(text),
       run: () => openRecorder()
     });
   }, [ready, inMeeting, openRecorder]);

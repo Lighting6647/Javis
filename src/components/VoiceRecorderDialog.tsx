@@ -1,5 +1,6 @@
-import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Volume2, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Upload, Volume2, X } from "lucide-react";
+import { type ChangeEvent, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { speakerProfileStore } from "../meeting/speakerProfile";
 import {
   createReplicatedVoice,
   type CustomVoiceRecord,
@@ -9,7 +10,13 @@ import {
 import { customVoicesStore } from "../services/customVoicesStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import type { SpeechSynthesizer } from "../speech/types";
-import { type ActiveVoiceRecording, type RecordedClip, startVoiceRecording } from "../speech/voiceRecorder";
+import {
+  type ActiveVoiceRecording,
+  readUploadedAudioClip,
+  type RecordedClip,
+  startVoiceRecording,
+  TARGET_WAV_SAMPLE_RATE
+} from "../speech/voiceRecorder";
 
 const DEFAULT_CONSENT_PHRASE =
   "ฉันเป็นเจ้าของเสียงนี้ และฉันยินยอมให้ Google ใช้เสียงนี้เพื่อสร้างแบบจำลองเสียงสังเคราะห์";
@@ -29,6 +36,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const nameId = useId();
 
   const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
+  const speakerProfile = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.get);
   const [consentPhrase, setConsentPhrase] = useState(DEFAULT_CONSENT_PHRASE);
   const [displayName, setDisplayName] = useState("เสียงของคุณไลท์");
   const [sourceClip, setSourceClip] = useState<RecordedClip | null>(null);
@@ -45,6 +53,8 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const recorderRef = useRef<ActiveVoiceRecording | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sourceUploadRef = useRef<HTMLInputElement>(null);
+  const consentUploadRef = useRef<HTMLInputElement>(null);
 
   const stopPreviewAudio = () => {
     if (previewAudioRef.current) {
@@ -103,6 +113,34 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     };
   }, [open]);
 
+  const storeClip = (slot: ClipSlot, clip: RecordedClip) => {
+    if (slot === "source") {
+      setSourceClip(clip);
+      if (clip.samples24k) {
+        speakerProfileStore.saveFromPcm("ไลท์", clip.samples24k, TARGET_WAV_SAMPLE_RATE);
+      }
+    } else {
+      setConsentClip(clip);
+    }
+  };
+
+  const handleFileUpload = async (slot: ClipSlot, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const clip = await readUploadedAudioClip(file, slot === "source" ? 25 : 15);
+      storeClip(slot, clip);
+      if (slot === "source") {
+        setNotice("นำเข้าไฟล์เสียงและจดจำเอกลักษณ์เสียงสำหรับแยกผู้พูดในโหมดประชุมแล้วครับ");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "อ่านไฟล์เสียงที่เลือกไม่สำเร็จ");
+    }
+  };
+
   const startRecording = async (slot: ClipSlot) => {
     setError(null);
     setNotice(null);
@@ -123,8 +161,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
           recorderRef.current = null;
           setRecordingSlot(null);
           setLevel(0);
-          if (slot === "source") setSourceClip(clip);
-          else setConsentClip(clip);
+          storeClip(slot, clip);
         },
         onError: (msg) => {
           recorderRef.current = null;
@@ -149,8 +186,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
 
     try {
       const clip = await active.stop();
-      if (slot === "source") setSourceClip(clip);
-      else setConsentClip(clip);
+      storeClip(slot, clip);
     } catch (err) {
       setError(err instanceof Error ? err.message : "บันทึกเสียงไม่สำเร็จ");
     }
@@ -305,14 +341,31 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
                 <Square size={14} fill="currentColor" aria-hidden /> หยุดอัดเสียงตัวอย่าง
               </button>
             ) : (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={recordingSlot !== null || saving}
-                onClick={() => void startRecording("source")}
-              >
-                <Mic size={15} aria-hidden /> {sourceClip ? "อัดเสียงตัวอย่างใหม่" : "เริ่มอัดเสียงตัวอย่าง"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => void startRecording("source")}
+                >
+                  <Mic size={15} aria-hidden /> {sourceClip ? "อัดเสียงตัวอย่างใหม่" : "เริ่มอัดเสียงตัวอย่าง"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => sourceUploadRef.current?.click()}
+                >
+                  <Upload size={14} aria-hidden /> อัปโหลดไฟล์เสียง
+                </button>
+                <input
+                  ref={sourceUploadRef}
+                  type="file"
+                  accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm"
+                  hidden
+                  onChange={(event) => void handleFileUpload("source", event)}
+                />
+              </>
             )}
             {sourceClip && recordingSlot !== "source" && (
               <button type="button" className="btn btn-secondary" onClick={() => playClip(sourceClip)}>
@@ -347,14 +400,31 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
                 <Square size={14} fill="currentColor" aria-hidden /> หยุดอัดคำยินยอม
               </button>
             ) : (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={recordingSlot !== null || saving}
-                onClick={() => void startRecording("consent")}
-              >
-                <Mic size={15} aria-hidden /> {consentClip ? "อัดคำยินยอมใหม่" : "เริ่มอัดคำยินยอม"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => void startRecording("consent")}
+                >
+                  <Mic size={15} aria-hidden /> {consentClip ? "อัดคำยินยอมใหม่" : "เริ่มอัดคำยินยอม"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => consentUploadRef.current?.click()}
+                >
+                  <Upload size={14} aria-hidden /> อัปโหลดไฟล์เสียง
+                </button>
+                <input
+                  ref={consentUploadRef}
+                  type="file"
+                  accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm"
+                  hidden
+                  onChange={(event) => void handleFileUpload("consent", event)}
+                />
+              </>
             )}
             {consentClip && recordingSlot !== "consent" && (
               <button type="button" className="btn btn-secondary" onClick={() => playClip(consentClip)}>
@@ -363,6 +433,18 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
             )}
           </div>
         </section>
+
+        <div className="recorder-speaker-status">
+          <span>
+            แยกเสียงในโหมดประชุม:{" "}
+            <strong>{speakerProfile ? `จำเสียง "${speakerProfile.label}" แล้ว` : "ยังไม่มีข้อมูลเสียงในเครื่อง (อัดข้อ 1 เพื่อเปิดใช้)"}</strong>
+          </span>
+          {speakerProfile && (
+            <button type="button" className="studio-pill-btn" onClick={() => speakerProfileStore.clear()}>
+              ล้างข้อมูลแยกเสียง
+            </button>
+          )}
+        </div>
 
         <div className="settings-actions">
           <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={() => void handleSaveAndClone()}>

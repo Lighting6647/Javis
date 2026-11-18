@@ -1,6 +1,7 @@
 import { FileText, Mic, Pause, Sparkles, Trash2 } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { MeetingState, MeetingStatus } from "../meeting/meetingRecorder";
+import { speakerProfileStore } from "../meeting/speakerProfile";
 import { formatClock, formatTranscript, type MeetingEntry, meetingMinutes } from "../meeting/transcript";
 import { MeetingExport } from "./MeetingExport";
 
@@ -47,7 +48,12 @@ const MeetingLines = memo(function MeetingLines({ entries }: { entries: readonly
   return entries.map((entry, index) => (
     <li key={`${entry.at}-${index}`}>
       <time>{formatClock(entry.at)}</time>
-      <p>{entry.text}</p>
+      <p>
+        {entry.speaker && (
+          <span className={`meeting-speaker${entry.speaker === "คู่สนทนา" ? " peer" : ""}`}>{entry.speaker}</span>
+        )}
+        {entry.text}
+      </p>
     </li>
   ));
 });
@@ -65,6 +71,7 @@ const TranscriptExport = memo(function TranscriptExport({ entries, startedAt }: 
  */
 export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: MeetingPanelProps) {
   const { status, startedAt, entries, partial, summary, notice } = state;
+  const speakerProfile = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.get);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   /** ผู้ใช้อยู่ท้ายรายการ จึงเลื่อนตามคำพูดใหม่ให้ */
@@ -100,6 +107,7 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: M
           </span>
           {status === "recording" && <MeetingClock startedAt={startedAt} />}
           <span className="meeting-count">{entries.length > 0 ? `จดแล้ว ${entries.length} ช่วงคำพูด` : "ยังไม่มีคำพูดที่จดได้"}</span>
+          {speakerProfile && <span className="recorder-badge">แยกเสียง: {speakerProfile.label}</span>}
         </div>
 
         {confirmingCancel ? (

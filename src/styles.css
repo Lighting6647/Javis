@@ -1205,6 +1205,30 @@ html[data-theme="plain"] .recorder-consent-phrase strong { color: inherit; }
 .recorder-voice-item strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recorder-voice-item small { font-size: 11px; color: var(--muted, #94a3b8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recorder-voice-item-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.recorder-speaker-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+.meeting-speaker {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(34, 211, 238, 0.16);
+  color: var(--accent, #22d3ee);
+  vertical-align: baseline;
+}
+.meeting-speaker.peer {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--muted, #cbd5e1);
+}
 @media (max-width: 640px) {
   .voice-enroll-entry span { display: none; }
 }
