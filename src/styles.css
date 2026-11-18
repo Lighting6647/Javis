@@ -744,8 +744,8 @@ iframe.browser-frame { width: 100%; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
-/* แถบบนเริ่มแน่น: ปุ่มเข้าโหมดประชุมเหลือไอคอน ชื่อยังอยู่ให้โปรแกรมอ่านหน้าจอผ่านป้ายของปุ่ม */
-@media (max-width: 720px) {
+/* แถบบนเริ่มแน่น: ปุ่มเข้าโหมดประชุมและบันทึกเสียงเหลือไอคอน ชื่อยังอยู่ให้โปรแกรมอ่านหน้าจอผ่านป้ายของปุ่ม */
+@media (max-width: 960px) {
   .meeting-entry, .voice-enroll-entry { width: 34px; justify-content: center; padding: 0; }
   .meeting-entry span, .voice-enroll-entry span { display: none; }
 }
@@ -768,13 +768,15 @@ iframe.browser-frame { width: 100%; }
 
   /* App header: กระชับบนมือถือ */
   .app-header {
-    padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left));
-    gap: var(--space-2);
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
+    gap: 6px;
   }
-  .brand strong { font-size: 16px; font-weight: 800; }
+  .header-actions { gap: 4px; }
+  .brand { gap: 6px; }
+  .brand strong { font-size: 15px; font-weight: 800; }
   .brand-mark { width: 24px; height: 24px; }
-  .icon-button { width: 34px; height: 34px; }
-  .status-pill { padding: 4px 9px; font-size: 12.5px; font-weight: 600; }
+  .icon-button, .meeting-entry, .voice-enroll-entry { width: 32px; height: 32px; }
+  .status-pill { padding: 4px 8px; font-size: 12px; font-weight: 600; }
 
   /* Chat thread & Message bubbles: ขนาดตัวอักษรใหญ่ชัดเจน สบายตาสำหรับผู้ใหญ่ */
   .scroll-area > * {
