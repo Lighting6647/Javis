@@ -41,6 +41,29 @@ export function describeAiState(state: AiServiceState | null): { text: string; t
   return AI_STATE_TEXT[state ?? "unchecked"];
 }
 
+const COUNT = new Intl.NumberFormat("th-TH");
+
+/**
+ * ยอดค้นเว็บของเดือนนี้เทียบกับโควตา เช่น "123 / 1,000"
+ * ใกล้เต็มเตือนเป็นสีรอ (75%) เต็มหรือเกินเป็นสีปัญหา (90%) เพราะเมื่อโควตาหมด Javis จะตอบโดยไม่ค้นเว็บ
+ */
+export function describeSearchMonth(month: { used: number; limit: number | null } | null): { text: string; tone?: ReadoutTone } {
+  if (!month) return { text: NO_VALUE };
+  if (!month.limit) return { text: `${COUNT.format(month.used)} ครั้ง` };
+  const share = month.used / month.limit;
+  return {
+    text: `${COUNT.format(month.used)} / ${COUNT.format(month.limit)}`,
+    tone: share >= 0.9 ? "bad" : share >= 0.75 ? "wait" : "ok"
+  };
+}
+
+/** สัดส่วนคำค้นที่ใช้ผลค้นที่จำไว้ เช่น "5 จาก 20 (25%)" ยังไม่มีการค้นคือ "ยังไม่มี" */
+export function describeCacheUse(cache: { hits: number; misses: number } | null): { text: string } {
+  const total = cache ? cache.hits + cache.misses : 0;
+  if (!cache || total === 0) return { text: NO_VALUE };
+  return { text: `${COUNT.format(cache.hits)} จาก ${COUNT.format(total)} (${Math.round((cache.hits / total) * 100)}%)` };
+}
+
 /** สถานะเสียงพูดของ Gemini สำหรับแสดงบนแผงตัวเลขของจอ Studio */
 export function describeCloudVoiceState(
   status: CloudVoiceStatus | null,

@@ -303,6 +303,17 @@ const server = http.createServer(async (request, response) => {
     return json(response, 200, { mode });
   }
 
+  // ยอดใช้งานของ Tavily จำลอง: นับจากจำนวนการค้นที่ได้รับจริง โควตาแบบแผนฟรี 1,000 ครั้งต่อเดือน
+  if (request.method === "GET" && path === "/usage") {
+    const tavilyKey = String(request.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+    if (tavilyKey !== TAVILY_KEY) return json(response, 401, { detail: { error: "Unauthorized: missing or invalid API key." } });
+    const searches = requests.filter((seen) => seen.api === "tavily").length;
+    return json(response, 200, {
+      key: { usage: searches, limit: null, search_usage: searches },
+      account: { current_plan: "Researcher", plan_usage: searches, plan_limit: 1000, paygo_usage: 0, paygo_limit: 0 }
+    });
+  }
+
   // บริการค้นเว็บ Tavily จำลอง (อยู่ในกระบวนการเดียวกันเพื่อความง่าย): ใช้กุญแจของตัวเอง คนละตัวกับของ Gemini
   if (request.method === "POST" && path === "/search") {
     const body = await readBody(request);

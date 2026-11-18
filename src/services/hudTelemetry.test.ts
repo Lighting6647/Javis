@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeAiState, describeCloudVoiceState, formatHudDate, formatLatency } from "./hudTelemetry";
+import { describeAiState, describeCacheUse, describeCloudVoiceState, describeSearchMonth, formatHudDate, formatLatency } from "./hudTelemetry";
 
 describe("formatLatency", () => {
   it.each([
@@ -65,5 +65,31 @@ describe("describeCloudVoiceState", () => {
     expect(describeCloudVoiceState(null, null)).toEqual({ text: "ในอุปกรณ์" });
     expect(describeCloudVoiceState({ mode: "off" }, "Zephyr")).toEqual({ text: "ในอุปกรณ์" });
     expect(describeCloudVoiceState({ mode: "unavailable" }, null)).toEqual({ text: "ในอุปกรณ์" });
+  });
+});
+
+describe("describeSearchMonth", () => {
+  it("ยอดเทียบโควตา: ปกติ ใกล้เต็ม (75%) และเกือบเต็มหรือเต็ม (90%) ใช้สีต่างกัน", () => {
+    expect(describeSearchMonth({ used: 123, limit: 1000 })).toEqual({ text: "123 / 1,000", tone: "ok" });
+    expect(describeSearchMonth({ used: 750, limit: 1000 })).toEqual({ text: "750 / 1,000", tone: "wait" });
+    expect(describeSearchMonth({ used: 900, limit: 1000 })).toEqual({ text: "900 / 1,000", tone: "bad" });
+    expect(describeSearchMonth({ used: 1200, limit: 1000 }).tone).toBe("bad");
+  });
+
+  it("ไม่รู้เพดาน: แสดงเฉพาะจำนวนครั้ง ไม่รู้ยอด: ยังไม่มี", () => {
+    expect(describeSearchMonth({ used: 42, limit: null })).toEqual({ text: "42 ครั้ง" });
+    expect(describeSearchMonth(null)).toEqual({ text: "ยังไม่มี" });
+  });
+});
+
+describe("describeCacheUse", () => {
+  it("บอกว่าใช้ผลค้นที่จำไว้กี่ครั้งจากการค้นทั้งหมด พร้อมเปอร์เซ็นต์", () => {
+    expect(describeCacheUse({ hits: 5, misses: 15 })).toEqual({ text: "5 จาก 20 (25%)" });
+    expect(describeCacheUse({ hits: 0, misses: 3 })).toEqual({ text: "0 จาก 3 (0%)" });
+  });
+
+  it("ยังไม่มีการค้น หรือไม่รู้ค่า: ยังไม่มี ไม่หารด้วยศูนย์", () => {
+    expect(describeCacheUse({ hits: 0, misses: 0 })).toEqual({ text: "ยังไม่มี" });
+    expect(describeCacheUse(null)).toEqual({ text: "ยังไม่มี" });
   });
 });
