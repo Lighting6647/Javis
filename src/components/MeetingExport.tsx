@@ -1,6 +1,14 @@
-import { Check, CircleAlert, Copy, Download } from "lucide-react";
+import { Check, CircleAlert, Copy, Download, FileText, Table } from "lucide-react";
 import { useEffect, useState } from "react";
-import { buildMeetingDocument, type MeetingDocument, meetingFileName } from "../meeting/export";
+import {
+  buildMeetingCsv,
+  buildMeetingDocument,
+  buildMeetingMarkdown,
+  type MeetingDocument,
+  meetingCsvFileName,
+  meetingFileName,
+  meetingMarkdownFileName
+} from "../meeting/export";
 import { downloadTextFile } from "../services/download";
 
 /** ปุ่มแสดงผลของการคัดลอกนานเท่านี้ แล้วกลับเป็นปกติ */
@@ -62,6 +70,18 @@ export function MeetingExport({ record }: MeetingExportProps) {
         <Download size={14} aria-hidden />
         <span>ดาวน์โหลดเป็นไฟล์</span>
       </button>
+      {summary && (
+        <>
+          <button type="button" onClick={() => downloadTextFile(meetingMarkdownFileName(record.startedAt), buildMeetingMarkdown(record))}>
+            <FileText size={14} aria-hidden />
+            <span>ดาวน์โหลด Markdown (.md)</span>
+          </button>
+          <button type="button" onClick={() => downloadTextFile(meetingCsvFileName(record.startedAt), buildMeetingCsv(record))}>
+            <Table size={14} aria-hidden />
+            <span>แยกผู้พูด/งาน (.csv)</span>
+          </button>
+        </>
+      )}
     </div>
   );
 }

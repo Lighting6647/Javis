@@ -1,20 +1,29 @@
 /**
  * ระบบจดจำลักษณะเสียงของผู้ใช้บนอุปกรณ์ (On-device Acoustic Speaker Profile)
  * สกัดคุณลักษณะความถี่เสียงพูด 8 ย่าน (85 Hz - 4,000 Hz) + Zero-Crossing Rate + Spectral Centroid
- * ใช้แยกผู้พูดหลัก ("ไลท์") ออกจากคู่สนทนาในโหมดสรุปการประชุมโดยไม่ส่งไฟล์เสียงออกนอกเครื่อง
+ * ใช้แยกผู้พูดหลายคน ("ไลท์", ชื่อทีมงาน) ออกจาก "คู่สนทนา" ในโหมดสรุปการประชุมโดยไม่ส่งไฟล์เสียงออกนอกเครื่อง
  */
 
 export interface SpeakerProfile {
+  id: string;
   label: string;
   /** เวกเตอร์เอกลักษณ์เสียง 10 มิติ (normalized L2) */
   vector: number[];
   updatedAt: number;
 }
 
+export interface SpeakerProfileState {
+  profiles: SpeakerProfile[];
+  threshold: number;
+}
+
 const STORAGE_KEY = "javis.speakerProfile";
 const BAND_EDGES_HZ = [85, 160, 260, 450, 750, 1250, 2000, 3000, 4000] as const;
-const MATCH_THRESHOLD = 0.86;
+export const DEFAULT_MATCH_THRESHOLD = 0.86;
+export const MIN_MATCH_THRESHOLD = 0.72;
+export const MAX_MATCH_THRESHOLD = 0.95;
 const MIN_SIGNAL_RMS = 0.012;
+const MAX_PROFILES = 12;
 
 export function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
   const len = Math.min(a.length, b.length);
@@ -131,60 +140,143 @@ export function extractSpeakerVectorFromPcm(samples: Float32Array, sampleRate: n
   return buildAcousticVectorFromSpectrum(avgMagnitudes, sampleRate, totalZcr / activeFrames);
 }
 
-export function classifySpeakerVector(
-  candidate: readonly number[] | null,
-  profile: SpeakerProfile | null
-): string | undefined {
-  if (!profile) return undefined;
-  if (!candidate) return undefined;
-  return cosineSimilarity(candidate, profile.vector) >= MATCH_THRESHOLD ? profile.label : "คู่สนทนา";
+export function clampThreshold(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_MATCH_THRESHOLD;
+  return Math.round(Math.min(MAX_MATCH_THRESHOLD, Math.max(MIN_MATCH_THRESHOLD, value)) * 100) / 100;
 }
 
-function load(): SpeakerProfile | null {
+/**
+ * เทียบเวกเตอร์เสียงกับรายการโปรไฟล์ผู้พูดทั้งหมดที่บันทึกไว้ แล้วเลือกผู้ที่คล้ายที่สุดหากผ่านค่า threshold
+ * หากไม่มีใครถึงเกณฑ์ คืน "คู่สนทนา" และหากยังไม่มีโปรไฟล์เลย คืน undefined
+ */
+export function classifySpeakerProfiles(
+  candidate: readonly number[] | null,
+  profiles: readonly Pick<SpeakerProfile, "label" | "vector">[],
+  threshold = DEFAULT_MATCH_THRESHOLD
+): string | undefined {
+  if (!profiles.length || !candidate) return undefined;
+  const effectiveThreshold = clampThreshold(threshold);
+
+  let bestLabel: string | undefined;
+  let bestScore = -1;
+  for (const profile of profiles) {
+    const score = cosineSimilarity(candidate, profile.vector);
+    if (score > bestScore) {
+      bestScore = score;
+      bestLabel = profile.label;
+    }
+  }
+  return bestLabel && bestScore >= effectiveThreshold ? bestLabel : "คู่สนทนา";
+}
+
+export function classifySpeakerVector(
+  candidate: readonly number[] | null,
+  profile: Pick<SpeakerProfile, "label" | "vector"> | null,
+  threshold = DEFAULT_MATCH_THRESHOLD
+): string | undefined {
+  if (!profile) return undefined;
+  return classifySpeakerProfiles(candidate, [profile], threshold);
+}
+
+function isValidProfile(item: unknown): item is SpeakerProfile {
+  if (!item || typeof item !== "object") return false;
+  const candidate = item as Partial<SpeakerProfile>;
+  return (
+    typeof candidate.label === "string" &&
+    candidate.label.trim().length > 0 &&
+    Array.isArray(candidate.vector) &&
+    candidate.vector.length > 0 &&
+    candidate.vector.every((n) => typeof n === "number" && Number.isFinite(n))
+  );
+}
+
+function normalizeLoadedProfile(item: SpeakerProfile, fallbackIndex: number): SpeakerProfile {
+  return {
+    id: typeof item.id === "string" && item.id.trim() ? item.id.trim() : `sp-${fallbackIndex}-${item.label.trim()}`,
+    label: item.label.trim(),
+    vector: item.vector,
+    updatedAt: typeof item.updatedAt === "number" && Number.isFinite(item.updatedAt) ? item.updatedAt : Date.now()
+  };
+}
+
+function loadState(): SpeakerProfileState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SpeakerProfile>;
-    if (
-      typeof parsed.label === "string" &&
-      parsed.label.trim() &&
-      Array.isArray(parsed.vector) &&
-      parsed.vector.every((n) => typeof n === "number" && Number.isFinite(n))
-    ) {
-      return { label: parsed.label.trim(), vector: parsed.vector, updatedAt: parsed.updatedAt ?? Date.now() };
+    if (!raw) return { profiles: [], threshold: DEFAULT_MATCH_THRESHOLD };
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && Array.isArray((parsed as Partial<SpeakerProfileState>).profiles)) {
+      const state = parsed as Partial<SpeakerProfileState>;
+      const profiles = state.profiles!
+        .filter(isValidProfile)
+        .slice(0, MAX_PROFILES)
+        .map((p, idx) => normalizeLoadedProfile(p, idx));
+      return {
+        profiles,
+        threshold: clampThreshold(state.threshold ?? DEFAULT_MATCH_THRESHOLD)
+      };
     }
-    return null;
+    // รองรับข้อมูลรูปแบบเดิมที่มีผู้พูดเดียว
+    if (isValidProfile(parsed)) {
+      return {
+        profiles: [normalizeLoadedProfile(parsed, 0)],
+        threshold: DEFAULT_MATCH_THRESHOLD
+      };
+    }
+    return { profiles: [], threshold: DEFAULT_MATCH_THRESHOLD };
   } catch {
-    return null;
+    return { profiles: [], threshold: DEFAULT_MATCH_THRESHOLD };
   }
 }
 
-let current = load();
+let currentState: SpeakerProfileState = loadState();
 const listeners = new Set<() => void>();
 
+function commitState(next: SpeakerProfileState): void {
+  currentState = next;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // ข้ามได้ถ้าพื้นที่เต็ม
+  }
+  listeners.forEach((l) => l());
+}
+
 export const speakerProfileStore = {
-  get: (): SpeakerProfile | null => current,
+  getState: (): SpeakerProfileState => currentState,
+  get: (): SpeakerProfile | null => currentState.profiles[0] ?? null,
+  getThreshold: (): number => currentState.threshold,
+  setThreshold: (value: number): void => {
+    const nextThreshold = clampThreshold(value);
+    if (nextThreshold === currentState.threshold) return;
+    commitState({ profiles: currentState.profiles, threshold: nextThreshold });
+  },
   saveFromPcm: (label: string, samples: Float32Array, sampleRate: number): SpeakerProfile | null => {
     const vector = extractSpeakerVectorFromPcm(samples, sampleRate);
     if (!vector) return null;
-    const next: SpeakerProfile = { label: label.trim() || "ไลท์", vector, updatedAt: Date.now() };
-    current = next;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ข้ามได้ถ้าพื้นที่เต็ม
-    }
-    listeners.forEach((l) => l());
-    return next;
+    const cleanLabel = label.trim() || "ไลท์";
+    const now = Date.now();
+    const existingIdx = currentState.profiles.findIndex((p) => p.label.toLowerCase() === cleanLabel.toLowerCase());
+    const entry: SpeakerProfile = {
+      id: existingIdx >= 0 ? currentState.profiles[existingIdx]!.id : `sp-${now}-${Math.random().toString(36).slice(2, 6)}`,
+      label: cleanLabel,
+      vector,
+      updatedAt: now
+    };
+    const nextProfiles =
+      existingIdx >= 0
+        ? currentState.profiles.map((p, idx) => (idx === existingIdx ? entry : p))
+        : [entry, ...currentState.profiles].slice(0, MAX_PROFILES);
+
+    commitState({ profiles: nextProfiles, threshold: currentState.threshold });
+    return entry;
+  },
+  remove: (id: string): void => {
+    const nextProfiles = currentState.profiles.filter((p) => p.id !== id);
+    if (nextProfiles.length === currentState.profiles.length) return;
+    commitState({ profiles: nextProfiles, threshold: currentState.threshold });
   },
   clear: (): void => {
-    current = null;
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ข้าม
-    }
-    listeners.forEach((l) => l());
+    commitState({ profiles: [], threshold: currentState.threshold });
   },
   subscribe: (listener: () => void): (() => void) => {
     listeners.add(listener);

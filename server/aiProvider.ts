@@ -22,6 +22,8 @@ export interface AiProvider {
   baseUrl: string;
   /** โมเดลที่ใช้คิดคำตอบ ควรเป็นโมเดลที่ตอบเร็วเพราะคำตอบถูกอ่านออกเสียงทันที */
   chatModel: string;
+  /** โมเดลรุ่นใหญ่สำหรับงานที่ JEV Router จัดเป็นระดับ pro (ถ้าไม่ตั้งจะใช้ chatModel เดิม) */
+  proModel?: string;
   chatModelVariable: string;
   /** โมเดลแปลงเสียงเป็นข้อความ (ใช้เฉพาะแอปเดสก์ท็อป) หรือ null ถ้าผู้ให้บริการรายนี้ยังไม่รองรับ */
   transcribeModel: string | null;
@@ -138,6 +140,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
   }
 
   if (provider === "claude") {
+    const proModel = read(env, "ANTHROPIC_PRO_MODEL") ? readModel(env, "ANTHROPIC_PRO_MODEL", CLAUDE_CHAT_MODEL, "ANTHROPIC_API_KEY", warn) : undefined;
     return {
       name: "claude",
       label: "Anthropic Claude",
@@ -146,6 +149,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
       keyVariable: "ANTHROPIC_API_KEY",
       baseUrl: readBaseUrl(env, "ANTHROPIC_BASE_URL", CLAUDE_BASE_URL, warn),
       chatModel: readModel(env, "ANTHROPIC_CHAT_MODEL", CLAUDE_CHAT_MODEL, "ANTHROPIC_API_KEY", warn),
+      ...(proModel ? { proModel } : {}),
       chatModelVariable: "ANTHROPIC_CHAT_MODEL",
       // Anthropic ไม่มีบริการแปลงเสียงเป็นข้อความ แอปเดสก์ท็อปจึงต้องพิมพ์แทน
       transcribeModel: null,
@@ -158,6 +162,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
   if (provider === "gemini") {
     const effort = read(env, "GEMINI_REASONING_EFFORT")?.toLowerCase();
     const chatModel = readModel(env, "GEMINI_CHAT_MODEL", GEMINI_CHAT_MODEL, "GEMINI_API_KEY", warn);
+    const proModel = read(env, "GEMINI_PRO_MODEL") ? readModel(env, "GEMINI_PRO_MODEL", chatModel, "GEMINI_API_KEY", warn) : undefined;
     // การตั้งกุญแจของบริการค้นเว็บภายนอก (Tavily) คือเจตนาให้ค้นเว็บ จึงไม่ต้องสั่งเปิดซ้ำ
     const hasSearchService = Boolean(read(env, "TAVILY_API_KEY"));
 
@@ -169,6 +174,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
       keyVariable: "GEMINI_API_KEY",
       baseUrl: readBaseUrl(env, "GEMINI_BASE_URL", GEMINI_BASE_URL, warn),
       chatModel,
+      ...(proModel ? { proModel } : {}),
       chatModelVariable: "GEMINI_CHAT_MODEL",
       // การแปลงเสียงผ่านทางที่เข้ากันได้กับ OpenAI ยังไม่มี แอปเดสก์ท็อปจึงต้องพิมพ์แทน
       transcribeModel: null,
@@ -182,6 +188,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
     };
   }
 
+  const proModel = read(env, "OPENAI_PRO_MODEL") ? readModel(env, "OPENAI_PRO_MODEL", OPENAI_CHAT_MODEL, "OPENAI_API_KEY", warn) : undefined;
   return {
     name: "openai",
     label: "OpenAI",
@@ -190,6 +197,7 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
     keyVariable: "OPENAI_API_KEY",
     baseUrl: readBaseUrl(env, "OPENAI_BASE_URL", OPENAI_BASE_URL, warn),
     chatModel: readModel(env, "OPENAI_CHAT_MODEL", OPENAI_CHAT_MODEL, "OPENAI_API_KEY", warn),
+    ...(proModel ? { proModel } : {}),
     chatModelVariable: "OPENAI_CHAT_MODEL",
     transcribeModel: readModel(env, "OPENAI_TRANSCRIBE_MODEL", OPENAI_TRANSCRIBE_MODEL, "OPENAI_API_KEY", warn),
     webSearch: !isOff(env, "WEB_SEARCH_ENABLED"),

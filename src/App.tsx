@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { AudioLines, FolderKanban, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, FolderKanban, GitBranch, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
@@ -18,6 +18,7 @@ import {
   MeetingPanel,
   preloadViews,
   ProjectsPanel,
+  RouterPanel,
   VoiceRecorderDialog,
   VoiceSettingsDialog
 } from "./components/lazy/views";
@@ -79,6 +80,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [routerOpen, setRouterOpen] = useState(false);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
   const [recorderUsed, setRecorderUsed] = useState(false);
@@ -103,6 +105,7 @@ export default function App() {
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible && !inMeeting;
   const showingProjects = ready && projectsOpen && !showingWeb && !inMeeting;
+  const showingRouter = ready && routerOpen && !showingWeb && !showingProjects && !inMeeting;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;
   const ai = useAiStatus(ready, desktop);
   // บอกสถานะจริงตอนว่างอยู่ ระหว่างฟังหรือคิดยังแสดงจังหวะการสนทนาตามปกติ
@@ -171,11 +174,13 @@ export default function App() {
       ? `หน้าเว็บ (${browser.title || browser.requestedUrl})`
       : showingProjects
         ? "ศูนย์ควบคุมโปรเจกต์ทั้งหมด (Project Control Hub)"
-        : inMeeting
-          ? "โหมดสรุปการประชุม"
-          : messages.length === 0
-            ? "หน้าหลัก Central Voice Studio"
-            : "หน้าสนทนา";
+        : showingRouter
+          ? "แผง JEV Agent-Router Telemetry"
+          : inMeeting
+            ? "โหมดสรุปการประชุม"
+            : messages.length === 0
+              ? "หน้าหลัก Central Voice Studio"
+              : "หน้าสนทนา";
     const stats = metricsHidden ? "ซ่อนค่าสถิติไว้" : readouts.map((r) => `${r.label}: ${r.value}`).join(", ");
     const lines = [`มุมมอง: ${viewName}`, `สถานะ: ${statusLabel}`, `แผงข้อมูล: ${stats}`];
     if (!metricsHidden && memories.length > 0) {
@@ -185,7 +190,7 @@ export default function App() {
       lines.push(`ข้อความล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
-  }, [ready, showingWeb, showingProjects, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
+  }, [ready, showingWeb, showingProjects, showingRouter, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
 
   useEffect(() => {
     controller.setScreenContextProvider(buildScreenSummary);
@@ -379,9 +384,10 @@ export default function App() {
             <button
               type="button"
               aria-label="สนทนา"
-              aria-pressed={!showingWeb && !showingProjects}
+              aria-pressed={!showingWeb && !showingProjects && !showingRouter}
               onClick={() => {
                 setProjectsOpen(false);
+                setRouterOpen(false);
                 browserStore.hide();
               }}
             >
@@ -393,10 +399,23 @@ export default function App() {
               aria-pressed={showingProjects}
               onClick={() => {
                 setProjectsOpen(true);
+                setRouterOpen(false);
                 browserStore.hide();
               }}
             >
               <FolderKanban size={15} aria-hidden /> โปรเจกต์
+            </button>
+            <button
+              type="button"
+              aria-label="เราเตอร์"
+              aria-pressed={showingRouter}
+              onClick={() => {
+                setProjectsOpen(false);
+                setRouterOpen(true);
+                browserStore.hide();
+              }}
+            >
+              <GitBranch size={15} aria-hidden /> Router
             </button>
             {pageOpen && (
               <button
@@ -405,6 +424,7 @@ export default function App() {
                 aria-pressed={showingWeb}
                 onClick={() => {
                   setProjectsOpen(false);
+                  setRouterOpen(false);
                   browserStore.show();
                 }}
               >
@@ -484,7 +504,7 @@ export default function App() {
           phase={shownPhase}
           statusLabel={statusLabel}
           readouts={readouts}
-          compact={messages.length > 0 || showingWeb || showingProjects || inMeeting}
+          compact={messages.length > 0 || showingWeb || showingProjects || showingRouter || inMeeting}
           offline={aiDown}
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
@@ -495,7 +515,7 @@ export default function App() {
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
         )}
-        <div className="scroll-area" hidden={showingWeb || showingProjects || inMeeting}>
+        <div className="scroll-area" hidden={showingWeb || showingProjects || showingRouter || inMeeting}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}
           {session.phase === "signed-out" && <AccessGate onSignIn={session.signIn} />}
@@ -565,6 +585,16 @@ export default function App() {
                 else browserStore.showFramed(url, "หน้าเว็บโปรเจกต์");
               }}
             />
+          </LazyBoundary>
+        )}
+        {showingRouter && (
+          <LazyBoundary
+            label="แผง JEV Router"
+            retry={RouterPanel.preload}
+            fallback={<MainViewSkeleton label="แผง JEV Router" />}
+            onDismiss={() => setRouterOpen(false)}
+          >
+            <RouterPanel onClose={() => setRouterOpen(false)} />
           </LazyBoundary>
         )}
         {inMeeting && (

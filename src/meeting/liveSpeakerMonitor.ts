@@ -1,8 +1,14 @@
-import { buildAcousticVectorFromSpectrum, classifySpeakerVector, type SpeakerProfile } from "./speakerProfile";
+import {
+  buildAcousticVectorFromSpectrum,
+  classifySpeakerProfiles,
+  DEFAULT_MATCH_THRESHOLD,
+  type SpeakerProfile,
+  type SpeakerProfileState
+} from "./speakerProfile";
 
 /**
  * ติดตามลักษณะความถี่เสียงพูดล่าสุดระหว่างเปิดโหมดสรุปการประชุม
- * เพื่อระบุว่าคำพูดแต่ละช่วงน่าจะเป็นเจ้าของเสียงที่บันทึกไว้ ("ไลท์") หรือ "คู่สนทนา"
+ * เพื่อระบุว่าคำพูดแต่ละช่วงน่าจะเป็นเจ้าของเสียงใดที่บันทึกไว้ ("ไลท์", ทีมงาน) หรือ "คู่สนทนา"
  */
 export interface LiveSpeakerMonitor {
   start: () => Promise<void>;
@@ -10,7 +16,15 @@ export interface LiveSpeakerMonitor {
   identifyRecent: () => string | undefined;
 }
 
-export function createLiveSpeakerMonitor(getProfile: () => SpeakerProfile | null): LiveSpeakerMonitor {
+type ProfileSource = () => SpeakerProfileState | SpeakerProfile | null;
+
+function resolveSource(source: ReturnType<ProfileSource>): SpeakerProfileState {
+  if (!source) return { profiles: [], threshold: DEFAULT_MATCH_THRESHOLD };
+  if ("profiles" in source) return source;
+  return { profiles: [source], threshold: DEFAULT_MATCH_THRESHOLD };
+}
+
+export function createLiveSpeakerMonitor(getProfiles: ProfileSource): LiveSpeakerMonitor {
   let ctx: AudioContext | null = null;
   let stream: MediaStream | null = null;
   let timer: number | null = null;
@@ -30,8 +44,8 @@ export function createLiveSpeakerMonitor(getProfile: () => SpeakerProfile | null
 
   const start = async () => {
     stop();
-    const profile = getProfile();
-    if (!profile) return;
+    const initial = resolveSource(getProfiles());
+    if (initial.profiles.length === 0) return;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
 
     const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -51,8 +65,8 @@ export function createLiveSpeakerMonitor(getProfile: () => SpeakerProfile | null
       const sampleRate = ctx.sampleRate;
 
       timer = window.setInterval(() => {
-        const activeProfile = getProfile();
-        if (!activeProfile) return;
+        const current = resolveSource(getProfiles());
+        if (current.profiles.length === 0) return;
 
         analyser.getFloatTimeDomainData(timeBuf);
         let sq = 0;
@@ -71,7 +85,7 @@ export function createLiveSpeakerMonitor(getProfile: () => SpeakerProfile | null
           freqMag[i] = db > -100 ? Math.pow(10, db / 20) : 0;
         }
         const vec = buildAcousticVectorFromSpectrum(freqMag, sampleRate, crossings / timeBuf.length);
-        const speaker = classifySpeakerVector(vec, activeProfile);
+        const speaker = classifySpeakerProfiles(vec, current.profiles, current.threshold);
         if (speaker) {
           lastSpeaker = speaker;
           lastHeardAt = Date.now();
@@ -86,7 +100,8 @@ export function createLiveSpeakerMonitor(getProfile: () => SpeakerProfile | null
     start,
     stop,
     identifyRecent: () => {
-      if (!getProfile()) return undefined;
+      const current = resolveSource(getProfiles());
+      if (current.profiles.length === 0) return undefined;
       if (!lastSpeaker || Date.now() - lastHeardAt > 6000) return undefined;
       return lastSpeaker;
     }

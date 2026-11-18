@@ -21,7 +21,7 @@ import {
 import { createSpeechHandler } from "./speech.js";
 import { createVoiceReplicationHandlers } from "./voiceReplication.js";
 import { transcribeHandler } from "./transcribe.js";
-import { getJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
+import { getJevTelemetry, listReviewQueue, resolveReviewItem, routeVoiceTurn } from "./jevRouter.js";
 import { createSearchUsageReader } from "./searchUsage.js";
 import { z } from "zod";
 import { fetchProjectCloudStatus } from "./cloudControl.js";
@@ -119,6 +119,28 @@ export function createApp(options: AppOptions = {}): Express {
       gapsCount: typeof body?.gapsCount === "number" ? body.gapsCount : 0,
     });
     response.json({ ok: true, decision, telemetry: getJevTelemetry() });
+  });
+  app.get("/api/router/queue", requireAuth, (_request, response) => {
+    response.set("Cache-Control", "no-store").json({
+      ok: true,
+      items: listReviewQueue(),
+      telemetry: getJevTelemetry(),
+    });
+  });
+  app.post("/api/router/queue/:id/decision", requireAuth, (request, response) => {
+    const rawId = request.params.id;
+    const id = typeof rawId === "string" ? rawId : "";
+    const parsedDecision = z.object({ decision: z.enum(["approved", "rejected"]) }).safeParse(request.body);
+    if (!/^rev_[a-zA-Z0-9-]{4,32}$/.test(id) || !parsedDecision.success) {
+      response.status(400).json({ ok: false, error: "ข้อมูลคำขออนุมัติไม่ถูกต้องครับ" });
+      return;
+    }
+    const updated = resolveReviewItem(id, parsedDecision.data.decision);
+    if (!updated) {
+      response.status(404).json({ ok: false, error: "ไม่พบรายการในคิวตรวจสอบครับ" });
+      return;
+    }
+    response.json({ ok: true, item: updated, telemetry: getJevTelemetry() });
   });
   app.get("/api/auth/session", sessionHandler);
   app.post("/api/auth/login", loginRateLimiter, loginHandler);

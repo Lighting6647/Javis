@@ -55,7 +55,7 @@ const meetingOwner = (): string | null => sessionStore.get()?.name ?? null;
  */
 export function useMeeting({ ready, controller }: MeetingOptions): Meeting {
   const [capable] = useState(handsFreeAvailable);
-  const [speakerMonitor] = useState(() => createLiveSpeakerMonitor(() => speakerProfileStore.get()));
+  const [speakerMonitor] = useState(() => createLiveSpeakerMonitor(() => speakerProfileStore.getState()));
   const [recorder] = useState(
     () =>
       new MeetingRecorder({

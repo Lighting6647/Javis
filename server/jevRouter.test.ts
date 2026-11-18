@@ -1,7 +1,15 @@
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
-import { evaluateLocalSystemOne, getJevTelemetry, resetJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
+import {
+  buildStateBusSnapshot,
+  evaluateLocalSystemOne,
+  getJevTelemetry,
+  redactGoalSummary,
+  resetJevTelemetry,
+  resolveRoutedModel,
+  routeVoiceTurn
+} from "./jevRouter.js";
 
 vi.hoisted(() => {
   for (const name of ["ACCESS_CODES", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]) {
@@ -149,5 +157,90 @@ describe("JEV Router HTTP Endpoints in server/app.ts", () => {
       else process.env.SESSION_SECRET = previousSecret;
       vi.resetModules();
     }
+  });
+
+  it("enqueues held items below 0.85 into Human Review Queue and supports approve/reject", async () => {
+    const classifyRes = await fetch(`${origin}/api/router/classify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: "เอ่อ" }),
+    });
+    expect(classifyRes.status).toBe(200);
+
+    const queueRes = await fetch(`${origin}/api/router/queue`);
+    expect(queueRes.status).toBe(200);
+    const queueJson = (await queueRes.json()) as {
+      ok: boolean;
+      items: Array<{ id: string; status: string; redactedGoal: string }>;
+    };
+    expect(queueJson.ok).toBe(true);
+    expect(queueJson.items.length).toBeGreaterThanOrEqual(1);
+    const pending = queueJson.items[0];
+    expect(pending.status).toBe("pending");
+
+    const decisionRes = await fetch(`${origin}/api/router/queue/${pending.id}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approved" }),
+    });
+    expect(decisionRes.status).toBe(200);
+    const decisionJson = (await decisionRes.json()) as {
+      ok: boolean;
+      item: { status: string; resolvedAt?: string };
+      telemetry: { queues: { review: number; fast: number } };
+    };
+    expect(decisionJson.ok).toBe(true);
+    expect(decisionJson.item.status).toBe("approved");
+    expect(decisionJson.item.resolvedAt).toBeTruthy();
+  });
+
+  it("rejects invalid review id or decision payload cleanly", async () => {
+    const badRes = await fetch(`${origin}/api/router/queue/bad-id/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approved" }),
+    });
+    expect(badRes.status).toBe(400);
+
+    const missingRes = await fetch(`${origin}/api/router/queue/rev_deadbeef/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "rejected" }),
+    });
+    expect(missingRes.status).toBe(404);
+  });
+});
+
+describe("JEV State Bus, Model Tiering & PII Redaction", () => {
+  it("counts active busReaders from State Bus channels", () => {
+    const bus = buildStateBusSnapshot({
+      goal: "วิเคราะห์โครงสร้าง",
+      notes: ["note-1"],
+      plan: ["step-1"],
+      evidenceCount: 3,
+      gapsCount: 1,
+      lastError: "timeout"
+    });
+    expect(bus.busReaders).toBe(10);
+  });
+
+  it("selects proModel when tier is pro and proModel is configured, otherwise falls back to chatModel", () => {
+    expect(resolveRoutedModel({ chatModel: "gemini-3.5-flash-lite", proModel: "gemini-3.5-pro" }, { modelTier: "pro" })).toBe(
+      "gemini-3.5-pro"
+    );
+    expect(resolveRoutedModel({ chatModel: "gemini-3.5-flash-lite", proModel: "gemini-3.5-pro" }, { modelTier: "fast" })).toBe(
+      "gemini-3.5-flash-lite"
+    );
+    expect(resolveRoutedModel({ chatModel: "gemini-3.5-flash-lite" }, { modelTier: "pro" })).toBe("gemini-3.5-flash-lite");
+  });
+
+  it("redacts phone numbers, emails, and API key patterns from review summaries", () => {
+    const redacted = redactGoalSummary("โทร 0812345678 อีเมล test@example.com คีย์ sk-1234567890abcdef");
+    expect(redacted).not.toContain("0812345678");
+    expect(redacted).not.toContain("test@example.com");
+    expect(redacted).not.toContain("sk-1234567890abcdef");
+    expect(redacted).toContain("[phone]");
+    expect(redacted).toContain("[email]");
+    expect(redacted).toContain("[secret]");
   });
 });

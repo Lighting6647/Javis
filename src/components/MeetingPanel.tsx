@@ -71,7 +71,7 @@ const TranscriptExport = memo(function TranscriptExport({ entries, startedAt }: 
  */
 export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: MeetingPanelProps) {
   const { status, startedAt, entries, partial, summary, notice } = state;
-  const speakerProfile = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.get);
+  const speakerState = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.getState);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   /** ผู้ใช้อยู่ท้ายรายการ จึงเลื่อนตามคำพูดใหม่ให้ */
@@ -107,7 +107,9 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel }: M
           </span>
           {status === "recording" && <MeetingClock startedAt={startedAt} />}
           <span className="meeting-count">{entries.length > 0 ? `จดแล้ว ${entries.length} ช่วงคำพูด` : "ยังไม่มีคำพูดที่จดได้"}</span>
-          {speakerProfile && <span className="recorder-badge">แยกเสียง: {speakerProfile.label}</span>}
+          {speakerState.profiles.length > 0 && (
+            <span className="recorder-badge">แยกเสียง ({speakerState.profiles.length}): {speakerState.profiles.map((p) => p.label).join(", ")}</span>
+          )}
         </div>
 
         {confirmingCancel ? (

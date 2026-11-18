@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySpeakerVector, cosineSimilarity, extractSpeakerVectorFromPcm } from "./speakerProfile";
+import { classifySpeakerProfiles, classifySpeakerVector, cosineSimilarity, extractSpeakerVectorFromPcm } from "./speakerProfile";
 
 function sineWave(freqHz: number, seconds = 0.6, sampleRate = 24_000): Float32Array {
   const total = Math.round(seconds * sampleRate);
@@ -23,12 +23,30 @@ describe("speakerProfile acoustic speaker recognition", () => {
     expect(otherVec).not.toBeNull();
     expect(cosineSimilarity(lightVec!, lightVecAgain!)).toBeGreaterThan(0.95);
 
-    const profile = { label: "ไลท์", vector: lightVec!, updatedAt: Date.now() };
+    const profile = { id: "1", label: "ไลท์", vector: lightVec!, updatedAt: Date.now() };
     expect(classifySpeakerVector(lightVecAgain, profile)).toBe("ไลท์");
     expect(classifySpeakerVector(otherVec, profile)).toBe("คู่สนทนา");
   });
 
+  it("รองรับหลายโปรไฟล์ผู้พูดพร้อมกันและปรับความไว threshold ได้", () => {
+    const lightVec = extractSpeakerVectorFromPcm(sineWave(180), 24_000)!;
+    const teammateVec = extractSpeakerVectorFromPcm(sineWave(1100), 24_000)!;
+    const unknownVec = extractSpeakerVectorFromPcm(sineWave(2800), 24_000)!;
+
+    const profiles = [
+      { id: "p1", label: "ไลท์", vector: lightVec, updatedAt: 1 },
+      { id: "p2", label: "คุณบี", vector: teammateVec, updatedAt: 2 }
+    ];
+
+    expect(classifySpeakerProfiles(extractSpeakerVectorFromPcm(sineWave(185), 24_000), profiles, 0.86)).toBe("ไลท์");
+    expect(classifySpeakerProfiles(extractSpeakerVectorFromPcm(sineWave(1120), 24_000), profiles, 0.86)).toBe("คุณบี");
+    expect(classifySpeakerProfiles(unknownVec, profiles, 0.86)).toBe("คู่สนทนา");
+    // threshold สูงสุด 0.95 ช่วยคัดความคล้ายที่ต่ำกว่าออกอย่างเข้มงวด
+    expect(classifySpeakerProfiles(unknownVec, profiles, 0.95)).toBe("คู่สนทนา");
+  });
+
   it("เมื่อยังไม่ได้บันทึกโปรไฟล์เสียง: คืน undefined เพื่อคงรูปแบบบันทึกปกติ", () => {
     expect(classifySpeakerVector([0.1, 0.2], null)).toBeUndefined();
+    expect(classifySpeakerProfiles([0.1, 0.2], [])).toBeUndefined();
   });
 });

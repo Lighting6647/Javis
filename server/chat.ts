@@ -41,7 +41,7 @@ import { describeUpstreamFailure } from "./upstreamError.js";
 import { MAX_READ_TEXT_LENGTH, readWebPage } from "./webReader.js";
 import { searchCache } from "./searchUsage.js";
 import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
-import { routeVoiceTurn } from "./jevRouter.js";
+import { resolveRoutedModel, routeVoiceTurn } from "./jevRouter.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -773,6 +773,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
     });
     return;
   }
+  const routedModel = resolveRoutedModel(ai, jevRoute);
 
   const diagnosing = isDiagnosticToken(diagnose);
   const requestStarted = Date.now();
@@ -888,7 +889,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
     const tools = buildTools(searchTool, pageFields.length > 0);
     const turns = input as Array<{ role: string; content: string }>;
     /** คำอธิบายคำขอนี้ในช่องวินิจฉัย */
-    const target = `${ai.apiStyle} ${ai.chatModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
+    const target = `${ai.apiStyle} ${routedModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
 
     if (ai.apiStyle === "claude") {
       // คำสั่งที่ใช้แทนชุดปกติ (การสรุปการประชุม) ไม่มีส่วนเฉพาะตัวผู้ใช้ แต่ Claude ไม่รับส่วนที่ว่างเปล่า
@@ -900,7 +901,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
           connection: { apiKey, baseUrl: ai.baseUrl },
           signal,
           timeoutMs: UPSTREAM_TIMEOUT_MS,
-          model: ai.chatModel,
+          model: routedModel,
           fixedInstructions: fixed,
           personalInstructions: personal,
           messages: turns,
@@ -919,7 +920,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
     // โมเดลที่ค้นเว็บได้ต้องรู้วันที่ปัจจุบัน จึงจะรู้ว่าเรื่องใดควรค้นก่อนตอบ และค้นด้วยวันที่ที่ถูก
     if (ai.name === "gemini" && searchTool === "provider") {
       return startGeminiInteraction({
-        model: ai.chatModel,
+        model: routedModel,
         instructions: buildInstructions(page, memories, "grounded", describeToday(), screen),
         turns,
         image: options.image,
@@ -946,7 +947,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
             signal,
             translator: stream ? traceChatStream(translator, stream) : translator,
             body: toChatCompletionsRequest({
-              model: ai.chatModel,
+              model: routedModel,
               instructions,
               messages: turns,
               image: options.image,
@@ -991,7 +992,7 @@ export const chatHandler: RequestHandler = async (request, response) => {
         headers: bearerHeaders(apiKey),
         signal,
         body: {
-          model: ai.chatModel,
+          model: routedModel,
           stream: true,
           // ไม่ให้ต้นทางเก็บบทสนทนาของผู้ใช้ไว้
           store: false,
@@ -1483,7 +1484,16 @@ export const chatHandler: RequestHandler = async (request, response) => {
           searchThinkingLevelUsable,
           searchRequest: reducer.searchRequest,
           searchRecency: reducer.searchRecency,
-          searchCacheSize: searchCache.size
+          searchCacheSize: searchCache.size,
+          router: {
+            choice: jevRoute.choice,
+            urgency: jevRoute.urgency,
+            modelTier: jevRoute.modelTier,
+            gatePassed: jevRoute.gatePassed,
+            destination: jevRoute.destination,
+            model: routedModel,
+            latencyMs: jevRoute.latencyMs
+          }
         }
       });
     }

@@ -5,7 +5,75 @@ export interface RecordedClip {
   blob: Blob;
   base64: string;
   durationSeconds: number;
+  originalDurationSeconds?: number;
   samples24k?: Float32Array;
+}
+
+export interface SilenceTrimOptions {
+  /** ค่า RMS ขั้นต่ำของเฟรม 20ms ที่ถือว่ามีเสียงพูด (ค่าเริ่มต้น 0.015) */
+  threshold?: number;
+  /** ช่วงเผื่อหัว-ท้ายเป็นวินาที เพื่อไม่ให้คำขึ้นต้น/ลงท้ายขาด (ค่าเริ่มต้น 0.12s) */
+  padSeconds?: number;
+  /** ความยาวขั้นต่ำหลังตัดเป็นวินาที หากสั้นกว่านี้จะขยายกรอบกลับ (ค่าเริ่มต้น 0.35s) */
+  minKeepSeconds?: number;
+}
+
+const DEFAULT_SILENCE_RMS_THRESHOLD = 0.015;
+const DEFAULT_TRIM_PAD_SECONDS = 0.12;
+const DEFAULT_MIN_KEEP_SECONDS = 0.35;
+
+/**
+ * ตัดความเงียบและเสียงรบกวนเบาๆ ช่วงต้น/ท้ายของสัญญาณ PCM โมโนออกโดยอัตโนมัติ
+ * ช่วยให้เสียงที่ส่งไปจำลองและจดจำโปรไฟล์ผู้พูดมีเนื้อเสียงพูดคมชัดขึ้น
+ */
+export function trimSilenceSamples(
+  samples: Float32Array,
+  sampleRate = TARGET_WAV_SAMPLE_RATE,
+  options: SilenceTrimOptions = {}
+): Float32Array {
+  if (samples.length === 0 || sampleRate <= 0) return samples;
+
+  const threshold = options.threshold ?? DEFAULT_SILENCE_RMS_THRESHOLD;
+  const padSeconds = options.padSeconds ?? DEFAULT_TRIM_PAD_SECONDS;
+  const minKeepSeconds = options.minKeepSeconds ?? DEFAULT_MIN_KEEP_SECONDS;
+
+  const frameSamples = Math.max(1, Math.round(sampleRate * 0.02));
+  const frameCount = Math.ceil(samples.length / frameSamples);
+
+  let firstVoiced = -1;
+  let lastVoiced = -1;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const start = frame * frameSamples;
+    const end = Math.min(samples.length, start + frameSamples);
+    let sumSquares = 0;
+    for (let i = start; i < end; i += 1) {
+      const s = samples[i] ?? 0;
+      sumSquares += s * s;
+    }
+    const rms = Math.sqrt(sumSquares / Math.max(1, end - start));
+    if (rms >= threshold) {
+      if (firstVoiced === -1) firstVoiced = frame;
+      lastVoiced = frame;
+    }
+  }
+
+  // ไม่มีช่วงใดดังพอ (เช่น ไฟล์เงียบทั้งคลิป): คืนสัญญาณเดิมเพื่อไม่ให้คลิปว่างเปล่า
+  if (firstVoiced === -1 || lastVoiced === -1) return samples;
+
+  const padSamples = Math.round(sampleRate * padSeconds);
+  let startSample = Math.max(0, firstVoiced * frameSamples - padSamples);
+  let endSample = Math.min(samples.length, (lastVoiced + 1) * frameSamples + padSamples);
+
+  const minSamples = Math.min(samples.length, Math.round(sampleRate * minKeepSeconds));
+  if (endSample - startSample < minSamples) {
+    const center = Math.floor((startSample + endSample) / 2);
+    startSample = Math.max(0, center - Math.floor(minSamples / 2));
+    endSample = Math.min(samples.length, startSample + minSamples);
+    startSample = Math.max(0, endSample - minSamples);
+  }
+
+  if (startSample === 0 && endSample === samples.length) return samples;
+  return samples.slice(startSample, endSample);
 }
 
 const MAX_UPLOAD_AUDIO_BYTES = 15 * 1024 * 1024;
@@ -82,7 +150,9 @@ async function decodeToWav24kMono(rawBlob: Blob, maxDurationSeconds?: number): P
     source.connect(offline.destination);
     source.start(0, 0, clippedDuration);
     const rendered = await offline.startRendering();
-    const samples24k = new Float32Array(rendered.getChannelData(0));
+    const rawSamples24k = new Float32Array(rendered.getChannelData(0));
+    const samples24k = trimSilenceSamples(rawSamples24k, TARGET_WAV_SAMPLE_RATE);
+    const trimmedDuration = samples24k.length / TARGET_WAV_SAMPLE_RATE;
     const pcm16 = floatToPcm16(samples24k);
     const wavBytes = encodeWavFromPcm16(pcm16, TARGET_WAV_SAMPLE_RATE);
     const wavCopy = new Uint8Array(wavBytes.length);
@@ -91,7 +161,8 @@ async function decodeToWav24kMono(rawBlob: Blob, maxDurationSeconds?: number): P
     return {
       blob: wavBlob,
       base64: bytesToBase64(wavBytes),
-      durationSeconds: Math.round(clippedDuration * 10) / 10,
+      durationSeconds: Math.round(trimmedDuration * 10) / 10,
+      originalDurationSeconds: Math.round(clippedDuration * 10) / 10,
       samples24k
     };
   } finally {

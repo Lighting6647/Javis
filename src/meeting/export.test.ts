@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildMeetingDocument, describeDuration, formatMeetingDate, meetingFileName, summaryRequestText } from "./export";
+import {
+  buildMeetingCsv,
+  buildMeetingDocument,
+  buildMeetingMarkdown,
+  describeDuration,
+  extractActionItems,
+  formatMeetingDate,
+  meetingCsvFileName,
+  meetingFileName,
+  meetingMarkdownFileName,
+  parseTranscriptLines,
+  summaryRequestText
+} from "./export";
 
 /** 13 พฤศจิกายน 2569 เวลา 14:30 ตามเวลาประเทศไทย */
 const STARTED_AT = Date.UTC(2026, 10, 13, 7, 30);
@@ -70,5 +82,59 @@ describe("buildMeetingDocument", () => {
 
     expect(text).not.toMatch(/[^\r]\n/);
     expect(text).not.toContain("\r\r");
+  });
+});
+
+describe("speaker-grouped meeting Markdown & CSV export", () => {
+  const speakerRecord = {
+    startedAt: STARTED_AT,
+    minutes: 30,
+    transcript: [
+      "[00:05] ไลท์: วันนี้สรุปแผนเปิดตัวรุ่นใหม่",
+      "[00:18] คุณเอ: ผมรับผิดชอบจัดทำสไลด์นำเสนอ",
+      "[00:35] ไลท์: โอเค เวลา 14:30 ส่งลิงก์ให้ด้วยนะ",
+      "[00:50] ข้อความที่ไม่ได้ระบุผู้พูด"
+    ].join("\n"),
+    summary: [
+      "ภาพรวม: เตรียมเปิดตัวรุ่นใหม่",
+      "งานที่ต้องทำ:",
+      "- คุณเอ: จัดทำสไลด์นำเสนอให้เสร็จก่อนศุกร์",
+      "- ไลท์ตรวจสอบเดโมระบบ"
+    ].join("\n")
+  };
+
+  it("ตั้งชื่อไฟล์ .md และ .csv จากวันเวลาเริ่มประชุม", () => {
+    const d = new Date(2026, 10, 13, 14, 5).getTime();
+    expect(meetingMarkdownFileName(d)).toBe("javis-meeting-20261113-1405.md");
+    expect(meetingCsvFileName(d)).toBe("javis-meeting-20261113-1405.csv");
+  });
+
+  it("แยกชื่อผู้พูดและงานแยกตามผู้รับผิดชอบใน Markdown ได้ครบถ้วน", () => {
+    const lines = parseTranscriptLines(speakerRecord.transcript);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toEqual({ clock: "00:05", speaker: "ไลท์", text: "วันนี้สรุปแผนเปิดตัวรุ่นใหม่" });
+    expect(lines[3]?.speaker).toBe("ไม่ระบุผู้พูด");
+
+    const tasks = extractActionItems(speakerRecord.summary, ["ไลท์", "คุณเอ"]);
+    expect(tasks).toEqual([
+      { owner: "คุณเอ", task: "จัดทำสไลด์นำเสนอให้เสร็จก่อนศุกร์" },
+      { owner: "ไลท์", task: "ไลท์ตรวจสอบเดโมระบบ" }
+    ]);
+
+    const md = buildMeetingMarkdown(speakerRecord, BANGKOK);
+    expect(md).toContain("## งานที่ต้องทำ (แยกตามผู้รับผิดชอบ)");
+    expect(md).toContain("### คุณเอ\n\n- [ ] จัดทำสไลด์นำเสนอให้เสร็จก่อนศุกร์");
+    expect(md).toContain("### ไลท์ (2 ช่วงคำพูด)");
+    expect(md).toContain("- `[00:35]` โอเค เวลา 14:30 ส่งลิงก์ให้ด้วยนะ");
+  });
+
+  it("สร้าง CSV พร้อมป้องกัน CSV formula injection สำหรับเซลล์ขึ้นต้นด้วย = หรือ +", () => {
+    const csv = buildMeetingCsv({
+      ...speakerRecord,
+      summary: "- คุณเอ: =SUM(A1:A2)",
+      transcript: "[00:01] ไลท์: +ทดสอบ"
+    });
+    expect(csv).toContain('"งานที่ต้องทำ","คุณเอ","","\'=SUM(A1:A2)"');
+    expect(csv).toContain('"บันทึกคำพูด","ไลท์","00:01","\'+ทดสอบ"');
   });
 });

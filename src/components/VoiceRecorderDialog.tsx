@@ -1,6 +1,6 @@
-import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Upload, Volume2, X } from "lucide-react";
+import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Upload, UserPlus, Volume2, X } from "lucide-react";
 import { type ChangeEvent, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { speakerProfileStore } from "../meeting/speakerProfile";
+import { MAX_MATCH_THRESHOLD, MIN_MATCH_THRESHOLD, speakerProfileStore } from "../meeting/speakerProfile";
 import {
   createReplicatedVoice,
   type CustomVoiceRecord,
@@ -28,17 +28,27 @@ interface VoiceRecorderDialogProps {
   activeCloudVoice: string | null;
 }
 
-type ClipSlot = "source" | "consent";
+type ClipSlot = "source" | "consent" | "speaker";
+
+function formatClipBadge(clip: RecordedClip): string {
+  const trimmed =
+    clip.originalDurationSeconds !== undefined && clip.originalDurationSeconds - clip.durationSeconds > 0.2;
+  return trimmed
+    ? `${clip.durationSeconds} วิ (ตัดความเงียบจาก ${clip.originalDurationSeconds} วิ)`
+    : `${clip.durationSeconds} วิ · พร้อมใช้`;
+}
 
 export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoice }: VoiceRecorderDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const nameId = useId();
+  const speakerNameId = useId();
 
   const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
-  const speakerProfile = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.get);
+  const speakerState = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.getState);
   const [consentPhrase, setConsentPhrase] = useState(DEFAULT_CONSENT_PHRASE);
   const [displayName, setDisplayName] = useState("เสียงของคุณไลท์");
+  const [speakerName, setSpeakerName] = useState("ไลท์");
   const [sourceClip, setSourceClip] = useState<RecordedClip | null>(null);
   const [consentClip, setConsentClip] = useState<RecordedClip | null>(null);
   const [recordingSlot, setRecordingSlot] = useState<ClipSlot | null>(null);
@@ -55,6 +65,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const sourceUploadRef = useRef<HTMLInputElement>(null);
   const consentUploadRef = useRef<HTMLInputElement>(null);
+  const speakerUploadRef = useRef<HTMLInputElement>(null);
 
   const stopPreviewAudio = () => {
     if (previewAudioRef.current) {
@@ -117,7 +128,16 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     if (slot === "source") {
       setSourceClip(clip);
       if (clip.samples24k) {
-        speakerProfileStore.saveFromPcm("ไลท์", clip.samples24k, TARGET_WAV_SAMPLE_RATE);
+        speakerProfileStore.saveFromPcm(speakerName.trim() || "ไลท์", clip.samples24k, TARGET_WAV_SAMPLE_RATE);
+      }
+    } else if (slot === "speaker") {
+      if (clip.samples24k) {
+        const saved = speakerProfileStore.saveFromPcm(speakerName.trim() || "ไลท์", clip.samples24k, TARGET_WAV_SAMPLE_RATE);
+        if (saved) {
+          setNotice(`บันทึกโปรไฟล์เสียง "${saved.label}" สำหรับแยกผู้พูดในโหมดประชุมเรียบร้อยครับ`);
+        } else {
+          setError("ไม่พบเนื้อเสียงพูดที่ชัดเจนพอ ลองพูดใกล้ไมค์ขึ้นอีกนิดครับ");
+        }
       }
     } else {
       setConsentClip(clip);
@@ -134,7 +154,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
       const clip = await readUploadedAudioClip(file, slot === "source" ? 25 : 15);
       storeClip(slot, clip);
       if (slot === "source") {
-        setNotice("นำเข้าไฟล์เสียงและจดจำเอกลักษณ์เสียงสำหรับแยกผู้พูดในโหมดประชุมแล้วครับ");
+        setNotice("นำเข้าไฟล์เสียง ตัดความเงียบ และจดจำเอกลักษณ์เสียงสำหรับแยกผู้พูดแล้วครับ");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "อ่านไฟล์เสียงที่เลือกไม่สำเร็จ");
@@ -147,7 +167,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     stopPreviewAudio();
     synthesizer.cancel();
 
-    const maxDurationSeconds = slot === "source" ? 25 : 15;
+    const maxDurationSeconds = slot === "source" ? 25 : slot === "speaker" ? 10 : 15;
     setElapsed(0);
     setLevel(0);
     setRecordingSlot(slot);
@@ -323,7 +343,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
               {recordingSlot === "source"
                 ? `${elapsed.toFixed(1)} / 25 วิ`
                 : sourceClip
-                  ? `${sourceClip.durationSeconds} วิ · พร้อมใช้`
+                  ? formatClipBadge(sourceClip)
                   : "ยังไม่ได้อัด"}
             </span>
           </div>
@@ -382,7 +402,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
               {recordingSlot === "consent"
                 ? `${elapsed.toFixed(1)} / 15 วิ`
                 : consentClip
-                  ? `${consentClip.durationSeconds} วิ · พร้อมใช้`
+                  ? formatClipBadge(consentClip)
                   : "ยังไม่ได้อัด"}
             </span>
           </div>
@@ -434,17 +454,119 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
           </div>
         </section>
 
-        <div className="recorder-speaker-status">
-          <span>
-            แยกเสียงในโหมดประชุม:{" "}
-            <strong>{speakerProfile ? `จำเสียง "${speakerProfile.label}" แล้ว` : "ยังไม่มีข้อมูลเสียงในเครื่อง (อัดข้อ 1 เพื่อเปิดใช้)"}</strong>
-          </span>
-          {speakerProfile && (
-            <button type="button" className="studio-pill-btn" onClick={() => speakerProfileStore.clear()}>
-              ล้างข้อมูลแยกเสียง
-            </button>
+        <section className="recorder-step recorder-speaker-box" aria-label="โปรไฟล์แยกผู้พูดในโหมดประชุม">
+          <div className="recorder-step-head">
+            <strong>แยกผู้พูดหลายคนในโหมดประชุม (ทำงานบนเครื่อง)</strong>
+            {speakerState.profiles.length > 0 && (
+              <button type="button" className="studio-pill-btn" onClick={() => speakerProfileStore.clear()}>
+                ล้างทั้งหมด
+              </button>
+            )}
+          </div>
+
+          <div className="recorder-speaker-enroll">
+            <input
+              id={speakerNameId}
+              type="text"
+              maxLength={32}
+              value={speakerName}
+              onChange={(event) => setSpeakerName(event.target.value)}
+              placeholder="ชื่อผู้พูด เช่น ไลท์, คุณเอ"
+              aria-label="ชื่อผู้พูดสำหรับจำแนกเสียง"
+            />
+            {recordingSlot === "speaker" ? (
+              <button type="button" className="btn btn-primary" onClick={() => void stopRecording("speaker")}>
+                <Square size={14} fill="currentColor" aria-hidden /> หยุด ({elapsed.toFixed(1)} / 10 วิ)
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => void startRecording("speaker")}
+                >
+                  <UserPlus size={14} aria-hidden /> อัดจำเสียงผู้พูด
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recordingSlot !== null || saving}
+                  onClick={() => speakerUploadRef.current?.click()}
+                >
+                  <Upload size={14} aria-hidden /> อัปโหลดเสียงผู้พูด
+                </button>
+                <input
+                  ref={speakerUploadRef}
+                  type="file"
+                  accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.webm"
+                  hidden
+                  onChange={(event) => void handleFileUpload("speaker", event)}
+                />
+                {sourceClip?.samples24k && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={recordingSlot !== null || saving}
+                    onClick={() => {
+                      const saved = speakerProfileStore.saveFromPcm(
+                        speakerName.trim() || "ไลท์",
+                        sourceClip.samples24k!,
+                        TARGET_WAV_SAMPLE_RATE
+                      );
+                      if (saved) setNotice(`เพิ่มโปรไฟล์เสียง "${saved.label}" จากคลิปข้อ 1 แล้วครับ`);
+                    }}
+                  >
+                    ใช้คลิปข้อ 1
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {recordingSlot === "speaker" && (
+            <div className="recorder-meter" aria-hidden>
+              <div className="recorder-meter-fill" style={{ width: `${Math.round(level * 100)}%` }} />
+            </div>
           )}
-        </div>
+
+          {speakerState.profiles.length > 0 ? (
+            <div className="recorder-speaker-chips" role="list" aria-label="ผู้พูดที่บันทึกไว้">
+              {speakerState.profiles.map((profile) => (
+                <span key={profile.id} className="recorder-chip" role="listitem">
+                  <span>{profile.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`ลบโปรไฟล์เสียง ${profile.label}`}
+                    onClick={() => speakerProfileStore.remove(profile.id)}
+                  >
+                    <X size={12} aria-hidden />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="recorder-script">ยังไม่มีโปรไฟล์เสียงบนเครื่อง — อัดเสียงข้อ 1 หรือเพิ่มชื่อทีมงานด้านบนเพื่อแยกชื่อผู้พูดในบันทึกประชุม</p>
+          )}
+
+          <label className="recorder-threshold">
+            <span>
+              ความเข้มงวดในการจับคู่เสียง:{" "}
+              <strong>
+                {Math.round(speakerState.threshold * 100)}% (
+                {speakerState.threshold >= 0.9 ? "เข้มงวด" : speakerState.threshold <= 0.8 ? "ผ่อนปรน" : "สมดุล · แนะนำ"})
+              </strong>
+            </span>
+            <input
+              type="range"
+              min={MIN_MATCH_THRESHOLD}
+              max={MAX_MATCH_THRESHOLD}
+              step={0.01}
+              value={speakerState.threshold}
+              onChange={(event) => speakerProfileStore.setThreshold(Number(event.target.value))}
+            />
+          </label>
+        </section>
 
         <div className="settings-actions">
           <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={() => void handleSaveAndClone()}>
