@@ -57,7 +57,11 @@ export const TTS_VOICES = [
   "Sulafat"
 ] as const;
 
-const UPSTREAM_TIMEOUT_MS = 20_000;
+const UPSTREAM_TIMEOUT_MS = 12_000;
+/** แคชไฟล์เสียงประโยคสั้น ๆ ในหน่วยความจำ เพื่อให้เสียงตอบรับ/ปุ่มฟังตอบทันที */
+const SPEECH_CACHE_MAX = 32;
+const SPEECH_CACHE_MAX_TEXT = 120;
+const SPEECH_CACHE_TTL_MS = 20 * 60_000;
 /** ต้นทางบอกว่าโควตาหมดแต่ไม่บอกว่าต้องรอนานแค่ไหน */
 const DEFAULT_QUOTA_PAUSE_MS = 60_000;
 const MIN_QUOTA_PAUSE_MS = 5_000;
@@ -301,11 +305,20 @@ const MESSAGES = {
  * เมื่อโควตาหมดหรือต้นทางไม่ให้ใช้โมเดล จะพักการเรียกต้นทางไว้ช่วงหนึ่ง คำขอระหว่างนั้นได้คำตอบทันทีโดยไม่เสียเวลาเรียก
  * (บนโฮสต์แบบ serverless การพักจำอยู่ในแต่ละอินสแตนซ์ หน้าเว็บจึงพักเองตามรหัสที่ได้ด้วย)
  */
+interface CachedAudio {
+  audio: Buffer;
+  model: string;
+  voice: string;
+  expiresAt: number;
+}
+
 export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
   const { voice } = deps;
   const callUpstream = deps.fetch ?? fetch;
   const now = deps.now ?? Date.now;
   const pauses = new Map<string, Pause>();
+  const audioCache = new Map<string, CachedAudio>();
+  let preferredModel: string | null = null;
 
   const activePauseOf = (key: string): Pause | null => {
     const entry = pauses.get(key);
@@ -315,6 +328,24 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
       return null;
     }
     return entry;
+  };
+
+  const readCache = (key: string): CachedAudio | null => {
+    const hit = audioCache.get(key);
+    if (!hit) return null;
+    if (now() >= hit.expiresAt) {
+      audioCache.delete(key);
+      return null;
+    }
+    return hit;
+  };
+
+  const writeCache = (key: string, entry: CachedAudio) => {
+    if (audioCache.size >= SPEECH_CACHE_MAX) {
+      const oldestKey = audioCache.keys().next().value;
+      if (oldestKey !== undefined) audioCache.delete(oldestKey);
+    }
+    audioCache.set(key, entry);
   };
 
   return async (request, response) => {
@@ -332,13 +363,37 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
     }
     const { text, voice: chosenVoice, persona, diagnose } = parsed.data;
     const diagnosing = deps.isDiagnostic?.(diagnose) ?? false;
+    const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
+    const effectiveVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
+    const cacheKey = `${effectiveVoice}\0${persona ?? ""}\0${text}`;
+
+    if (!diagnosing && text.length <= SPEECH_CACHE_MAX_TEXT) {
+      const hit = readCache(cacheKey);
+      if (hit) {
+        response.setHeader("X-Javis-Speech-Model", hit.model);
+        response.setHeader("X-Javis-Speech-Voice", hit.voice);
+        response.setHeader("X-Javis-Speech-Cache", "hit");
+        response.status(200).type("audio/wav").send(hit.audio);
+        return;
+      }
+    }
 
     const sendQuota = (retryMs: number, detail: Record<string, unknown> = {}) => {
       const seconds = Math.max(1, Math.ceil(retryMs / 1000));
       response.status(429).set("Retry-After", String(seconds)).json({ error: MESSAGES.quota, code: "quota", retryAfterSeconds: seconds, ...detail });
     };
 
-    const models = diagnosing ? [voice.model] : [voice.model, ...(voice.fallbackModels ?? [])];
+    const baseModels = [voice.model, ...(voice.fallbackModels ?? [])];
+    if (!diagnosing && preferredModel && !activePauseOf(preferredModel)) {
+      const idx = baseModels.indexOf(preferredModel);
+      if (idx > 0) {
+        baseModels.splice(idx, 1);
+        baseModels.unshift(preferredModel);
+      }
+    } else if (preferredModel && activePauseOf(preferredModel)) {
+      preferredModel = null;
+    }
+    const models = diagnosing ? [voice.model] : baseModels;
     let lastErrorKind: "quota" | "rejected" | "failed" | null = null;
     let lastRetryMs = DEFAULT_QUOTA_PAUSE_MS;
     let lastDetail: Record<string, unknown> = {};
@@ -401,8 +456,17 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
         continue;
       }
 
-      const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
-      const effectiveVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
+      if (!diagnosing) {
+        preferredModel = candidate;
+        if (text.length <= SPEECH_CACHE_MAX_TEXT) {
+          writeCache(cacheKey, {
+            audio,
+            model: candidate,
+            voice: effectiveVoice,
+            expiresAt: now() + SPEECH_CACHE_TTL_MS
+          });
+        }
+      }
       response.setHeader("X-Javis-Speech-Model", candidate);
       response.setHeader("X-Javis-Speech-Voice", effectiveVoice);
       response.status(200).type("audio/wav").send(audio);

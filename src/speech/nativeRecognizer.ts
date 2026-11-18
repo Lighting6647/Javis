@@ -3,7 +3,7 @@ import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { SPEECH_LANGUAGE, SpeechError, type SpeechErrorCode, type SpeechRecognizer } from "./types";
 
 /** เงียบนานเท่านี้หลังเริ่มพูด ถือว่าพูดจบ (iOS ไม่ตัดจบให้เอง) */
-const END_OF_SPEECH_SILENCE_MS = 1500;
+const END_OF_SPEECH_SILENCE_MS = 1000;
 /** ไม่ได้ยินอะไรเลยนานเท่านี้ ถือว่าไม่มีคำพูด */
 const NO_SPEECH_TIMEOUT_MS = 8000;
 const MAX_LISTEN_MS = 60_000;

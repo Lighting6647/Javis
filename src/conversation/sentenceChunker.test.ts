@@ -69,6 +69,19 @@ describe("createSentenceChunker", () => {
     expect(sentences).toEqual(["ก".repeat(230)]);
   });
 
+  it("ตัดช่วงแรกของข้อความภาษาไทยให้เร็วขึ้น เพื่อให้เสียงเริ่มพูดไวบนมือถือ", () => {
+    const first = "สวัสดีค่าวันนี้มีเรื่องอะไรให้เค้าช่วยดูแลไหม";
+    const rest = "บอกมาได้เลยน้าเดี๋ยวจัดการให้";
+    const sentences: string[] = [];
+    const chunker = createSentenceChunker((sentence) => sentences.push(sentence));
+
+    chunker.push(`${first} ${rest}`);
+    expect(sentences).toEqual([first]);
+
+    chunker.flush();
+    expect(sentences).toEqual([first, rest]);
+  });
+
   it("ไม่ส่งส่วนที่มีแต่สัญลักษณ์", () => {
     expect(collect(["***\n", "- - -\n"])).toEqual([]);
   });

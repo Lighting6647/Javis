@@ -434,4 +434,36 @@ describe("createSpeechHandler", () => {
     expect(response.headers.get("x-javis-speech-voice")).toBe("Leda");
     expect(modelsCalled).toEqual(["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"]);
   });
+
+  it("จำโมเดลที่สำเร็จล่าสุดและแคชข้อความสั้น: คำขอถัดไปไม่ต้องเสียเวลารอลองโมเดลซ้ำ", async () => {
+    let upstreamCount = 0;
+    const { speak } = await serve({
+      voice: { ...VOICE, fallbackModels: ["gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"] },
+      upstream: async (_url, init) => {
+        upstreamCount += 1;
+        const parsed = JSON.parse(String(init.body)) as { model: string };
+        if (parsed.model === "gemini-3.8-flash-tts") {
+          return Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+        }
+        return Response.json(audioPayload(wav()));
+      }
+    });
+
+    const first = await speak({ text: "ฮายยย หวัดดีค่า" });
+    expect(first.status).toBe(200);
+    expect(first.headers.get("x-javis-speech-model")).toBe("gemini-3.8-flash-lite-tts");
+    expect(upstreamCount).toBe(2);
+
+    // ข้อความเดิมซ้ำ: ตอบจากแคชทันทีโดยไม่เรียกต้นทางเลย
+    const cached = await speak({ text: "ฮายยย หวัดดีค่า" });
+    expect(cached.status).toBe(200);
+    expect(cached.headers.get("x-javis-speech-cache")).toBe("hit");
+    expect(upstreamCount).toBe(2);
+
+    // ข้อความใหม่: เรียกโมเดลที่สำเร็จล่าสุดก่อนทันที (1 ครั้ง)
+    const next = await speak({ text: "ข้อความถัดไปค่ะ" });
+    expect(next.status).toBe(200);
+    expect(next.headers.get("x-javis-speech-model")).toBe("gemini-3.8-flash-lite-tts");
+    expect(upstreamCount).toBe(3);
+  });
 });

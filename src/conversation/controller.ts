@@ -634,6 +634,8 @@ export class ConversationController {
     const attachedImage: CapturedImage | undefined = options?.image ?? this.pendingImageProvider?.() ?? undefined;
     let speech: Promise<void> = Promise.resolve();
     const chunker = createSentenceChunker((sentence) => {
+      if (epoch !== this.epoch) return;
+      this.deps.synthesizer.preload?.(sentence);
       speech = speech.then(async () => {
         if (epoch !== this.epoch) return;
         this.update({ phase: "speaking" });

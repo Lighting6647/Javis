@@ -36,6 +36,8 @@ export interface AudioPlayback {
 export interface AudioPlayer {
   /** @param rate ความเร็วในการเล่น 1 = ปกติ */
   play(audio: Blob, rate: number): AudioPlayback;
+  /** ปลดล็อกเครื่องเล่นเสียงบน iOS Safari ในจังหวะที่ผู้ใช้แตะหน้าจอ */
+  unlock?(): void;
 }
 
 export interface CloudVoiceDeps {
@@ -155,6 +157,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
 
   /** พูดตอบได้เมื่ออุปกรณ์มีเสียงภาษาไทย หรือมีเสียงของ Gemini ให้ใช้แทน */
   async prepare(): Promise<boolean> {
+    this.deps.player.unlock?.();
     const deviceReady = await this.deps.fallback.prepare();
     return deviceReady || this.usable();
   }
@@ -166,6 +169,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   }
 
   async speak(text: string): Promise<void> {
+    this.deps.player.unlock?.();
     const epoch = this.epoch;
     const head = this.queue[0];
 

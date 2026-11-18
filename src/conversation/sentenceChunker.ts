@@ -2,7 +2,9 @@ import { stripLinks } from "./richText";
 
 /** จบประโยคด้วยเครื่องหมายวรรคตอนตามด้วยช่องว่าง หรือขึ้นบรรทัดใหม่ */
 const SENTENCE_END = /[.!?…]+["')\]]*\s+|\n+/;
-/** ภาษาไทยไม่มีจุดจบประโยค เมื่อยาวพอจึงตัดที่ช่องว่างซึ่งเป็นจุดเว้นวรรค */
+/** ภาษาไทยไม่มีจุดจบประโยค: ช่วงแรกส่งเร็วขึ้นเพื่อลดเวลารอเสียงพูดบนมือถือ แล้วค่อยใช้ช่วงปกติ */
+const FIRST_SOFT_LIMIT = 44;
+const FIRST_MIN_CHUNK = 22;
 const SOFT_LIMIT = 80;
 const MIN_SOFT_CHUNK = 30;
 /** ข้อความยาวต่อเนื่องไม่มีช่องว่างเลย ตัดส่งเพื่อไม่ให้เสียงเงียบนาน */
@@ -29,11 +31,15 @@ export interface SentenceChunker {
  */
 export function createSentenceChunker(emit: (sentence: string) => void): SentenceChunker {
   let buffer = "";
+  let emitted = 0;
 
   const cut = (end: number) => {
     const sentence = toSpeakable(buffer.slice(0, end));
     buffer = buffer.slice(end);
-    if (sentence) emit(sentence);
+    if (sentence) {
+      emitted += 1;
+      emit(sentence);
+    }
   };
 
   return {
@@ -47,9 +53,11 @@ export function createSentenceChunker(emit: (sentence: string) => void): Sentenc
           continue;
         }
 
-        if (buffer.length >= SOFT_LIMIT) {
+        const softLimit = emitted === 0 ? FIRST_SOFT_LIMIT : SOFT_LIMIT;
+        const minChunk = emitted === 0 ? FIRST_MIN_CHUNK : MIN_SOFT_CHUNK;
+        if (buffer.length >= softLimit) {
           const space = buffer.lastIndexOf(" ");
-          if (space >= MIN_SOFT_CHUNK) {
+          if (space >= minChunk) {
             cut(space + 1);
             continue;
           }

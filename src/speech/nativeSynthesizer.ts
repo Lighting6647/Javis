@@ -1,4 +1,5 @@
 import { TextToSpeech } from "@capacitor-community/text-to-speech";
+import { getVoicePersona } from "./cloudVoices";
 import {
   DEFAULT_VOICE_SETTINGS,
   SPEECH_LANGUAGE,
@@ -10,6 +11,12 @@ import {
 interface NativeVoice extends VoiceOption {
   /** ตำแหน่งในรายการเสียงทั้งหมดของระบบ ซึ่งปลั๊กอินใช้ระบุเสียงตอนสั่งพูด */
   index: number;
+}
+
+function scoreNativeVoice(name: string): number {
+  if (/kanya|premwadee|achara|narisa|female/i.test(name)) return 4;
+  if (/niwat|pattara|\bmale\b/i.test(name)) return -2;
+  return 0;
 }
 
 /** ตัวพูดบนแอปมือถือ: iOS ใช้ AVSpeechSynthesizer ของ Apple ส่วน Android ใช้ TextToSpeech ของระบบ */
@@ -24,6 +31,7 @@ export class NativeSpeechSynthesizer implements SpeechSynthesizer {
       this.voices = voices
         .map((voice, index) => ({ id: voice.voiceURI, name: voice.name, index, lang: voice.lang }))
         .filter((voice) => voice.lang.toLowerCase().replace("_", "-").startsWith("th"))
+        .sort((a, b) => scoreNativeVoice(b.name) - scoreNativeVoice(a.name))
         .map(({ id, name, index }) => ({ id, name, index }));
     } catch {
       this.voices = [];
@@ -57,14 +65,14 @@ export class NativeSpeechSynthesizer implements SpeechSynthesizer {
   async speak(text: string): Promise<void> {
     if (!(await this.checkAvailable())) return;
 
-    // ไม่ได้เลือกเสียง หรือเสียงที่เลือกหายไปแล้ว: ปล่อยให้ระบบใช้เสียงเริ่มต้นของภาษาไทย
-    const chosen = this.voices.find((voice) => voice.id === this.settings.voiceId);
+    // ไม่ได้เลือกเสียง: ใช้เสียงผู้หญิงภาษาไทยอันดับแรกถ้ามี มิฉะนั้นปล่อยให้ระบบเลือกให้
+    const chosen = this.voices.find((voice) => voice.id === this.settings.voiceId) ?? this.voices[0];
     try {
       await TextToSpeech.speak({
         text,
         lang: SPEECH_LANGUAGE,
         rate: this.settings.rate,
-        pitch: 1,
+        pitch: getVoicePersona(this.settings.persona).devicePitch,
         volume: 1,
         category: "playback",
         ...(chosen ? { voice: chosen.index } : {})
