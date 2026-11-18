@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSearchCache, resolveWebSearchProvider, SEARCH_CACHE_TTL_MS, searchWeb, type WebSearchProvider } from "./webSearch.js";
+import { createSearchCache, fetchSearchUsage, resolveWebSearchProvider, SEARCH_CACHE_TTL_MS, searchWeb, type WebSearchProvider } from "./webSearch.js";
 
 // ค่าทดสอบเท่านั้น ไม่ใช่กุญแจจริงของบริการใด
 const TAVILY_KEY = "tvly-test-only-not-a-real-key";
@@ -147,6 +147,23 @@ describe("searchWeb", () => {
 
       expect(upstream.sent).toHaveLength(2);
       expect(again).toMatchObject({ ok: true, cached: true, widenedFrom: "day" });
+    });
+
+    it("นับว่าใช้ผลที่จำไว้กี่ครั้ง และต้องค้นใหม่กี่ครั้ง ตั้งแต่เริ่มทำงาน", async () => {
+      const time = clock();
+      const cache = createSearchCache({ now: time.now });
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+      const search = (query: string) => searchWeb(provider, query, { cache, fetchImpl: upstream.fetchImpl });
+
+      expect(cache.stats()).toEqual({ hits: 0, misses: 0, since: 1_000_000 });
+      await search("ราคาทองคำวันนี้");
+      await search("ราคาทองคำวันนี้");
+      await search("ราคาทองคำวันนี้");
+      await search("ข่าววันนี้");
+      expect(cache.stats()).toEqual({ hits: 2, misses: 2, since: 1_000_000 });
+      // ค่าที่คืนเป็นสำเนา แก้แล้วไม่กระทบตัวนับ
+      cache.stats().hits = 99;
+      expect(cache.stats().hits).toBe(2);
     });
 
     it("จำได้ไม่เกินจำนวนที่กำหนด เมื่อเต็มจะลบรายการที่จำไว้นานที่สุดออกก่อน", async () => {
@@ -327,5 +344,41 @@ describe("searchWeb", () => {
 
     const noList = fakeTavily(() => json({ answer: "ไม่มีรายการ" }));
     expect(await searchWeb(provider, "ทดสอบ", { fetchImpl: noList.fetchImpl })).toEqual({ ok: true, results: [] });
+  });
+});
+
+describe("fetchSearchUsage", () => {
+  const provider: WebSearchProvider = { name: "tavily", label: "Tavily", apiKey: TAVILY_KEY, baseUrl: "https://tavily.invalid" };
+  const reply = (body: unknown, status = 200): typeof fetch => async () =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+  it("ถามยอดของรอบบิลจาก Tavily ด้วยกุญแจในหัวคำขอ และใช้ยอดของแผนซึ่งตรงกับโควตาฟรีรายเดือน", async () => {
+    const sent: Array<{ url: string; method?: string; authorization: string | null }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      sent.push({ url: String(input), method: init?.method, authorization: new Headers(init?.headers).get("authorization") });
+      return new Response(
+        JSON.stringify({
+          key: { usage: 40, limit: null, search_usage: 40 },
+          account: { current_plan: "Researcher", plan_usage: 123, plan_limit: 1000, paygo_usage: 0, paygo_limit: 0 }
+        }),
+        { status: 200 }
+      );
+    };
+
+    expect(await fetchSearchUsage(provider, { fetchImpl })).toEqual({ used: 123, limit: 1000, plan: "Researcher" });
+    expect(sent).toEqual([{ url: "https://tavily.invalid/usage", method: "GET", authorization: `Bearer ${TAVILY_KEY}` }]);
+  });
+
+  it("ไม่มียอดของแผน: ใช้ยอดของกุญแจนี้แทน เพดานที่ไม่จำกัดคือ null", async () => {
+    expect(await fetchSearchUsage(provider, { fetchImpl: reply({ key: { usage: 7, limit: null } }) })).toEqual({ used: 7, limit: null, plan: null });
+    expect(await fetchSearchUsage(provider, { fetchImpl: reply({ key: { usage: 7, limit: 500 }, account: {} }) })).toEqual({ used: 7, limit: 500, plan: null });
+  });
+
+  it("ถามไม่สำเร็จหรือคำตอบอ่านไม่ได้: คืน null แทนการทำให้แผงสถานะล้ม", async () => {
+    expect(await fetchSearchUsage(provider, { fetchImpl: reply({ detail: { error: "Unauthorized" } }, 401) })).toBeNull();
+    expect(await fetchSearchUsage(provider, { fetchImpl: reply({ key: { usage: "many" } }) })).toBeNull();
+    expect(await fetchSearchUsage(provider, { fetchImpl: reply("not json object") })).toBeNull();
+    const offline: typeof fetch = () => Promise.reject(new Error("offline"));
+    expect(await fetchSearchUsage(provider, { fetchImpl: offline })).toBeNull();
   });
 });

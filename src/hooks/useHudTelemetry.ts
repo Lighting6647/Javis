@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { memoryStore } from "../memory/memoryStore";
 import { aiStatusStore } from "../services/aiStatusStore";
-import { describeAiState, describeCloudVoiceState, formatLatency, type ReadoutTone } from "../services/hudTelemetry";
+import { describeAiState, describeCacheUse, describeCloudVoiceState, describeSearchMonth, formatLatency, type ReadoutTone } from "../services/hudTelemetry";
+import type { SearchUsageView } from "../services/searchUsage";
 import type { CloudVoiceStatus } from "../speech/cloudVoice";
 
 /** ค่าหนึ่งช่องบนแผงตัวเลขของจอ HUD */
@@ -26,6 +27,8 @@ interface TelemetryInput {
   cloudVoiceStatus?: CloudVoiceStatus | null;
   /** ชื่อเสียง Gemini ที่ผู้ใช้เลือก (null = ค่าเริ่มต้น) */
   cloudVoiceName?: string | null;
+  /** ยอดใช้การค้นเว็บ แสดงเฉพาะเมื่อเซิร์ฟเวอร์ค้นด้วย Tavily ซึ่งนับยอดและจำผลค้นได้ */
+  searchUsage?: SearchUsageView | null;
 }
 
 function subscribeToNetwork(listener: () => void): () => void {
@@ -48,7 +51,8 @@ export function useHudTelemetry({
   messageCount,
   lastReplyMs,
   cloudVoiceStatus = null,
-  cloudVoiceName = null
+  cloudVoiceName = null,
+  searchUsage = null
 }: TelemetryInput): Readout[] {
   const online = useSyncExternalStore(subscribeToNetwork, isOnline);
   const memories = useSyncExternalStore(memoryStore.subscribe, memoryStore.get);
@@ -65,6 +69,20 @@ export function useHudTelemetry({
     { code: "LOG", label: "ข้อความ", value: `${messageCount} รายการ` },
     cloudVoiceStatus
       ? { code: "TTS", label: "เสียงพูด", value: voice.text, tone: voice.tone }
-      : { code: "ENV", label: "ทำงานบน", value: platformLabel }
+      : { code: "ENV", label: "ทำงานบน", value: platformLabel },
+    ...searchReadouts(searchUsage)
+  ];
+}
+
+/**
+ * ช่องการค้นเว็บ: ยอดของเดือนนี้เทียบโควตา และการใช้ผลค้นที่จำไว้
+ * แสดงเฉพาะเมื่อค้นด้วย Tavily เพราะผู้ให้บริการ AI รายอื่นนับยอดในบัญชีของตัวเอง
+ */
+function searchReadouts(usage: SearchUsageView | null): Readout[] {
+  if (usage?.service !== "tavily") return [];
+  const month = describeSearchMonth(usage.month);
+  return [
+    { code: "WEB", label: "ค้นเว็บเดือนนี้", value: month.text, ...(month.tone ? { tone: month.tone } : {}) },
+    { code: "HIT", label: "ใช้ผลค้นที่จำไว้", value: describeCacheUse(usage.cache).text }
   ];
 }

@@ -25,6 +25,7 @@ import { useCloudVoiceStatus } from "./hooks/useCloudVoiceStatus";
 import { useConversation } from "./hooks/useConversation";
 import { useHandsFree } from "./hooks/useHandsFree";
 import { useHudTelemetry } from "./hooks/useHudTelemetry";
+import { useSearchUsage } from "./hooks/useSearchUsage";
 import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useMeeting } from "./hooks/useMeeting";
 import { useSession } from "./hooks/useSession";
@@ -116,12 +117,14 @@ export default function App() {
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const cloudVoiceStatus = useCloudVoiceStatus(synthesizer);
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
+  const searchUsage = useSearchUsage(ready, messages.length);
   const readouts = useHudTelemetry({
     platformLabel,
     messageCount: messages.length,
     lastReplyMs,
     cloudVoiceStatus,
-    cloudVoiceName: voiceSettings.cloudVoice
+    cloudVoiceName: voiceSettings.cloudVoice,
+    searchUsage
   });
   // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป ส่วนบนเว็บ หน้าที่เปิดแสดงในพื้นที่หลักข้างแผงสถานะ
   const stageShown = ready && !(showingWeb && desktop);

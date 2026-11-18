@@ -32,10 +32,11 @@ import {
   SEARCH_WEB_TOOL,
   type SearchRecency
 } from "./responseStream.js";
-import { isFindCommand, pointToSource } from "./sourcePointer.js";
+import { pointToSource } from "./sourcePointer.js";
 import { describeUpstreamFailure } from "./upstreamError.js";
 import { MAX_READ_TEXT_LENGTH, readWebPage } from "./webReader.js";
-import { createSearchCache, searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
+import { searchCache } from "./searchUsage.js";
+import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
 import { routeVoiceTurn } from "./jevRouter.js";
 
 export const MAX_CHAT_MESSAGES = 24;
@@ -339,9 +340,6 @@ let webSearchUsable = config.ai.webSearch;
  */
 let webSearchPausedUntil = 0;
 const WEB_SEARCH_PAUSE_MS = 60 * 60 * 1000;
-
-/** ผลค้นของบริการค้นเว็บภายนอกที่จำไว้ชั่วคราว คำถามเดิมจึงตอบเร็วขึ้นโดยไม่ใช้เครดิตซ้ำ */
-const searchCache = createSearchCache();
 
 /**
  * เปลี่ยนเป็น false เมื่อพบว่าโมเดลที่ตั้งไว้ไม่รับตัวเลือกเสริมของคำขอ
@@ -707,16 +705,13 @@ export const chatHandler: RequestHandler = async (request, response) => {
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
-  // JEV System-One Pre-Flight Router (Choice / Score / Noul Safety Gate)
+  // JEV System-One Pre-Flight Router (Choice / Score / Noul Safety Gate): ตัดสินในเครื่อง ไม่ส่งคำถามออกไปภายนอก
   const latestUserGoal = messages.at(-1)?.content ?? "";
-  const jevRoute = await routeVoiceTurn(
-    {
-      goal: latestUserGoal,
-      notes: meeting ? ["meeting-summary-mode"] : image ? ["screen-capture-vision"] : [],
-      evidenceCount: memories?.length ?? 0,
-    },
-    { signal }
-  );
+  const jevRoute = routeVoiceTurn({
+    goal: latestUserGoal,
+    notes: meeting ? ["meeting-summary-mode"] : image ? ["screen-capture-vision"] : [],
+    evidenceCount: memories?.length ?? 0
+  });
   if (!jevRoute.safeToRun) {
     response.status(400).json({
       error: "คำสั่งถูกระงับโดย JEV Noul Safety Gate เพื่อความปลอดภัยของระบบ",
@@ -1207,11 +1202,12 @@ export const chatHandler: RequestHandler = async (request, response) => {
           for (const result of outcome.results) {
             forward({ type: "response.output_text.annotation.added", annotation: { type: "url_citation", url: result.url, title: result.title } });
           }
-          // พาผู้ใช้ไปยังหน้าที่มีคำตอบ พร้อมชี้ข้อความที่ตอบ: เปิดให้เองเมื่อผู้ใช้สั่งให้หา ไม่เช่นนั้นแนบลิงก์ไว้ให้แตะ
+          // แนบหน้าที่มีคำตอบเป็นลิงก์ให้แตะเอง พร้อมชี้ข้อความที่ตอบ ไม่เปิดให้เองแม้ผู้ใช้สั่งให้ "หา"
+          // เพราะบนเว็บ เมื่อเบราว์เซอร์ไม่ยอมเปิดแท็บใหม่ แอปจะพาแท็บของ Javis ไปหน้านั้นแทน ผู้ใช้จึงเห็นว่า Javis หายไป
           // เป็นส่วนเสริมของคำตอบ ถ้าเลือกหน้าไม่ได้ (เช่นเครื่องไม่มีตัวตัดคำ) คำตอบและแหล่งที่มายังต้องไปถึงผู้ใช้ครบ
           try {
             const pointer = pointToSource(answerText, outcome.results);
-            if (pointer) reducer.suggestPage(pointer, isFindCommand(messages.at(-1)?.content ?? ""));
+            if (pointer) reducer.suggestPage(pointer, false);
           } catch (error) {
             console.warn("เลือกหน้าแหล่งข้อมูลไม่สำเร็จ จึงตอบโดยไม่มีหน้าให้เปิด", error instanceof Error ? error.message : "unknown");
           }

@@ -45,24 +45,38 @@ describe("JEV System-One Router (Javis Voice Agent)", () => {
     expect(res.gatePassed).toBe(false);
   });
 
-  it("holds ambiguous ultra-short goals below 0.85 confidence gate", async () => {
-    const res = await routeVoiceTurn({ goal: "เอ่อ" });
+  it("holds ambiguous ultra-short goals below 0.85 confidence gate", () => {
+    const res = routeVoiceTurn({ goal: "เอ่อ" });
     expect(res.gatePassed).toBe(false);
     expect(res.destination).toBe("review");
     expect(getJevTelemetry().heldAtGate).toBe(1);
   });
 
-  it("combines external signal with 4s timeout and falls back cleanly when OpenRouter fails", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("upstream unavailable"));
-    const callerController = new AbortController();
-    const res = await routeVoiceTurn(
-      { goal: "สวัสดีครับจาวิส" },
-      { openRouterApiKey: "test-key", signal: callerController.signal }
-    );
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(res.engine).toBe("local-system-one");
-    expect(res.safeToRun).toBe(true);
-    fetchSpy.mockRestore();
+  it("decides locally and never sends the user's question anywhere, even with OPENROUTER_API_KEY set", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-only-not-a-real-key");
+    try {
+      const res = routeVoiceTurn({ goal: "ราคาทองวันนี้เท่าไร" });
+      // คืนผลทันที ไม่ใช่ Promise: ไม่มีอะไรให้รอก่อนตอบผู้ใช้
+      expect(res).not.toBeInstanceOf(Promise);
+      expect(res.engine).toBe("local-system-one");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("keeps decisions in telemetry but never the text of the user's question", () => {
+    const question = "เบอร์โทรของฉันคือ 0812345678 ช่วยค้นหาร้านแถวบ้านหน่อย";
+    routeVoiceTurn({ goal: question });
+
+    const telemetry = getJevTelemetry();
+    expect(telemetry.decisions).toBe(1);
+    expect(telemetry.recentLog[0]).toMatchObject({ choice: "web-research", safeToRun: true });
+    expect(JSON.stringify(telemetry)).not.toContain("0812345678");
+    expect(JSON.stringify(telemetry)).not.toContain("ร้านแถวบ้าน");
+    expect(telemetry.recentLog[0]).not.toHaveProperty("goalPreview");
   });
 });
 

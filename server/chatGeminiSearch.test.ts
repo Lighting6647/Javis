@@ -552,13 +552,14 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     }
     const GOLD_ANSWER = "ทองคำแท่งขายออกบาทละ 62,350 บาทครับ";
 
-    it("สั่งให้หาข้อมูล: ตอบจากผลค้น แล้วเปิดหน้าแหล่งที่ตรงกับคำตอบให้เอง พร้อมชี้ข้อความที่ตอบ", async () => {
+    it("สั่งให้หาข้อมูล: ตอบจากผลค้น แล้วแนบหน้าแหล่งที่ตรงกับคำตอบเป็นลิงก์ให้แตะเอง ไม่พาออกจาก Javis", async () => {
       const app = await boot(chatModel(GOLD_ANSWER), TAVILY_SEARCH);
       const reply = await app.ask("ช่วยหาราคาทองวันนี้ให้หน่อย");
 
       expect(reply.text).toBe(GOLD_ANSWER);
       const open = eventOf(reply, "open") as OpenEvent | undefined;
-      expect(open?.auto).toBe(true);
+      // บนเว็บจริง การเปิดให้เองเมื่อเบราว์เซอร์บล็อกแท็บใหม่ พาแท็บของ Javis ไปหน้าโรงพยาบาลจน Javis หายไป
+      expect(open?.auto).toBe(false);
       expect(open?.title).toBe("ราคาทองคำวันนี้ | สมาคมค้าทองคำ");
       // ที่อยู่ของแหล่งข้อมูล ตามด้วยคำสั่งให้เบราว์เซอร์เลื่อนไปยังข้อความที่ตอบ
       expect(open?.url.startsWith("https://www.goldtraders.or.th/#:~:text=")).toBe(true);

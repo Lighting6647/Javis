@@ -136,11 +136,22 @@ export const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 /** จำนวนผลค้นที่จำได้สูงสุด ผลค้นหนึ่งชุดไม่เกินราว 5 KB ทั้งหมดจึงไม่เกินราว 0.5 MB */
 export const SEARCH_CACHE_MAX_ENTRIES = 100;
 
+/** สถิติการใช้ความจำผลค้น นับตั้งแต่เซิร์ฟเวอร์ตัวนี้เริ่มทำงาน */
+export interface SearchCacheStats {
+  /** ค้นแล้วได้ผลที่จำไว้ ไม่ต้องค้นใหม่ */
+  hits: number;
+  /** ค้นแล้วไม่มีผลที่จำไว้ ต้องค้นใหม่ */
+  misses: number;
+  /** เวลาที่เริ่มนับ (มิลลิวินาทีตั้งแต่ epoch) */
+  since: number;
+}
+
 /** ความจำผลค้นของเซิร์ฟเวอร์หนึ่งตัว บน Vercel อยู่ได้เท่าที่เซิร์ฟเวอร์ตัวนั้นยังเปิดอยู่ */
 export interface SearchCache {
   get(query: string, recency: SearchRecency | null | undefined): FoundOutcome | null;
   set(query: string, recency: SearchRecency | null | undefined, outcome: FoundOutcome): void;
   readonly size: number;
+  stats(): SearchCacheStats;
 }
 
 /** คำค้นที่ต่างกันแค่ตัวพิมพ์ ช่องว่าง หรือรูปแบบการเข้ารหัสตัวอักษร ถือเป็นคำค้นเดียวกัน */
@@ -157,17 +168,24 @@ export function createSearchCache(
 ): SearchCache {
   const { ttlMs = SEARCH_CACHE_TTL_MS, maxEntries = SEARCH_CACHE_MAX_ENTRIES, now = Date.now } = options;
   const entries = new Map<string, { outcome: FoundOutcome; expiresAt: number }>();
+  const counts = { hits: 0, misses: 0, since: now() };
+
+  const lookup = (key: string): FoundOutcome | null => {
+    const entry = entries.get(key);
+    if (!entry) return null;
+    if (now() >= entry.expiresAt) {
+      entries.delete(key);
+      return null;
+    }
+    return entry.outcome;
+  };
 
   return {
     get(query, recency) {
-      const key = cacheKeyOf(query, recency);
-      const entry = entries.get(key);
-      if (!entry) return null;
-      if (now() >= entry.expiresAt) {
-        entries.delete(key);
-        return null;
-      }
-      return entry.outcome;
+      const found = lookup(cacheKeyOf(query, recency));
+      if (found) counts.hits += 1;
+      else counts.misses += 1;
+      return found;
     },
     set(query, recency, outcome) {
       if (outcome.results.length === 0) return;
@@ -182,6 +200,9 @@ export function createSearchCache(
     },
     get size() {
       return entries.size;
+    },
+    stats() {
+      return { ...counts };
     }
   };
 }
@@ -258,5 +279,49 @@ async function searchOnce(
     // เชื่อมต่อไม่ได้ หมดเวลา หรือคำตอบไม่ใช่ JSON
     const message = error instanceof Error ? error.message : "";
     return { ok: false, status, reason: status === 0 || status === 200 ? "unknown" : reasonOf(status), logDetail: sanitizeUpstreamMessage(message) };
+  }
+}
+
+/** ยอดใช้งานของบริการค้นเว็บในรอบบิลปัจจุบัน ตามที่บริการรายงาน */
+export interface SearchUsage {
+  /** เครดิตที่ใช้ไปแล้วในรอบบิลนี้ */
+  used: number;
+  /** เพดานเครดิตของรอบบิล null = ไม่จำกัดหรือบริการไม่ได้บอก */
+  limit: number | null;
+  /** ชื่อแผน เช่น Researcher (แผนฟรี) */
+  plan: string | null;
+}
+
+const USAGE_TIMEOUT_MS = 5_000;
+const MAX_PLAN_NAME_LENGTH = 40;
+
+const countOf = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
+
+/**
+ * ถามยอดใช้งานของรอบบิลนี้จาก Tavily (GET /usage) แทนการนับเอง
+ * เพราะเซิร์ฟเวอร์บน Vercel เริ่มใหม่บ่อย ตัวนับในหน่วยความจำจึงหายไปกลางเดือน
+ * ใช้ยอดของแผน (ทุกกุญแจในบัญชี) ซึ่งตรงกับโควตาฟรีรายเดือน ถ้าไม่มีจึงใช้ยอดของกุญแจนี้ คืน null เมื่อถามไม่สำเร็จ
+ */
+export async function fetchSearchUsage(provider: WebSearchProvider, options: { fetchImpl?: typeof fetch } = {}): Promise<SearchUsage | null> {
+  try {
+    const response = await (options.fetchImpl ?? fetch)(`${provider.baseUrl}/usage`, {
+      method: "GET",
+      signal: AbortSignal.timeout(USAGE_TIMEOUT_MS),
+      headers: { Authorization: `Bearer ${provider.apiKey}` }
+    });
+    if (!response.ok) return null;
+
+    const payload: unknown = await response.json();
+    const account = isObject(payload) && isObject(payload.account) ? payload.account : {};
+    const key = isObject(payload) && isObject(payload.key) ? payload.key : {};
+
+    const planUsed = countOf(account.plan_usage);
+    const used = planUsed ?? countOf(key.usage);
+    if (used === null) return null;
+    const limit = planUsed !== null ? countOf(account.plan_limit) : countOf(key.limit);
+    const plan = oneLine(account.current_plan, MAX_PLAN_NAME_LENGTH) || null;
+    return { used, limit: limit && limit > 0 ? limit : null, plan };
+  } catch {
+    return null;
   }
 }

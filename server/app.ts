@@ -21,6 +21,7 @@ import {
 import { createSpeechHandler } from "./speech.js";
 import { transcribeHandler } from "./transcribe.js";
 import { getJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
+import { createSearchUsageReader } from "./searchUsage.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
@@ -82,17 +83,22 @@ export function createApp(options: AppOptions = {}): Express {
     // voice.cloud บอกหน้าเว็บว่าเซิร์ฟเวอร์นี้มีเสียงพูดของ Gemini ให้ใช้ไหม หน้าเว็บจึงไม่ต้องลองขอเมื่อไม่มี
     response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot(), voice: { cloud: config.cloudVoice !== null } });
   });
+  // ยอดใช้การค้นเว็บสำหรับแผงสถานะ: ยอดของเดือนนี้จาก Tavily และการใช้ผลค้นที่จำไว้ ไม่มีข้อความของผู้ใช้
+  const readSearchUsage = createSearchUsageReader({ ai: config.ai, external: config.webSearch });
+  app.get("/api/search/usage", requireAuth, async (_request, response) => {
+    response.set("Cache-Control", "no-store").json({ search: await readSearchUsage() });
+  });
   app.get("/api/router/telemetry", requireAuth, (_request, response) => {
     response.set("Cache-Control", "no-store").json({ ok: true, telemetry: getJevTelemetry() });
   });
-  app.post("/api/router/classify", requireAuth, async (request, response) => {
+  app.post("/api/router/classify", requireAuth, (request, response) => {
     const body = request.body as { goal?: unknown; notes?: unknown; gapsCount?: unknown } | undefined;
     const goal = typeof body?.goal === "string" ? body.goal.trim() : "";
     if (!goal) {
       response.status(400).json({ ok: false, error: "กรุณาระบุข้อความ goal สำหรับ JEV Router" });
       return;
     }
-    const decision = await routeVoiceTurn({
+    const decision = routeVoiceTurn({
       goal,
       notes: Array.isArray(body?.notes) ? body.notes.map(String) : [],
       gapsCount: typeof body?.gapsCount === "number" ? body.gapsCount : 0,
