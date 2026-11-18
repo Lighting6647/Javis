@@ -598,9 +598,9 @@ iframe.browser-frame { width: 100%; }
 
 /* ---------- โหมดสรุปการประชุม ---------- */
 /* ทางเข้าบนแถบบน: มีชื่อกำกับบนจอกว้าง เพราะไอคอนอย่างเดียวบอกไม่ได้ว่าทำอะไร จอแคบเหลือไอคอน */
-.meeting-entry { height: 34px; display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; font-size: 13px; font-weight: 600; white-space: nowrap; transition: color .15s, background .15s, border-color .15s, transform .15s; }
-.meeting-entry:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface); }
-.meeting-entry:active { transform: scale(.96); }
+.meeting-entry, .voice-enroll-entry { height: 34px; display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; font-size: 13px; font-weight: 600; white-space: nowrap; transition: color .15s, background .15s, border-color .15s, transform .15s; }
+.meeting-entry:hover, .voice-enroll-entry:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface); }
+.meeting-entry:active, .voice-enroll-entry:active { transform: scale(.96); }
 
 /* แผงการประชุมแทนที่บทสนทนาตลอดการประชุม: หัวแผงและท้ายแผงอยู่กับที่ รายการคำพูดตรงกลางเลื่อนได้เอง */
 .meeting { flex: 1; min-height: 0; width: min(var(--content-width), 100%); display: flex; flex-direction: column; gap: var(--space-3); margin-inline: auto; padding: var(--space-4) var(--space-4) var(--space-3); }
@@ -746,8 +746,8 @@ iframe.browser-frame { width: 100%; }
 
 /* แถบบนเริ่มแน่น: ปุ่มเข้าโหมดประชุมเหลือไอคอน ชื่อยังอยู่ให้โปรแกรมอ่านหน้าจอผ่านป้ายของปุ่ม */
 @media (max-width: 720px) {
-  .meeting-entry { width: 34px; justify-content: center; padding: 0; }
-  .meeting-entry span { display: none; }
+  .meeting-entry, .voice-enroll-entry { width: 34px; justify-content: center; padding: 0; }
+  .meeting-entry span, .voice-enroll-entry span { display: none; }
 }
 
 /* ---------- Small screens ---------- */
@@ -1108,7 +1108,7 @@ html[data-theme="holo"] .browser-address { background: rgba(5, 8, 17, .75); }
 html[data-theme="holo"] .skeleton { background: linear-gradient(90deg, rgba(34, 211, 238, .06) 25%, rgba(34, 211, 238, .2) 50%, rgba(34, 211, 238, .06) 75%); background-size: 200% 100%; }
 
 /* ---------- โหมดสรุปการประชุม ---------- */
-html[data-theme="holo"] .meeting-entry:hover { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); box-shadow: var(--glow); }
+html[data-theme="holo"] .meeting-entry:hover, html[data-theme="holo"] .voice-enroll-entry:hover { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); box-shadow: var(--glow); }
 html[data-theme="holo"] .meeting-body { background: var(--corners), rgba(11, 17, 32, .8); }
 html[data-theme="holo"] .meeting-badge { letter-spacing: .04em; }
 html[data-theme="holo"] .meeting-badge.recording i { box-shadow: 0 0 8px var(--danger); }

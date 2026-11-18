@@ -402,7 +402,7 @@ export default function App() {
           {ready && !inMeeting && (
             <button
               type="button"
-              className="meeting-entry voice-enroll-entry"
+              className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
               title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ Javis จดจำและใช้เสียงนี้พูดตอบกลับ"
