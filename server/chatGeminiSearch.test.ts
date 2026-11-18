@@ -463,6 +463,71 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     expect(request?.headers.get("authorization")).toBe("Bearer test-gemini-key");
   });
 
+  describe("ช่วงเวลาของข้อมูล", () => {
+    /** โมเดลขอค้นพร้อมช่วงเวลา แล้วตอบจากผลค้น */
+    const datedModel =
+      (tavily: (call: UpstreamCall) => Response): Responder =>
+      (call) => {
+        if (call.api === "tavily") return tavily(call);
+        if (!chatToolNames(call).includes("search_web")) return spokenAnswer("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ");
+        return toolCalls([{ name: "search_web", args: { query: "ราคาทองคำแท่ง 18 พฤศจิกายน 2569", recency: "day" } }]);
+      };
+
+    it("เครื่องมือขอค้นให้โมเดลเลือกช่วงเวลาได้ และคำสั่งบอกให้ตรวจวันที่ของข้อมูล", async () => {
+      const app = await boot(chatModel("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ"), TAVILY_SEARCH);
+      await app.ask("ราคาทองวันนี้เท่าไหร่");
+
+      const [request, , answer] = app.calls;
+      const searchTool = toolsOf(request).find((tool) => (tool.function as Json).name === "search_web")?.function as Json;
+      const parameters = searchTool.parameters as { required: string[]; properties: Record<string, Json> };
+      expect(parameters.required).toEqual(["query", "recency"]);
+      expect(parameters.properties.recency?.enum).toEqual(["day", "week", "month", "year", "any"]);
+      expect(chatSystemOf(request)).toContain("ใส่วันที่และปี พ.ศ. ของวันนี้ในคำค้น");
+      expect(chatSystemOf(answer)).toContain("ระวังข้อมูลของปีก่อนที่วันและเดือนตรงกับวันนี้");
+    });
+
+    it("โมเดลขอข้อมูลของวันนี้: ค้นเฉพาะหน้าที่เผยแพร่ภายในหนึ่งวัน และบอกโมเดลว่าผลค้นจำกัดช่วงไว้", async () => {
+      const app = await boot(
+        datedModel(() => tavilyResults(GOLD_RESULTS)),
+        TAVILY_SEARCH
+      );
+      const reply = await app.ask("ราคาทองวันนี้เท่าไหร่");
+
+      expect(reply.text).toBe("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ");
+      expect(app.apis()).toEqual(["chat", "tavily", "chat"]);
+      const [, search, answer] = app.calls;
+      expect(search?.body).toMatchObject({ query: "ราคาทองคำแท่ง 18 พฤศจิกายน 2569", time_range: "day", include_published_date: true });
+      expect(chatSystemOf(answer)).toContain("ผลการค้นด้านล่างจำกัดเฉพาะหน้าที่เผยแพร่ภายในหนึ่งวันที่ผ่านมา");
+    });
+
+    it("ข้อมูลของวันนี้ไม่มีหน้าใดเผยแพร่ในช่วงนั้น: ค้นซ้ำแบบไม่จำกัด ผู้ใช้ยังได้คำตอบและแหล่งที่มา และโมเดลถูกเตือนว่าผลอาจเก่า", async () => {
+      let searches = 0;
+      const app = await boot(
+        datedModel(() => tavilyResults(++searches === 1 ? [] : GOLD_RESULTS)),
+        TAVILY_SEARCH
+      );
+      const reply = await app.ask("ราคาทองวันนี้เท่าไหร่");
+
+      expect(app.apis()).toEqual(["chat", "tavily", "tavily", "chat"]);
+      const [, narrow, wide, answer] = app.calls;
+      expect(narrow?.body).toMatchObject({ time_range: "day" });
+      expect(wide?.body).not.toHaveProperty("time_range");
+      expect(chatSystemOf(answer)).toContain("ค้นเฉพาะข้อมูลภายในหนึ่งวันที่ผ่านมาแล้วไม่พบ");
+      expect(chatSystemOf(answer)).toContain("ให้บอกวันที่ของข้อมูลที่ใช้ตอบทุกครั้ง");
+      expect(reply.text).toBe("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ");
+      expect(eventOf(reply, "sources")).toMatchObject({ sources: [{ url: "https://www.goldtraders.or.th/" }, { url: "https://www.thairath.co.th/money/gold" }] });
+    });
+
+    it("โมเดลไม่ได้ขอช่วงเวลา หรือขอแบบไม่จำกัด: ค้นแบบไม่จำกัดครั้งเดียว", async () => {
+      const app = await boot(chatModel("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ"), TAVILY_SEARCH);
+      await app.ask("ราคาทองวันนี้เท่าไหร่");
+
+      expect(app.apis()).toEqual(["chat", "tavily", "chat"]);
+      expect(app.calls[1]?.body).not.toHaveProperty("time_range");
+      expect(chatSystemOf(app.calls[2])).not.toContain("จำกัดเฉพาะหน้าที่เผยแพร่ภายใน");
+    });
+  });
+
   describe("พาไปยังหน้าแหล่งข้อมูล", () => {
     interface OpenEvent {
       url: string;

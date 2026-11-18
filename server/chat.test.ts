@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInstructionParts,
   buildInstructions,
+  buildSearchAnswerInstructions,
   buildSearchStepInstructions,
   buildSearchUnavailableInstructions,
   chatRequestSchema,
@@ -242,6 +243,24 @@ describe("buildInstructionParts", () => {
     }
   );
 
+  it.each([true, "grounded"] as const)("ค้นและตอบในคำขอเดียว (%s): ให้ตรวจวันที่ของข้อมูลจากเว็บก่อนตอบ", (webSearch) => {
+    const { fixed } = buildInstructionParts(undefined, undefined, webSearch, today);
+
+    // บนเว็บจริง ราคาของวันและเดือนเดียวกันเมื่อปีก่อนถูกตอบว่าเป็นราคาวันนี้
+    expect(fixed).toContain("ระวังข้อมูลของปีก่อนที่วันและเดือนตรงกับวันนี้");
+    expect(fixed).toContain("ห้ามเรียกว่าเป็นข้อมูลของวันนี้");
+  });
+
+  it("ค้นเป็นขั้นแยก: ให้ใส่วันที่ในคำค้นและเลือกช่วงเวลาของข้อมูล ส่วนตอนค้นไม่ได้ไม่พูดถึงเรื่องนี้", () => {
+    const request = buildInstructionParts(undefined, undefined, "request", today).fixed;
+    expect(request).toContain("ใส่วันที่และปี พ.ศ. ของวันนี้ในคำค้น");
+    expect(request).toContain("recency");
+
+    const offline = buildInstructionParts(undefined, undefined, false, today).fixed;
+    expect(offline).not.toContain("recency");
+    expect(offline).not.toContain("ระวังข้อมูลของปีก่อน");
+  });
+
   it("การค้นด้วย Google: ไม่ให้ AI เขียนลิงก์เอง เพราะระบบแสดงแหล่งที่มาจากข้อมูลของ Google ให้แล้ว", () => {
     const grounded = buildInstructionParts(undefined, undefined, "grounded").fixed;
 
@@ -277,6 +296,46 @@ describe("buildSearchUnavailableInstructions", () => {
   });
 });
 
+describe("buildSearchAnswerInstructions", () => {
+  const today = "วันพุธที่ 18 พฤศจิกายน ค.ศ. 2026 (พ.ศ. 2569) ตามเวลาประเทศไทย";
+  // ผลค้นแบบเดียวกับที่พบบนเว็บจริง: หน้าของวันและเดือนเดียวกันเมื่อปีก่อน
+  const results = [
+    {
+      title: "ราคาทองคำอังคารที่ 18 พ.ย. 2568 เปิดตลาดร่วงหนัก",
+      url: "https://gold.example/2568-11-18",
+      content: "ทองคำแท่ง รับซื้อ 61,650 บาท ขายออก 61,850 บาท",
+      publishedDate: "2025-11-18"
+    }
+  ];
+
+  it("ส่งผลค้นพร้อมวันที่เผยแพร่ วันนี้ และให้ตรวจวันที่ของข้อมูลก่อนตอบ", () => {
+    const instructions = buildSearchAnswerInstructions(undefined, today, "ราคาทองคำแท่งวันนี้", results);
+
+    expect(instructions).toContain(`วันนี้คือ${today}`);
+    expect(instructions).toContain('"publishedDate":"2025-11-18"');
+    expect(instructions).toContain("ระวังข้อมูลของปีก่อนที่วันและเดือนตรงกับวันนี้");
+    expect(instructions).toContain("ให้บอกวันที่ของข้อมูลนั้นตรง ๆ");
+    // ไม่ได้จำกัดช่วงเวลา: ไม่อ้างว่าผลค้นจำกัดช่วงไว้
+    expect(instructions).not.toContain("จำกัดเฉพาะหน้าที่เผยแพร่ภายใน");
+    expect(instructions).not.toContain("ค้นแบบไม่จำกัดช่วงเวลา");
+  });
+
+  it("บอก AI ว่าผลค้นจำกัดช่วงเวลาไว้แค่ไหน", () => {
+    expect(buildSearchAnswerInstructions(undefined, today, "ข่าววันนี้", results, { recency: "day" })).toContain(
+      "ผลการค้นด้านล่างจำกัดเฉพาะหน้าที่เผยแพร่ภายในหนึ่งวันที่ผ่านมา"
+    );
+    expect(buildSearchAnswerInstructions(undefined, today, "ข่าวสัปดาห์นี้", results, { recency: "week" })).toContain("ภายในหนึ่งสัปดาห์ที่ผ่านมา");
+  });
+
+  it("ค้นในช่วงที่ขอแล้วไม่พบ จึงค้นแบบไม่จำกัด: เตือนว่าผลอาจเก่า และให้บอกวันที่ของข้อมูลทุกครั้ง", () => {
+    const instructions = buildSearchAnswerInstructions(undefined, today, "ราคาทองคำแท่งวันนี้", results, { widenedFrom: "day" });
+
+    expect(instructions).toContain("ค้นเฉพาะข้อมูลภายในหนึ่งวันที่ผ่านมาแล้วไม่พบ");
+    expect(instructions).toContain("ผลการค้นด้านล่างอาจเป็นข้อมูลเก่า ให้บอกวันที่ของข้อมูลที่ใช้ตอบทุกครั้ง");
+    expect(instructions).not.toContain("จำกัดเฉพาะหน้าที่เผยแพร่ภายใน");
+  });
+});
+
 describe("buildSearchStepInstructions", () => {
   const memories = [{ id: "m1", text: "ผู้ใช้ชื่อไลท์" }];
   const today = "วันพุธที่ 11 พฤศจิกายน ค.ศ. 2026 (พ.ศ. 2569) ตามเวลาประเทศไทย";
@@ -288,6 +347,7 @@ describe("buildSearchStepInstructions", () => {
     expect(instructions).toContain("ราคาทองคำวันนี้");
     expect(instructions).toContain(`วันนี้คือ${today}`);
     expect(instructions).toContain("- [m1] ผู้ใช้ชื่อไลท์");
+    expect(instructions).toContain("ระวังข้อมูลของปีก่อนที่วันและเดือนตรงกับวันนี้");
   });
 
   it("ไม่สั่งให้เรียกเครื่องมือที่ขั้นนี้ไม่มี ไม่เช่นนั้น AI จะอ้างว่าเปิดหน้าเว็บหรือจำให้แล้วทั้งที่ไม่ได้ทำ", () => {

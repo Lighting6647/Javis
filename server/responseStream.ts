@@ -10,6 +10,17 @@ export const SEARCH_WEB_TOOL = "search_web";
 /** เครื่องมือที่ AI ใช้ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจากหน้าเว็บภายนอกมาอ่านให้ผู้ใช้ฟัง */
 export const READ_PAGE_TOOL = "read_web_page";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
+/**
+ * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
+ * เรื่องที่เปลี่ยนตามเวลาต้องจำกัดช่วง ไม่เช่นนั้นอาจได้หน้าเก่าที่บังเอิญตรงคำค้น เช่น ราคาของวันและเดือนเดียวกันเมื่อปีก่อน
+ */
+export const SEARCH_RECENCIES = ["day", "week", "month", "year", "any"] as const;
+export type SearchRecency = Exclude<(typeof SEARCH_RECENCIES)[number], "any">;
+
+/** อ่านช่วงเวลาที่ AI ขอ ค่าที่ไม่รู้จักหรือ "any" คือไม่จำกัดช่วง */
+export function readRecency(value: unknown): SearchRecency | null {
+  return SEARCH_RECENCIES.find((each): each is SearchRecency => each !== "any" && each === value) ?? null;
+}
 export const MAX_SOURCES = 6;
 export const MAX_FILL_VALUE_LENGTH = 500;
 export const MAX_MEMORY_LENGTH = 200;
@@ -121,6 +132,8 @@ export interface ResponseReducer {
    * null คือไม่ได้ขอค้น เซิร์ฟเวอร์เป็นผู้ค้นและตอบต่อในขั้นถัดไป
    */
   readonly searchRequest: string | null;
+  /** ช่วงเวลาของข้อมูลที่ AI ขอพร้อมคำค้น null คือไม่จำกัดช่วง (หรือไม่ได้ขอค้น) */
+  readonly searchRecency: SearchRecency | null;
   /**
    * AI ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจาก URL ภายนอกมาอ่านให้ผู้ใช้ฟัง (null = ไม่ได้ขอ)
    */
@@ -154,6 +167,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   const sources = new Map<string, WebSource>();
   const suggestionBlocks: string[] = [];
   let searchRequest: string | null = null;
+  let searchRecency: SearchRecency | null = null;
   let readRequest: string | null = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
@@ -267,7 +281,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       readMemoryCall(item);
     } else if (item.type === "function_call" && item.name === SEARCH_WEB_TOOL && !searchRequest) {
       // การขอค้นยังไม่ใช่การอ่านเว็บ จึงไม่กระทบการจำหรือการเปิดหน้าเว็บในคำขอเดียวกัน ใช้คำค้นแรกที่อ่านได้
-      searchRequest = cleanLine(parseArguments(item.arguments).query, MAX_SEARCH_QUERY_LENGTH);
+      const args = parseArguments(item.arguments);
+      searchRequest = cleanLine(args.query, MAX_SEARCH_QUERY_LENGTH);
+      searchRecency = readRecency(args.recency);
     } else if (item.type === "function_call" && item.name === READ_PAGE_TOOL && !readRequest) {
       const targetUrl = safeHttpUrl(parseArguments(item.arguments).url);
       if (targetUrl) {
@@ -373,6 +389,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get searchRequest() {
       return searchRequest;
+    },
+    get searchRecency() {
+      return searchRecency;
     },
     get readRequest() {
       return readRequest;

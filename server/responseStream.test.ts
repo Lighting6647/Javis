@@ -585,6 +585,19 @@ describe("การขอค้นเว็บผ่านเครื่อง�
     expect(requestOf([searchCall({ query: "ราคาทองคำวันนี้" })])).toBe("ราคาทองคำวันนี้");
   });
 
+  it("อ่านช่วงเวลาของข้อมูลที่ AI ขอ ค่าที่ไม่รู้จักหรือ any คือไม่จำกัดช่วง", () => {
+    const recencyOf = (args: unknown) => {
+      const reducer = createResponseReducer();
+      reducer.push(searchCall(args));
+      return reducer.searchRecency;
+    };
+
+    for (const recency of ["day", "week", "month", "year"]) expect(recencyOf({ query: "ราคาทองคำวันนี้", recency })).toBe(recency);
+    for (const recency of ["any", "DAY", "hour", 7, null, undefined]) expect(recencyOf({ query: "ราคาทองคำวันนี้", recency })).toBeNull();
+    expect(recencyOf("{เสีย")).toBeNull();
+    expect(createResponseReducer().searchRecency).toBeNull();
+  });
+
   it("ไม่ได้เรียกเครื่องมือค้นเว็บ: ไม่มีคำขอค้น แม้จะเรียกเครื่องมืออื่น", () => {
     expect(requestOf([delta("สวัสดีครับ")])).toBeNull();
     expect(requestOf([openCall({ url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา" })])).toBeNull();
