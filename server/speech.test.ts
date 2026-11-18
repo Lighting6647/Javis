@@ -466,4 +466,24 @@ describe("createSpeechHandler", () => {
     expect(next.headers.get("x-javis-speech-model")).toBe("gemini-3.8-flash-lite-tts");
     expect(upstreamCount).toBe(3);
   });
+
+  it("เสียงจำลอง (voice_...): ใช้กับโมเดล Gemini 3.8 และข้ามโมเดล 3.1 ที่ไม่รองรับ", async () => {
+    const modelsCalled: string[] = [];
+    const { speak } = await serve({
+      voice: { ...VOICE, fallbackModels: ["gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"] },
+      upstream: async (_url, init) => {
+        const parsed = JSON.parse(String(init.body)) as { model: string };
+        modelsCalled.push(parsed.model);
+        if (parsed.model === "gemini-3.8-flash-tts") {
+          return Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+        }
+        return Response.json(audioPayload(wav()));
+      }
+    });
+
+    const res = await speak({ text: "สวัสดีจากเสียงไลท์", voice: "voice_light_01" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-javis-speech-voice")).toBe("voice_light_01");
+    expect(modelsCalled).toEqual(["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]);
+  });
 });

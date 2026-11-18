@@ -106,10 +106,16 @@ const TTS_PERSONA_CONFIG: Record<TtsPersonaId, { defaultVoice?: (typeof TTS_VOIC
   }
 };
 
+const CUSTOM_VOICE_ID_PATTERN = /^voice(?:key)?_[A-Za-z0-9._-]{4,120}$/;
+
+export function isCustomVoiceId(voice: string | undefined): boolean {
+  return Boolean(voice && CUSTOM_VOICE_ID_PATTERN.test(voice));
+}
+
 export const speechRequestSchema = z.object({
   text: z.string().trim().min(1).max(MAX_SPEECH_TEXT_LENGTH),
-  /** เสียงที่ผู้ใช้เลือก ไม่ส่ง = เสียงเริ่มต้นของเซิร์ฟเวอร์ */
-  voice: z.enum(TTS_VOICES).optional(),
+  /** เสียงที่ผู้ใช้เลือก (เสียงสำเร็จรูปของ Gemini หรือรหัสเสียงจำลอง voice_...) ไม่ส่ง = เสียงเริ่มต้นของเซิร์ฟเวอร์ */
+  voice: z.union([z.enum(TTS_VOICES), z.string().regex(CUSTOM_VOICE_ID_PATTERN)]).optional(),
   /** บุคลิก/ลีลาการพูดที่ผู้ใช้เลือก */
   persona: z.enum(TTS_PERSONAS).optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
@@ -203,8 +209,11 @@ export function buildSpeechRequest(
   persona?: TtsPersonaId
 ): Json {
   const model = modelOverride ?? voice.model;
+  const custom = isCustomVoiceId(chosenVoice);
   const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
-  const resolvedStyle = preset?.style ?? voice.style;
+  const resolvedStyle = custom
+    ? "Speak in Thai naturally and conversationally, preserving the custom speaker voice."
+    : (preset?.style ?? voice.style);
   const resolvedVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
   const isLegacyPreview = model.includes("3.1-");
   return {
@@ -365,7 +374,8 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
     const diagnosing = deps.isDiagnostic?.(diagnose) ?? false;
     const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
     const effectiveVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
-    const cacheKey = `${effectiveVoice}\0${persona ?? ""}\0${text}`;
+    const customVoiceRequested = isCustomVoiceId(chosenVoice);
+    const cacheKey = `${effectiveVoice}\0${customVoiceRequested ? "custom" : (persona ?? "")}\0${text}`;
 
     if (!diagnosing && text.length <= SPEECH_CACHE_MAX_TEXT) {
       const hit = readCache(cacheKey);
@@ -383,7 +393,12 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
       response.status(429).set("Retry-After", String(seconds)).json({ error: MESSAGES.quota, code: "quota", retryAfterSeconds: seconds, ...detail });
     };
 
-    const baseModels = [voice.model, ...(voice.fallbackModels ?? [])];
+    const allCandidates = [voice.model, ...(voice.fallbackModels ?? [])];
+    // เสียงจำลอง (voice_...) ใช้ได้เฉพาะโมเดล Gemini 3.8 TTS เท่านั้น (3.1 ไม่รองรับ)
+    const baseModels = customVoiceRequested
+      ? allCandidates.filter((candidate) => !candidate.includes("3.1-"))
+      : allCandidates;
+    if (customVoiceRequested && baseModels.length === 0) baseModels.push(DEFAULT_TTS_MODEL);
     if (!diagnosing && preferredModel && !activePauseOf(preferredModel)) {
       const idx = baseModels.indexOf(preferredModel);
       if (idx > 0) {

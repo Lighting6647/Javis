@@ -10,6 +10,10 @@ export const VoiceSettingsDialog = lazyWithPreload(
   () => import("../VoiceSettingsDialog").then((module) => module.VoiceSettingsDialog),
   "VoiceSettingsDialog"
 );
+export const VoiceRecorderDialog = lazyWithPreload(
+  () => import("../VoiceRecorderDialog").then((module) => module.VoiceRecorderDialog),
+  "VoiceRecorderDialog"
+);
 /** เบราว์เซอร์ในตัวของแอปเดสก์ท็อปเท่านั้น ผู้ใช้เว็บและมือถือไม่ต้องโหลดเลย */
 export const BrowserView = lazyWithPreload(() => import("../BrowserView").then((module) => module.BrowserView), "BrowserView");
 export const FrameView = lazyWithPreload(() => import("../FrameView").then((module) => module.FrameView), "FrameView");
@@ -45,7 +49,7 @@ const whenIdle = (task: () => void): (() => void) => {
  */
 export function preloadViews({ desktop, meeting }: PreloadOptions): () => void {
   return whenIdle(() => {
-    const views = [VoiceSettingsDialog, ProjectsPanel, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
+    const views = [VoiceSettingsDialog, VoiceRecorderDialog, ProjectsPanel, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
     for (const view of views) void view.preload().catch(() => undefined);
   });
 }

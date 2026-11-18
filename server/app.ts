@@ -19,6 +19,7 @@ import {
   transcribeRateLimiter
 } from "./security.js";
 import { createSpeechHandler } from "./speech.js";
+import { createVoiceReplicationHandlers } from "./voiceReplication.js";
 import { transcribeHandler } from "./transcribe.js";
 import { getJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
 import { createSearchUsageReader } from "./searchUsage.js";
@@ -79,8 +80,18 @@ export function createApp(options: AppOptions = {}): Express {
   app.use("/api", originGuard, corsMiddleware);
   // บันทึกการประชุมยาวกว่าข้อความสนทนามาก เส้นทางนี้จึงรับเนื้อหาได้ใหญ่กว่าเส้นทางอื่น และต้องอยู่ก่อนตัวอ่านเนื้อหาของเส้นทางทั่วไป
   // คำขอสรุปการประชุมมีเพดานจำนวนครั้งของตัวเองซ้อนอีกชั้น เพราะแต่ละครั้งใช้โทเค็นมากกว่าข้อความสนทนาหลายสิบเท่า
+  const voiceReplication = createVoiceReplicationHandlers({ voice: config.cloudVoice });
   app.post("/api/chat", requireAuth, express.json({ limit: CHAT_BODY_LIMIT }), chatRateLimiter, meetingRateLimiter, chatHandler);
+  app.post(
+    "/api/voices/replicate",
+    requireAuth,
+    express.json({ limit: "4mb" }),
+    speechRateLimiter,
+    voiceReplication.replicateVoice
+  );
   app.use("/api", express.json({ limit: "200kb" }));
+  app.get("/api/voices", requireAuth, voiceReplication.listVoices);
+  app.delete("/api/voices/:id", requireAuth, voiceReplication.deleteVoice);
   // สถานะบัญชี AI สำหรับแอป: ข้อมูลหมวดกว้างชุดเดียวกับ /health แต่อยู่ใต้ /api เพื่อให้แอปมือถือเรียกข้ามต้นทางได้
   app.get("/api/status", async (_request, response) => {
     await settleStatus();

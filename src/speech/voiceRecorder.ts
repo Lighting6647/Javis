@@ -1,0 +1,231 @@
+/** อัตราตัวอย่างที่ Gemini 3.8 Voice Replication แนะนำ: 24kHz โมโน 16-bit PCM WAV */
+export const TARGET_WAV_SAMPLE_RATE = 24_000;
+
+export interface RecordedClip {
+  blob: Blob;
+  base64: string;
+  durationSeconds: number;
+}
+
+export interface ActiveVoiceRecording {
+  stop: () => Promise<RecordedClip>;
+  cancel: () => void;
+}
+
+export function encodeWavFromPcm16(pcmSamples: Int16Array, sampleRate = TARGET_WAV_SAMPLE_RATE): Uint8Array {
+  const dataLength = pcmSamples.length * 2;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+  const writeAscii = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + dataLength, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, "data");
+  view.setUint32(40, dataLength, true);
+
+  for (let i = 0; i < pcmSamples.length; i += 1) {
+    view.setInt16(44 + i * 2, pcmSamples[i] ?? 0, true);
+  }
+  return new Uint8Array(buffer);
+}
+
+/** แปลงตัวอย่างเสียง float32 เป็น 16-bit PCM พร้อมบีบค่าให้อยู่ในช่วง [-1, 1] */
+export function floatToPcm16(samples: Float32Array): Int16Array {
+  const output = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i += 1) {
+    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
+    output[i] = clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
+  }
+  return output;
+}
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const slice = bytes.subarray(offset, offset + chunkSize);
+    binary += String.fromCharCode(...slice);
+  }
+  return btoa(binary);
+}
+
+async function decodeToWav24kMono(rawBlob: Blob): Promise<RecordedClip> {
+  const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) {
+    throw new Error("เบราว์เซอร์นี้ไม่รองรับการประมวลผลเสียง Web Audio");
+  }
+
+  const ctx = new AudioCtx();
+  try {
+    const rawBuffer = await rawBlob.arrayBuffer();
+    const decoded = await ctx.decodeAudioData(rawBuffer.slice(0));
+    const frameCount = Math.max(1, Math.round(decoded.duration * TARGET_WAV_SAMPLE_RATE));
+    const offline = new OfflineAudioContext(1, frameCount, TARGET_WAV_SAMPLE_RATE);
+    const source = offline.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offline.destination);
+    source.start(0);
+    const rendered = await offline.startRendering();
+    const pcm16 = floatToPcm16(rendered.getChannelData(0));
+    const wavBytes = encodeWavFromPcm16(pcm16, TARGET_WAV_SAMPLE_RATE);
+    const wavCopy = new Uint8Array(wavBytes.length);
+    wavCopy.set(wavBytes);
+    const wavBlob = new Blob([wavCopy], { type: "audio/wav" });
+    return {
+      blob: wavBlob,
+      base64: bytesToBase64(wavBytes),
+      durationSeconds: Math.round(decoded.duration * 10) / 10
+    };
+  } finally {
+    await ctx.close().catch(() => undefined);
+  }
+}
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return undefined;
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4;codecs=mp4a.40.2", "audio/mp4"];
+  return candidates.find((mime) => MediaRecorder.isTypeSupported(mime));
+}
+
+/**
+ * อัดเสียงจากไมโครโฟน (รองรับทั้ง Desktop Chrome/Edge และ iPhone Safari/PWA)
+ * แล้วแปลงเป็นไฟล์ WAV 24kHz โมโน 16-bit พร้อมระดับเสียงแบบเรียลไทม์
+ */
+export async function startVoiceRecording(options: {
+  maxDurationSeconds: number;
+  onLevel?: (level: number) => void;
+  onElapsed?: (seconds: number) => void;
+  onAutoStop?: (clip: RecordedClip) => void;
+  onError?: (message: string) => void;
+}): Promise<ActiveVoiceRecording> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    throw new Error("อุปกรณ์หรือเบราว์เซอร์นี้ยังไม่รองรับการอัดเสียงจากไมโครโฟน");
+  }
+
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch {
+    throw new Error("ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาตสิทธิ์ไมโครโฟนแล้วลองใหม่");
+  }
+
+  const mimeType = pickRecorderMimeType();
+  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) chunks.push(event.data);
+  };
+
+  let cancelled = false;
+  let stopped = false;
+  let meterTimer: number | null = null;
+  let autoStopTimer: number | null = null;
+  const startedAt = Date.now();
+
+  const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const meterCtx = AudioCtx ? new AudioCtx() : null;
+  const analyser = meterCtx ? meterCtx.createAnalyser() : null;
+  let meterSource: MediaStreamAudioSourceNode | null = null;
+  const levelSamples = analyser ? new Uint8Array(analyser.fftSize) : null;
+  if (meterCtx && analyser) {
+    try {
+      meterSource = meterCtx.createMediaStreamSource(stream);
+      analyser.fftSize = 256;
+      meterSource.connect(analyser);
+    } catch {
+      // ข้ามตัววัดเสียงได้หากเบราว์เซอร์ไม่อนุญาต
+    }
+  }
+
+  const cleanup = () => {
+    if (meterTimer !== null) window.clearInterval(meterTimer);
+    if (autoStopTimer !== null) window.clearTimeout(autoStopTimer);
+    meterSource?.disconnect();
+    void meterCtx?.close().catch(() => undefined);
+    stream.getTracks().forEach((track) => track.stop());
+    options.onLevel?.(0);
+  };
+
+  const stopPromise = new Promise<RecordedClip>((resolve, reject) => {
+    recorder.onstop = () => {
+      cleanup();
+      if (cancelled) {
+        reject(new Error("cancelled"));
+        return;
+      }
+      const raw = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      void decodeToWav24kMono(raw).then(resolve, (err) => {
+        reject(err instanceof Error ? err : new Error("แปลงไฟล์เสียงไม่สำเร็จ"));
+      });
+    };
+    recorder.onerror = () => {
+      cleanup();
+      reject(new Error("การอัดเสียงขัดข้อง กรุณาลองใหม่"));
+    };
+  });
+
+  meterTimer = window.setInterval(() => {
+    options.onElapsed?.((Date.now() - startedAt) / 1000);
+    if (!analyser || !levelSamples) return;
+    analyser.getByteTimeDomainData(levelSamples);
+    let peak = 0;
+    for (let i = 0; i < levelSamples.length; i += 1) {
+      const normalized = Math.abs(((levelSamples[i] ?? 128) - 128) / 128);
+      if (normalized > peak) peak = normalized;
+    }
+    options.onLevel?.(Math.min(1, peak * 2.4));
+  }, 80);
+
+  autoStopTimer = window.setTimeout(() => {
+    if (stopped || cancelled) return;
+    stopped = true;
+    try {
+      recorder.stop();
+      void stopPromise.then(
+        (clip) => options.onAutoStop?.(clip),
+        (err) => options.onError?.(err instanceof Error ? err.message : "อัดเสียงไม่สำเร็จ")
+      );
+    } catch {
+      cleanup();
+    }
+  }, options.maxDurationSeconds * 1000);
+
+  recorder.start(250);
+
+  return {
+    stop() {
+      if (!stopped && !cancelled) {
+        stopped = true;
+        try {
+          recorder.stop();
+        } catch {
+          cleanup();
+        }
+      }
+      return stopPromise;
+    },
+    cancel() {
+      if (cancelled || stopped) return;
+      cancelled = true;
+      stopped = true;
+      try {
+        recorder.stop();
+      } catch {
+        cleanup();
+      }
+    }
+  };
+}

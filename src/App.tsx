@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { FolderKanban, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, FolderKanban, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
@@ -18,6 +18,7 @@ import {
   MeetingPanel,
   preloadViews,
   ProjectsPanel,
+  VoiceRecorderDialog,
   VoiceSettingsDialog
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
@@ -73,9 +74,11 @@ export default function App() {
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
   const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
+  const [recorderUsed, setRecorderUsed] = useState(false);
   const [metricsHidden, setMetricsHidden] = useState(false);
   const [latenciesMs, setLatenciesMs] = useState<number[]>([]);
   const [desktop] = useState(isDesktopApp);
@@ -90,8 +93,8 @@ export default function App() {
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
   const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
   const inMeeting = meetingStatus !== null;
-  // หน้าตั้งค่ามีเสียงตัวอย่างที่ไมโครโฟนไม่ควรได้ยิน จึงพักการฟังไว้ระหว่างที่เปิดอยู่ เช่นเดียวกับตลอดการประชุม
-  const handsFree = useHandsFree({ ready, paused: settingsOpen || meeting.active, controller });
+  // หน้าตั้งค่า/บันทึกเสียงใช้ไมโครโฟนหรือมีเสียงตัวอย่าง จึงพักการฟังไว้ระหว่างที่เปิดอยู่ เช่นเดียวกับตลอดการประชุม
+  const handsFree = useHandsFree({ ready, paused: settingsOpen || recorderOpen || meeting.active, controller });
   const speechBlocked = useSpeechBlocked(synthesizer);
 
   const pageOpen = ready && browser.requestedUrl !== null;
@@ -235,6 +238,18 @@ export default function App() {
     setSettingsUsed(false);
   };
 
+  const openRecorder = useCallback(() => {
+    stop();
+    setSettingsOpen(false);
+    setRecorderUsed(true);
+    setRecorderOpen(true);
+  }, [stop]);
+
+  const dismissRecorder = () => {
+    setRecorderOpen(false);
+    setRecorderUsed(false);
+  };
+
   const sendMessage = useCallback(
     (text: string, options?: Parameters<typeof sendText>[1]) => {
       if (captureError) setCaptureError(null);
@@ -298,6 +313,14 @@ export default function App() {
       }
     });
   }, [ready, screenCaptureAvailable, inMeeting]);
+
+  useEffect(() => {
+    if (!ready || inMeeting) return;
+    return appCommands.register({
+      matches: (text) => /(?:จดจำ|บันทึก|จำลอง)\s*เสียง/i.test(text),
+      run: () => openRecorder()
+    });
+  }, [ready, inMeeting, openRecorder]);
 
   return (
     <div className={`app${stageShown ? " has-stage" : ""}`}>
@@ -374,6 +397,18 @@ export default function App() {
             >
               <NotebookPen size={16} aria-hidden />
               <span>ประชุม</span>
+            </button>
+          )}
+          {ready && !inMeeting && (
+            <button
+              type="button"
+              className="meeting-entry voice-enroll-entry"
+              onClick={openRecorder}
+              aria-label="บันทึกเสียงของไลท์"
+              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ Javis จดจำและใช้เสียงนี้พูดตอบกลับ"
+            >
+              <AudioLines size={16} aria-hidden />
+              <span>บันทึกเสียง</span>
             </button>
           )}
           {ready && alwaysListening && answering && (
@@ -614,10 +649,22 @@ export default function App() {
           <VoiceSettingsDialog
             open={settingsOpen && ready}
             onClose={() => setSettingsOpen(false)}
+            onOpenRecorder={openRecorder}
             synthesizer={synthesizer}
             settings={voiceSettings}
             installPrompt={installPrompt}
             desktop={desktop}
+          />
+        </LazyBoundary>
+      )}
+
+      {recorderUsed && (
+        <LazyBoundary label="บันทึกเสียงของไลท์" retry={VoiceRecorderDialog.preload} onDismiss={dismissRecorder}>
+          <VoiceRecorderDialog
+            open={recorderOpen && ready}
+            onClose={() => setRecorderOpen(false)}
+            synthesizer={synthesizer}
+            activeCloudVoice={voiceSettings.cloudVoice}
           />
         </LazyBoundary>
       )}

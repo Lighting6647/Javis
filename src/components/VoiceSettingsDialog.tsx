@@ -1,6 +1,7 @@
-import { Check, Download, Play, RotateCcw, Sparkles, X } from "lucide-react";
+import { AudioLines, Check, Download, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useCloudVoiceStatus } from "../hooks/useCloudVoiceStatus";
+import { customVoicesStore } from "../services/customVoicesStore";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
@@ -28,6 +29,7 @@ interface InstallPrompt {
 interface VoiceSettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  onOpenRecorder?: () => void;
   synthesizer: SpeechSynthesizer;
   settings: VoiceSettings;
   installPrompt: InstallPrompt;
@@ -57,9 +59,14 @@ function describeCloudStatus(status: CloudVoiceStatus): string {
 }
 
 /** ส่วนตั้งค่าเสียง สร้างใหม่ทุกครั้งที่เปิด จึงโหลดรายการเสียงล่าสุดของอุปกรณ์เสมอ */
-function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, "synthesizer" | "settings">) {
+function VoiceSection({
+  synthesizer,
+  settings,
+  onOpenRecorder
+}: Pick<VoiceSettingsDialogProps, "synthesizer" | "settings" | "onOpenRecorder">) {
   /** null = กำลังโหลดรายการเสียง */
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
+  const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
   const cloudStatus = useCloudVoiceStatus(synthesizer);
   const rateId = useId();
   const cloudVoiceId = useId();
@@ -192,6 +199,15 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
                 onChange={(event) => voiceSettingsStore.update({ cloudVoice: event.target.value || null })}
               >
                 <option value={AUTOMATIC_VOICE}>ค่าเริ่มต้นของเซิร์ฟเวอร์ (Leda · สาวน้อย Gen Z สดใส)</option>
+                {customVoices.length > 0 && (
+                  <optgroup label="เสียงที่บันทึกไว้เอง (จดจำเสียง)">
+                    {customVoices.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.displayName} (เสียงของฉัน)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
                 {GEMINI_TTS_VOICES.map((voice) => (
                   <option key={voice.id} value={voice.id}>
                     {voice.label}
@@ -199,6 +215,11 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
                 ))}
               </select>
               {selectedCloudMeta?.hint && <small className="cloud-voice-hint">{selectedCloudMeta.hint}</small>}
+              {onOpenRecorder && (
+                <button type="button" className="btn btn-secondary" onClick={onOpenRecorder}>
+                  <AudioLines size={15} aria-hidden /> บันทึกเสียงของไลท์ (จดจำเสียง)
+                </button>
+              )}
               {cloudStatus.mode === "paused" && (
                 <button type="button" className="btn btn-secondary" onClick={() => preview()}>
                   ลองเชื่อมต่อเสียง Gemini อีกครั้ง
@@ -346,6 +367,7 @@ function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
 export function VoiceSettingsDialog({
   open,
   onClose,
+  onOpenRecorder,
   synthesizer,
   settings,
   installPrompt,
@@ -386,7 +408,7 @@ export function VoiceSettingsDialog({
         </header>
 
         <ThemeSection />
-        {open && <VoiceSection synthesizer={synthesizer} settings={settings} />}
+        {open && <VoiceSection synthesizer={synthesizer} settings={settings} onOpenRecorder={onOpenRecorder} />}
         <MemorySection />
         {/* แอปเดสก์ท็อปเป็นหน้าต่างของตัวเองอยู่แล้ว ไม่ต้องชวนติดตั้ง */}
         {!desktop && <InstallSection installPrompt={installPrompt} />}

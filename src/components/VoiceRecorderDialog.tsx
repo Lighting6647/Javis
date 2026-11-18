@@ -1,0 +1,425 @@
+import { Check, Mic, Play, RotateCcw, Sparkles, Square, Trash2, Volume2, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import {
+  createReplicatedVoice,
+  type CustomVoiceRecord,
+  deleteCustomVoice,
+  fetchCustomVoices
+} from "../services/customVoicesApi";
+import { customVoicesStore } from "../services/customVoicesStore";
+import { voiceSettingsStore } from "../services/voiceSettingsStore";
+import type { SpeechSynthesizer } from "../speech/types";
+import { type ActiveVoiceRecording, type RecordedClip, startVoiceRecording } from "../speech/voiceRecorder";
+
+const DEFAULT_CONSENT_PHRASE =
+  "ฉันเป็นเจ้าของเสียงนี้ และฉันยินยอมให้ Google ใช้เสียงนี้เพื่อสร้างแบบจำลองเสียงสังเคราะห์";
+
+interface VoiceRecorderDialogProps {
+  open: boolean;
+  onClose: () => void;
+  synthesizer: SpeechSynthesizer;
+  activeCloudVoice: string | null;
+}
+
+type ClipSlot = "source" | "consent";
+
+export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoice }: VoiceRecorderDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const nameId = useId();
+
+  const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
+  const [consentPhrase, setConsentPhrase] = useState(DEFAULT_CONSENT_PHRASE);
+  const [displayName, setDisplayName] = useState("เสียงของคุณไลท์");
+  const [sourceClip, setSourceClip] = useState<RecordedClip | null>(null);
+  const [consentClip, setConsentClip] = useState<RecordedClip | null>(null);
+  const [recordingSlot, setRecordingSlot] = useState<ClipSlot | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [level, setLevel] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const recorderRef = useRef<ActiveVoiceRecording | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopPreviewAudio = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.removeAttribute("src");
+      previewAudioRef.current = null;
+    }
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  const closeRecorder = () => {
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    stopPreviewAudio();
+    setRecordingSlot(null);
+    setLevel(0);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoadingList(true);
+        return fetchCustomVoices();
+      })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.consentPhrase) setConsentPhrase(res.consentPhrase);
+        customVoicesStore.replaceAll(res.voices);
+      })
+      .catch(() => {
+        // คงรายการที่แคชไว้ในเครื่องถ้าเครือข่ายขัดข้อง
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingList(false);
+      });
+
+    return () => {
+      cancelled = true;
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
+      stopPreviewAudio();
+    };
+  }, [open]);
+
+  const startRecording = async (slot: ClipSlot) => {
+    setError(null);
+    setNotice(null);
+    stopPreviewAudio();
+    synthesizer.cancel();
+
+    const maxDurationSeconds = slot === "source" ? 25 : 15;
+    setElapsed(0);
+    setLevel(0);
+    setRecordingSlot(slot);
+
+    try {
+      const handle = await startVoiceRecording({
+        maxDurationSeconds,
+        onElapsed: setElapsed,
+        onLevel: setLevel,
+        onAutoStop: (clip) => {
+          recorderRef.current = null;
+          setRecordingSlot(null);
+          setLevel(0);
+          if (slot === "source") setSourceClip(clip);
+          else setConsentClip(clip);
+        },
+        onError: (msg) => {
+          recorderRef.current = null;
+          setRecordingSlot(null);
+          setLevel(0);
+          setError(msg);
+        }
+      });
+      recorderRef.current = handle;
+    } catch (err) {
+      setRecordingSlot(null);
+      setError(err instanceof Error ? err.message : "เริ่มอัดเสียงไม่สำเร็จ");
+    }
+  };
+
+  const stopRecording = async (slot: ClipSlot) => {
+    const active = recorderRef.current;
+    recorderRef.current = null;
+    setRecordingSlot(null);
+    setLevel(0);
+    if (!active) return;
+
+    try {
+      const clip = await active.stop();
+      if (slot === "source") setSourceClip(clip);
+      else setConsentClip(clip);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "บันทึกเสียงไม่สำเร็จ");
+    }
+  };
+
+  const playClip = (clip: RecordedClip) => {
+    stopPreviewAudio();
+    const url = URL.createObjectURL(clip.blob);
+    const audio = new Audio(url);
+    previewUrlRef.current = url;
+    previewAudioRef.current = audio;
+    audio.onended = stopPreviewAudio;
+    audio.onerror = stopPreviewAudio;
+    void audio.play().catch(() => {
+      setError("เล่นเสียงตัวอย่างไม่สำเร็จ");
+      stopPreviewAudio();
+    });
+  };
+
+  const activateVoice = (voice: CustomVoiceRecord) => {
+    const current = voiceSettingsStore.get();
+    const next = { ...current, cloud: true, cloudVoice: voice.id };
+    voiceSettingsStore.update({ cloud: true, cloudVoice: voice.id });
+    synthesizer.applySettings(next);
+    if ("retryCloud" in synthesizer && typeof synthesizer.retryCloud === "function") {
+      synthesizer.retryCloud();
+    }
+    synthesizer.cancel();
+    void synthesizer.speak(`สวัสดีค่ะ ตอนนี้กำลังพูดด้วย${voice.displayName}แล้วนะคะ`);
+    setNotice(`ตั้งค่า "${voice.displayName}" เป็นเสียงพูดของ Javis เรียบร้อยแล้ว`);
+  };
+
+  const handleSaveAndClone = async () => {
+    if (!sourceClip || !consentClip || saving) return;
+    if (sourceClip.durationSeconds < 8) {
+      setError("คลิปเสียงตัวอย่างสั้นเกินไป กรุณาอัดใหม่อย่างน้อย 10 วินาทีเพื่อให้จำลองโทนเสียงได้แม่นยำครับ");
+      return;
+    }
+    if (consentClip.durationSeconds < 3) {
+      setError("คลิปเสียงยืนยันสิทธิ์สั้นเกินไป กรุณาอ่านประโยคยืนยันให้ครบชัดเจนครับ");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const created = await createReplicatedVoice({
+        displayName: displayName.trim() || "เสียงของคุณไลท์",
+        sourceAudioBase64: sourceClip.base64,
+        consentAudioBase64: consentClip.base64
+      });
+      customVoicesStore.add(created);
+      activateVoice(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "บันทึกและสร้างโมเดลเสียงจำลองไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (voice: CustomVoiceRecord) => {
+    if (deletingId) return;
+    setDeletingId(voice.id);
+    setError(null);
+    try {
+      await deleteCustomVoice(voice.id);
+      customVoicesStore.remove(voice.id);
+      if (activeCloudVoice === voice.id) {
+        voiceSettingsStore.update({ cloudVoice: null, persona: "genz-girl" });
+      }
+      setNotice(`ลบเสียง "${voice.displayName}" เรียบร้อยแล้ว`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ลบเสียงไม่สำเร็จ");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const canSubmit = Boolean(sourceClip && consentClip && !saving && recordingSlot === null);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="settings-dialog recorder-dialog"
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        closeRecorder();
+      }}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) closeRecorder();
+      }}
+    >
+      <div className="settings-body recorder-body">
+        <header>
+          <h2 id={titleId}>บันทึกเสียงของไลท์ (จดจำเสียง)</h2>
+          <button type="button" className="icon-button" onClick={closeRecorder} aria-label="ปิดเมนูบันทึกเสียง">
+            <X size={18} aria-hidden />
+          </button>
+        </header>
+
+        <p className="recorder-intro">
+          อัดเสียงพูดธรรมชาติและคำยืนยัน 2 ขั้นตอนเพื่อให้ Gemini 3.8 จดจำเอกลักษณ์เสียงของคุณไลท์สำหรับอ่านคำตอบของ Javis
+        </p>
+
+        {error && (
+          <div className="toast error" role="alert">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="toast info" role="status">
+            {notice}
+          </div>
+        )}
+
+        <div className="recorder-field">
+          <label htmlFor={nameId}>ชื่อโปรไฟล์เสียง</label>
+          <input
+            id={nameId}
+            type="text"
+            maxLength={60}
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="เช่น เสียงของคุณไลท์"
+          />
+        </div>
+
+        <section className="recorder-step">
+          <div className="recorder-step-head">
+            <strong>1. อัดเสียงตัวอย่าง (10–25 วินาที)</strong>
+            <span className="recorder-badge">
+              {recordingSlot === "source"
+                ? `${elapsed.toFixed(1)} / 25 วิ`
+                : sourceClip
+                  ? `${sourceClip.durationSeconds} วิ · พร้อมใช้`
+                  : "ยังไม่ได้อัด"}
+            </span>
+          </div>
+          <p className="recorder-script">
+            ตัวอย่างบทพูด: &ldquo;สวัสดีจาวิส นี่คือเสียงของไลท์เองนะ วันนี้ฝากช่วยดูสรุปงาน โปรเจกต์ทั้งหมด แล้วก็ช่วยเตือนนัดสำคัญให้ด้วย พูดแบบเป็นธรรมชาติสบาย ๆ ได้เลย&rdquo;
+          </p>
+          {recordingSlot === "source" && (
+            <div className="recorder-meter" aria-hidden>
+              <div className="recorder-meter-fill" style={{ width: `${Math.round(level * 100)}%` }} />
+            </div>
+          )}
+          <div className="recorder-actions">
+            {recordingSlot === "source" ? (
+              <button type="button" className="btn btn-primary" onClick={() => void stopRecording("source")}>
+                <Square size={14} fill="currentColor" aria-hidden /> หยุดอัดเสียงตัวอย่าง
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={recordingSlot !== null || saving}
+                onClick={() => void startRecording("source")}
+              >
+                <Mic size={15} aria-hidden /> {sourceClip ? "อัดเสียงตัวอย่างใหม่" : "เริ่มอัดเสียงตัวอย่าง"}
+              </button>
+            )}
+            {sourceClip && recordingSlot !== "source" && (
+              <button type="button" className="btn btn-secondary" onClick={() => playClip(sourceClip)}>
+                <Play size={14} aria-hidden /> ฟังที่อัด
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="recorder-step">
+          <div className="recorder-step-head">
+            <strong>2. อัดเสียงยืนยันสิทธิ์ (ตามที่ Google กำหนด)</strong>
+            <span className="recorder-badge">
+              {recordingSlot === "consent"
+                ? `${elapsed.toFixed(1)} / 15 วิ`
+                : consentClip
+                  ? `${consentClip.durationSeconds} วิ · พร้อมใช้`
+                  : "ยังไม่ได้อัด"}
+            </span>
+          </div>
+          <p className="recorder-script recorder-consent-phrase">
+            กรุณาอ่านออกเสียงข้อความนี้ให้ชัดเจน: <strong>&ldquo;{consentPhrase}&rdquo;</strong>
+          </p>
+          {recordingSlot === "consent" && (
+            <div className="recorder-meter" aria-hidden>
+              <div className="recorder-meter-fill" style={{ width: `${Math.round(level * 100)}%` }} />
+            </div>
+          )}
+          <div className="recorder-actions">
+            {recordingSlot === "consent" ? (
+              <button type="button" className="btn btn-primary" onClick={() => void stopRecording("consent")}>
+                <Square size={14} fill="currentColor" aria-hidden /> หยุดอัดคำยินยอม
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={recordingSlot !== null || saving}
+                onClick={() => void startRecording("consent")}
+              >
+                <Mic size={15} aria-hidden /> {consentClip ? "อัดคำยินยอมใหม่" : "เริ่มอัดคำยินยอม"}
+              </button>
+            )}
+            {consentClip && recordingSlot !== "consent" && (
+              <button type="button" className="btn btn-secondary" onClick={() => playClip(consentClip)}>
+                <Play size={14} aria-hidden /> ฟังคำยินยอม
+              </button>
+            )}
+          </div>
+        </section>
+
+        <div className="settings-actions">
+          <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={() => void handleSaveAndClone()}>
+            <Sparkles size={15} aria-hidden /> {saving ? "กำลังจดจำและสร้างเสียง..." : "บันทึกและจดจำเสียงของไลท์"}
+          </button>
+          {(sourceClip || consentClip) && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={saving || recordingSlot !== null}
+              onClick={() => {
+                setSourceClip(null);
+                setConsentClip(null);
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              <RotateCcw size={14} aria-hidden /> ล้างคลิป
+            </button>
+          )}
+        </div>
+
+        <section className="recorder-saved">
+          <h3>เสียงที่จดจำไว้ในระบบ {loadingList ? "(กำลังซิงก์…)" : ""}</h3>
+          {customVoices.length === 0 ? (
+            <p className="settings-note">ยังไม่มีเสียงที่บันทึกไว้ในโปรเจกต์ Gemini นี้ อัด 2 ขั้นตอนด้านบนเพื่อสร้างได้เลยครับ</p>
+          ) : (
+            <ul className="recorder-voice-list">
+              {customVoices.map((voice) => {
+                const isSelected = activeCloudVoice === voice.id;
+                return (
+                  <li key={voice.id} className={`recorder-voice-item${isSelected ? " active" : ""}`}>
+                    <div>
+                      <strong>{voice.displayName}</strong>
+                      <small>{voice.id}</small>
+                    </div>
+                    <div className="recorder-voice-item-actions">
+                      <button type="button" className="studio-pill-btn" onClick={() => activateVoice(voice)}>
+                        {isSelected ? <><Check size={12} aria-hidden /> ใช้อยู่</> : <><Volume2 size={12} aria-hidden /> ใช้เสียงนี้</>}
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        disabled={deletingId === voice.id}
+                        aria-label={`ลบเสียง ${voice.displayName}`}
+                        onClick={() => void handleDelete(voice)}
+                      >
+                        <Trash2 size={14} aria-hidden />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+    </dialog>
+  );
+}

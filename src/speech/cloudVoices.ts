@@ -101,7 +101,12 @@ export const GEMINI_TTS_VOICES: readonly GeminiVoiceOption[] = [
 ];
 
 const VALID_GEMINI_VOICE_IDS = new Set(GEMINI_TTS_VOICES.map((voice) => voice.id));
+const CUSTOM_VOICE_ID_PATTERN = /^voice(?:key)?_[A-Za-z0-9._-]{4,120}$/;
+
+export function isCustomTtsVoiceId(value: string): boolean {
+  return CUSTOM_VOICE_ID_PATTERN.test(value);
+}
 
 export function isGeminiTtsVoice(value: string): boolean {
-  return VALID_GEMINI_VOICE_IDS.has(value);
+  return VALID_GEMINI_VOICE_IDS.has(value) || isCustomTtsVoiceId(value);
 }
