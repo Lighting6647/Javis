@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveWebSearchProvider, searchWeb, type WebSearchProvider } from "./webSearch.js";
+import { createSearchCache, resolveWebSearchProvider, SEARCH_CACHE_TTL_MS, searchWeb, type WebSearchProvider } from "./webSearch.js";
 
 // ค่าทดสอบเท่านั้น ไม่ใช่กุญแจจริงของบริการใด
 const TAVILY_KEY = "tvly-test-only-not-a-real-key";
@@ -74,6 +74,99 @@ describe("searchWeb", () => {
     expect(request?.headers.get("content-type")).toBe("application/json");
     // ไม่ได้ขอช่วงเวลา: ไม่จำกัด เพราะข้อเท็จจริงที่ไม่ขึ้นกับเวลาต้องหาเจอแม้หน้าจะเก่า
     expect(request?.body).toEqual({ query: "ราคาทองคำวันนี้", ...BASE_BODY });
+  });
+
+  describe("จำผลค้นไว้ชั่วคราว", () => {
+    /** นาฬิกาที่เลื่อนเองได้ */
+    function clock() {
+      let time = 1_000_000;
+      return { now: () => time, advance: (ms: number) => void (time += ms) };
+    }
+
+    it("ถามคำค้นเดิมซ้ำภายใน 10 นาที: ใช้ผลที่จำไว้ ไม่ค้นใหม่ และบอกว่าผลมาจากที่จำไว้", async () => {
+      const time = clock();
+      const cache = createSearchCache({ now: time.now });
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+
+      const first = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", cache, fetchImpl: upstream.fetchImpl });
+      time.advance(SEARCH_CACHE_TTL_MS - 1);
+      const second = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", cache, fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent).toHaveLength(1);
+      expect(first).not.toHaveProperty("cached");
+      expect(second).toEqual({ ...first, cached: true });
+    });
+
+    it("ครบ 10 นาที: ค้นใหม่ แล้วจำผลชุดใหม่แทน", async () => {
+      const time = clock();
+      const cache = createSearchCache({ now: time.now });
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+
+      await searchWeb(provider, "ราคาทองคำวันนี้", { cache, fetchImpl: upstream.fetchImpl });
+      time.advance(SEARCH_CACHE_TTL_MS);
+      await searchWeb(provider, "ราคาทองคำวันนี้", { cache, fetchImpl: upstream.fetchImpl });
+      await searchWeb(provider, "ราคาทองคำวันนี้", { cache, fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent).toHaveLength(2);
+    });
+
+    it("คำค้นที่ต่างแค่ตัวพิมพ์หรือช่องว่างคือคำค้นเดียวกัน ส่วนช่วงเวลาที่ต่างกันแยกกันจำ", async () => {
+      const cache = createSearchCache();
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+      const search = (query: string, recency: "day" | "week" | null) => searchWeb(provider, query, { recency, cache, fetchImpl: upstream.fetchImpl });
+
+      await search("Gold price  today", "day");
+      await search("  gold PRICE today ", "day");
+      expect(upstream.sent).toHaveLength(1);
+
+      await search("gold price today", "week");
+      await search("gold price today", null);
+      expect(upstream.sent).toHaveLength(3);
+    });
+
+    it("ไม่จำผลที่ว่างหรือค้นไม่สำเร็จ: คำถามถัดไปได้ค้นใหม่", async () => {
+      const cache = createSearchCache();
+      const empty = fakeTavily(() => json({ results: [] }));
+      await searchWeb(provider, "เรื่องที่ไม่มีใครเขียน", { cache, fetchImpl: empty.fetchImpl });
+      await searchWeb(provider, "เรื่องที่ไม่มีใครเขียน", { cache, fetchImpl: empty.fetchImpl });
+      expect(empty.sent).toHaveLength(2);
+
+      const failing = fakeTavily(() => json({ detail: { error: "Internal Server Error" } }, 500));
+      await searchWeb(provider, "ราคาทองคำวันนี้", { cache, fetchImpl: failing.fetchImpl });
+      await searchWeb(provider, "ราคาทองคำวันนี้", { cache, fetchImpl: failing.fetchImpl });
+      expect(failing.sent).toHaveLength(2);
+      expect(cache.size).toBe(0);
+    });
+
+    it("จำผลที่ได้จากการค้นซ้ำแบบไม่จำกัด พร้อมบอกว่าผลชุดนั้นอาจเก่าเหมือนเดิม", async () => {
+      const cache = createSearchCache();
+      const upstream = fakeTavily(() => json({ results: upstream.sent.length === 1 ? [] : [GOLD_PAGE] }));
+
+      await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", cache, fetchImpl: upstream.fetchImpl });
+      const again = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", cache, fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent).toHaveLength(2);
+      expect(again).toMatchObject({ ok: true, cached: true, widenedFrom: "day" });
+    });
+
+    it("จำได้ไม่เกินจำนวนที่กำหนด เมื่อเต็มจะลบรายการที่จำไว้นานที่สุดออกก่อน", async () => {
+      const cache = createSearchCache({ maxEntries: 2 });
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+      const search = (query: string) => searchWeb(provider, query, { cache, fetchImpl: upstream.fetchImpl });
+
+      await search("หนึ่ง");
+      await search("สอง");
+      await search("สาม");
+      expect(cache.size).toBe(2);
+      expect(upstream.sent).toHaveLength(3);
+
+      // "สอง" กับ "สาม" ยังจำอยู่ ส่วน "หนึ่ง" ถูกลบไปแล้ว
+      await search("สาม");
+      await search("สอง");
+      expect(upstream.sent).toHaveLength(3);
+      await search("หนึ่ง");
+      expect(upstream.sent).toHaveLength(4);
+    });
   });
 
   describe("ช่วงเวลาของข้อมูล", () => {
