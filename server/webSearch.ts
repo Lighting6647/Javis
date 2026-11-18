@@ -37,6 +37,8 @@ export type WebSearchOutcome =
       recency?: SearchRecency;
       /** ช่วงเวลาที่ขอไว้ซึ่งค้นแล้วไม่พบอะไร ผลชุดนี้จึงมาจากการค้นซ้ำแบบไม่จำกัดช่วง และอาจเป็นข้อมูลเก่า */
       widenedFrom?: SearchRecency;
+      /** ผลชุดนี้มาจากที่จำไว้ ไม่ได้ค้นใหม่ */
+      cached?: true;
     }
   | {
       ok: false;
@@ -124,9 +126,71 @@ function errorMessageOf(payload: unknown): unknown {
   return payload.detail ?? payload.error ?? payload.message;
 }
 
+type FoundOutcome = Extract<WebSearchOutcome, { ok: true }>;
+
+/**
+ * ระยะเวลาที่จำผลค้นไว้: ราคาทองไทยประกาศเปลี่ยนไม่กี่ครั้งต่อวัน ผลที่ช้ากว่าจริงไม่เกิน 10 นาทีจึงรับได้
+ * ส่วนเรื่องที่เปลี่ยนเร็วกว่านี้ (เช่น ผลบอลสด) จะได้ผลที่ช้าไม่เกินเท่านี้เช่นกัน
+ */
+export const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+/** จำนวนผลค้นที่จำได้สูงสุด ผลค้นหนึ่งชุดไม่เกินราว 5 KB ทั้งหมดจึงไม่เกินราว 0.5 MB */
+export const SEARCH_CACHE_MAX_ENTRIES = 100;
+
+/** ความจำผลค้นของเซิร์ฟเวอร์หนึ่งตัว บน Vercel อยู่ได้เท่าที่เซิร์ฟเวอร์ตัวนั้นยังเปิดอยู่ */
+export interface SearchCache {
+  get(query: string, recency: SearchRecency | null | undefined): FoundOutcome | null;
+  set(query: string, recency: SearchRecency | null | undefined, outcome: FoundOutcome): void;
+  readonly size: number;
+}
+
+/** คำค้นที่ต่างกันแค่ตัวพิมพ์ ช่องว่าง หรือรูปแบบการเข้ารหัสตัวอักษร ถือเป็นคำค้นเดียวกัน */
+const cacheKeyOf = (query: string, recency: SearchRecency | null | undefined) =>
+  `${recency ?? "any"} ${query.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/**
+ * จำผลค้นที่พบข้อมูลไว้ชั่วคราว ให้คำถามเดิมตอบได้เร็วขึ้นโดยไม่ใช้เครดิตซ้ำ
+ * ไม่จำผลที่ว่างหรือค้นไม่สำเร็จ เพื่อให้ครั้งถัดไปได้ค้นใหม่ เมื่อเต็มจะลบรายการที่จำไว้นานที่สุดออกก่อน
+ * @param now นาฬิกา (ให้การทดสอบเลื่อนเวลาได้)
+ */
+export function createSearchCache(
+  options: { ttlMs?: number; maxEntries?: number; now?: () => number } = {}
+): SearchCache {
+  const { ttlMs = SEARCH_CACHE_TTL_MS, maxEntries = SEARCH_CACHE_MAX_ENTRIES, now = Date.now } = options;
+  const entries = new Map<string, { outcome: FoundOutcome; expiresAt: number }>();
+
+  return {
+    get(query, recency) {
+      const key = cacheKeyOf(query, recency);
+      const entry = entries.get(key);
+      if (!entry) return null;
+      if (now() >= entry.expiresAt) {
+        entries.delete(key);
+        return null;
+      }
+      return entry.outcome;
+    },
+    set(query, recency, outcome) {
+      if (outcome.results.length === 0) return;
+      const key = cacheKeyOf(query, recency);
+      // ลบก่อนใส่ใหม่ ให้รายการนี้นับเป็นรายการล่าสุด
+      entries.delete(key);
+      entries.set(key, { outcome, expiresAt: now() + ttlMs });
+      for (const oldest of entries.keys()) {
+        if (entries.size <= maxEntries) break;
+        entries.delete(oldest);
+      }
+    },
+    get size() {
+      return entries.size;
+    }
+  };
+}
+
 interface SearchOptions {
   /** ช่วงเวลาของข้อมูลที่ต้องการ นับย้อนจากวันนี้ ไม่กำหนด = ไม่จำกัด */
   recency?: SearchRecency | null;
+  /** ความจำผลค้น ไม่กำหนด = ค้นใหม่ทุกครั้ง */
+  cache?: SearchCache;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
@@ -138,6 +202,20 @@ interface SearchOptions {
  */
 export async function searchWeb(provider: WebSearchProvider, query: string, options: SearchOptions = {}): Promise<WebSearchOutcome> {
   const recency = options.recency ?? undefined;
+  const remembered = options.cache?.get(query, recency);
+  if (remembered) return { ...remembered, cached: true };
+
+  const outcome = await searchFresh(provider, query, recency, options);
+  if (outcome.ok) options.cache?.set(query, recency, outcome);
+  return outcome;
+}
+
+async function searchFresh(
+  provider: WebSearchProvider,
+  query: string,
+  recency: SearchRecency | undefined,
+  options: SearchOptions
+): Promise<WebSearchOutcome> {
   const first = await searchOnce(provider, query, recency, options);
   if (!recency || !first.ok || first.results.length > 0) return first;
 

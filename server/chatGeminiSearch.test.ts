@@ -518,6 +518,22 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
       expect(eventOf(reply, "sources")).toMatchObject({ sources: [{ url: "https://www.goldtraders.or.th/" }, { url: "https://www.thairath.co.th/money/gold" }] });
     });
 
+    it("ถามคำถามเดิมซ้ำ: ใช้ผลค้นที่จำไว้ ไม่ใช้เครดิตของ Tavily ซ้ำ และผู้ใช้ยังได้คำตอบกับแหล่งที่มาครบ", async () => {
+      const app = await boot(
+        datedModel(() => tavilyResults(GOLD_RESULTS)),
+        TAVILY_SEARCH
+      );
+      const first = await app.ask("ราคาทองวันนี้เท่าไหร่");
+      const second = await app.ask("ราคาทองวันนี้เท่าไหร่");
+
+      expect(app.apis()).toEqual(["chat", "tavily", "chat", "chat", "chat"]);
+      expect(second.text).toBe(first.text);
+      expect(eventOf(second, "sources")).toEqual(eventOf(first, "sources"));
+      // ขั้นตอบได้ผลค้นชุดเดิม พร้อมบอกว่าจำกัดช่วงเวลาไว้เหมือนเดิม
+      expect(chatSystemOf(app.calls[4])).toContain("ทองคำแท่ง ขายออก 62,350 บาท รับซื้อ 62,250 บาท");
+      expect(chatSystemOf(app.calls[4])).toContain("จำกัดเฉพาะหน้าที่เผยแพร่ภายในหนึ่งวันที่ผ่านมา");
+    });
+
     it("โมเดลไม่ได้ขอช่วงเวลา หรือขอแบบไม่จำกัด: ค้นแบบไม่จำกัดครั้งเดียว", async () => {
       const app = await boot(chatModel("ทองคำแท่งขายออกบาทละ 62,350 บาทครับ"), TAVILY_SEARCH);
       await app.ask("ราคาทองวันนี้เท่าไหร่");

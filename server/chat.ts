@@ -35,7 +35,7 @@ import {
 import { isFindCommand, pointToSource } from "./sourcePointer.js";
 import { describeUpstreamFailure } from "./upstreamError.js";
 import { MAX_READ_TEXT_LENGTH, readWebPage } from "./webReader.js";
-import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
+import { createSearchCache, searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
 import { routeVoiceTurn } from "./jevRouter.js";
 
 export const MAX_CHAT_MESSAGES = 24;
@@ -339,6 +339,9 @@ let webSearchUsable = config.ai.webSearch;
  */
 let webSearchPausedUntil = 0;
 const WEB_SEARCH_PAUSE_MS = 60 * 60 * 1000;
+
+/** ผลค้นของบริการค้นเว็บภายนอกที่จำไว้ชั่วคราว คำถามเดิมจึงตอบเร็วขึ้นโดยไม่ใช้เครดิตซ้ำ */
+const searchCache = createSearchCache();
 
 /**
  * เปลี่ยนเป็น false เมื่อพบว่าโมเดลที่ตั้งไว้ไม่รับตัวเลือกเสริมของคำขอ
@@ -1183,9 +1186,9 @@ export const chatHandler: RequestHandler = async (request, response) => {
       const began = Date.now();
       // โมเดลขอค้นโดยไม่ให้คำค้นที่อ่านได้: ใช้คำถามล่าสุดของผู้ใช้เป็นคำค้น
       const searchQuery = query || (messages.at(-1)?.content ?? "").slice(0, MAX_SEARCH_QUERY_LENGTH);
-      const outcome = await searchWeb(externalSearch, searchQuery, { recency, signal });
+      const outcome = await searchWeb(externalSearch, searchQuery, { recency, signal, cache: searchCache });
       attempts.push({
-        target: `${externalSearch.name} search`,
+        target: `${externalSearch.name} ${outcome.ok && outcome.cached ? "cache" : "search"}`,
         at: began - requestStarted,
         ms: Date.now() - began,
         ...(outcome.ok ? { status: 200 } : { status: outcome.status, codes: [outcome.reason], detail: outcome.logDetail })
@@ -1334,7 +1337,8 @@ export const chatHandler: RequestHandler = async (request, response) => {
           optionalSettingsUsable,
           searchThinkingLevelUsable,
           searchRequest: reducer.searchRequest,
-          searchRecency: reducer.searchRecency
+          searchRecency: reducer.searchRecency,
+          searchCacheSize: searchCache.size
         }
       });
     }
