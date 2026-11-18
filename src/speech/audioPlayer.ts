@@ -1,6 +1,11 @@
 import type { AudioPlayback, AudioPlayer, PlaybackOutcome } from "./cloudVoice";
 
-const SILENT_WAV_DATA_URI = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+// 44-byte silent 8kHz mono PCM WAV — สร้างเป็น Blob URL เพื่อไม่ให้ชน CSP media-src 'self' blob:
+const SILENT_WAV_BYTES = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+  0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x40, 0x1f, 0x00, 0x00, 0x80, 0x3e, 0x00, 0x00,
+  0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00
+]);
 
 type AudioContextCtor = typeof AudioContext;
 
@@ -105,21 +110,22 @@ export function createBrowserAudioPlayer(): AudioPlayer {
       }
 
       const element = ensureElement();
-      if (element && element.paused && !element.src.startsWith("blob:")) {
-        element.src = SILENT_WAV_DATA_URI;
+      if (element && element.paused && !element.src) {
+        const silentUrl = URL.createObjectURL(new Blob([SILENT_WAV_BYTES], { type: "audio/wav" }));
+        element.src = silentUrl;
         element.volume = 0;
-        void element
-          .play()
-          .then(() => {
-            if (element.src === SILENT_WAV_DATA_URI) {
-              element.pause();
-              element.volume = 1;
-              element.removeAttribute("src");
-            }
-          })
-          .catch(() => {
+        const cleanupSilent = () => {
+          if (element.src === silentUrl) {
+            element.pause();
             element.volume = 1;
-          });
+            element.removeAttribute("src");
+          }
+          URL.revokeObjectURL(silentUrl);
+        };
+        void element.play().then(cleanupSilent).catch(() => {
+          element.volume = 1;
+          cleanupSilent();
+        });
       }
     },
 
