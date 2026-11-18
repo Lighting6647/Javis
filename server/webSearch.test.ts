@@ -59,7 +59,10 @@ describe("searchWeb", () => {
 
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-  it("ส่งคำค้นไปยัง Tavily ด้วยกุญแจในหัวคำขอ และขอการค้นแบบพื้นฐานที่ใช้เครดิตเดียว", async () => {
+  const BASE_BODY = { search_depth: "basic", topic: "general", max_results: 5, include_answer: false, include_published_date: true };
+  const GOLD_PAGE = { title: "ราคาทองคำวันนี้", url: "https://www.goldtraders.or.th/", content: "ทองคำแท่ง ขายออก 62,350 บาท", published_date: "2026-11-18" };
+
+  it("ส่งคำค้นไปยัง Tavily ด้วยกุญแจในหัวคำขอ ขอการค้นแบบพื้นฐานที่ใช้เครดิตเดียว และขอวันที่เผยแพร่ของแต่ละหน้า", async () => {
     const upstream = fakeTavily(() => json({ query: "ราคาทองคำวันนี้", results: [] }));
     await searchWeb(provider, "ราคาทองคำวันนี้", { fetchImpl: upstream.fetchImpl });
 
@@ -69,7 +72,64 @@ describe("searchWeb", () => {
     expect(request?.method).toBe("POST");
     expect(request?.headers.get("authorization")).toBe(`Bearer ${TAVILY_KEY}`);
     expect(request?.headers.get("content-type")).toBe("application/json");
-    expect(request?.body).toEqual({ query: "ราคาทองคำวันนี้", search_depth: "basic", topic: "general", max_results: 5, include_answer: false });
+    // ไม่ได้ขอช่วงเวลา: ไม่จำกัด เพราะข้อเท็จจริงที่ไม่ขึ้นกับเวลาต้องหาเจอแม้หน้าจะเก่า
+    expect(request?.body).toEqual({ query: "ราคาทองคำวันนี้", ...BASE_BODY });
+  });
+
+  describe("ช่วงเวลาของข้อมูล", () => {
+    it("ขอช่วงเวลา: จำกัดผลค้นเฉพาะหน้าที่เผยแพร่ในช่วงนั้น และบอกว่าผลชุดนี้จำกัดช่วงไว้", async () => {
+      const upstream = fakeTavily(() => json({ results: [GOLD_PAGE] }));
+      const outcome = await searchWeb(provider, "ราคาทองคำแท่ง 18 พฤศจิกายน 2569", { recency: "day", fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent.map((request) => request.body)).toEqual([{ query: "ราคาทองคำแท่ง 18 พฤศจิกายน 2569", ...BASE_BODY, time_range: "day" }]);
+      expect(outcome).toEqual({
+        ok: true,
+        recency: "day",
+        results: [{ title: "ราคาทองคำวันนี้", url: "https://www.goldtraders.or.th/", content: "ทองคำแท่ง ขายออก 62,350 บาท", publishedDate: "2026-11-18" }]
+      });
+    });
+
+    it("จำกัดช่วงแล้วไม่พบอะไร: ค้นซ้ำหนึ่งครั้งแบบไม่จำกัด และบอกว่าผลชุดนี้อาจเป็นข้อมูลเก่า", async () => {
+      // หน้าที่อัปเดตทุกวันแต่เก็บวันที่เผยแพร่ครั้งแรกไว้ หลุดจากการกรองตามช่วงเวลา
+      const upstream = fakeTavily(() => json({ results: upstream.sent.length === 1 ? [] : [GOLD_PAGE] }));
+      const outcome = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "week", fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent.map((request) => request.body)).toEqual([
+        { query: "ราคาทองคำวันนี้", ...BASE_BODY, time_range: "week" },
+        { query: "ราคาทองคำวันนี้", ...BASE_BODY }
+      ]);
+      expect(outcome).toMatchObject({ ok: true, widenedFrom: "week", results: [{ url: "https://www.goldtraders.or.th/" }] });
+      expect(outcome).not.toHaveProperty("recency");
+    });
+
+    it("ค้นซ้ำแบบไม่จำกัดแล้วยังไม่พบ: คืนผลว่าง ไม่ค้นต่ออีก", async () => {
+      const upstream = fakeTavily(() => json({ results: [] }));
+      const outcome = await searchWeb(provider, "เรื่องที่ไม่มีใครเขียน", { recency: "month", fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent).toHaveLength(2);
+      expect(outcome).toEqual({ ok: true, results: [], widenedFrom: "month" });
+    });
+
+    it("ไม่จำกัดช่วงแล้วไม่พบ หรือจำกัดช่วงแล้วค้นไม่สำเร็จ: ไม่ค้นซ้ำ เพื่อไม่ใช้เครดิตเกินจำเป็น", async () => {
+      const empty = fakeTavily(() => json({ results: [] }));
+      await searchWeb(provider, "เรื่องทั่วไป", { recency: null, fetchImpl: empty.fetchImpl });
+      expect(empty.sent).toHaveLength(1);
+
+      const exhausted = fakeTavily(() => json({ detail: { error: "This request exceeds your plan's set usage limit." } }, 432));
+      const outcome = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", fetchImpl: exhausted.fetchImpl });
+      expect(exhausted.sent).toHaveLength(1);
+      expect(outcome).toMatchObject({ ok: false, status: 432, reason: "quota" });
+    });
+
+    it("ค้นซ้ำแบบไม่จำกัดแล้วค้นไม่สำเร็จ: รายงานความล้มเหลวนั้น เพื่อให้ระบบพักหรือปิดการค้นได้ถูกต้อง", async () => {
+      const upstream = fakeTavily(() =>
+        upstream.sent.length === 1 ? json({ results: [] }) : json({ detail: { error: "This request exceeds your plan's set usage limit." } }, 432)
+      );
+      const outcome = await searchWeb(provider, "ราคาทองคำวันนี้", { recency: "day", fetchImpl: upstream.fetchImpl });
+
+      expect(upstream.sent).toHaveLength(2);
+      expect(outcome).toMatchObject({ ok: false, status: 432, reason: "quota" });
+    });
   });
 
   it("คืนผลค้นที่ใช้ต่อได้: ชื่อ ลิงก์ เนื้อหาย่อ และวันที่เผยแพร่ถ้ามี", async () => {

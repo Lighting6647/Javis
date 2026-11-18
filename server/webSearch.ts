@@ -3,7 +3,7 @@
  * ตอนนี้รองรับ Tavily ซึ่งมีโควตาฟรีรายเดือนและไม่ต้องใช้บัตรเครดิต
  * AI ขอค้นผ่านเครื่องมือของ Javis เซิร์ฟเวอร์ค้นที่นี่ แล้วส่งผลค้นให้ AI ใช้ตอบ
  */
-import { safeHttpUrl } from "./responseStream.js";
+import { safeHttpUrl, type SearchRecency } from "./responseStream.js";
 import { sanitizeUpstreamMessage } from "./upstreamError.js";
 
 type Env = Record<string, string | undefined>;
@@ -30,7 +30,14 @@ export interface WebSearchResult {
 export type WebSearchFailureReason = "auth" | "quota" | "busy" | "unknown";
 
 export type WebSearchOutcome =
-  | { ok: true; results: WebSearchResult[] }
+  | {
+      ok: true;
+      results: WebSearchResult[];
+      /** ช่วงเวลาที่ผลค้นชุดนี้ถูกจำกัดไว้ ไม่มี = ไม่จำกัด */
+      recency?: SearchRecency;
+      /** ช่วงเวลาที่ขอไว้ซึ่งค้นแล้วไม่พบอะไร ผลชุดนี้จึงมาจากการค้นซ้ำแบบไม่จำกัดช่วง และอาจเป็นข้อมูลเก่า */
+      widenedFrom?: SearchRecency;
+    }
   | {
       ok: false;
       /** รหัสสถานะ HTTP ของต้นทาง หรือ 0 ถ้าเชื่อมต่อไม่ได้ */
@@ -117,13 +124,32 @@ function errorMessageOf(payload: unknown): unknown {
   return payload.detail ?? payload.error ?? payload.message;
 }
 
+interface SearchOptions {
+  /** ช่วงเวลาของข้อมูลที่ต้องการ นับย้อนจากวันนี้ ไม่กำหนด = ไม่จำกัด */
+  recency?: SearchRecency | null;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
 /**
- * ค้นเว็บหนึ่งครั้ง ไม่ throw: ความล้มเหลวทุกแบบคืนเป็นผลลัพธ์ เพราะการค้นไม่สำเร็จต้องไม่ทำให้คำตอบของผู้ใช้ล้ม
+ * ค้นเว็บ ไม่ throw: ความล้มเหลวทุกแบบคืนเป็นผลลัพธ์ เพราะการค้นไม่สำเร็จต้องไม่ทำให้คำตอบของผู้ใช้ล้ม
+ * ถ้าจำกัดช่วงเวลาแล้วไม่พบอะไรเลย จะค้นซ้ำหนึ่งครั้งแบบไม่จำกัด (ใช้อีกหนึ่งเครดิต)
+ * เพราะหน้าที่อัปเดตทุกวัน เช่น หน้าราคาทอง อาจยังเก็บวันที่เผยแพร่ครั้งแรกไว้ จึงหลุดจากการกรองตามช่วงเวลา
  */
-export async function searchWeb(
+export async function searchWeb(provider: WebSearchProvider, query: string, options: SearchOptions = {}): Promise<WebSearchOutcome> {
+  const recency = options.recency ?? undefined;
+  const first = await searchOnce(provider, query, recency, options);
+  if (!recency || !first.ok || first.results.length > 0) return first;
+
+  const widened = await searchOnce(provider, query, undefined, options);
+  return widened.ok ? { ...widened, widenedFrom: recency } : widened;
+}
+
+async function searchOnce(
   provider: WebSearchProvider,
   query: string,
-  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {}
+  recency: SearchRecency | undefined,
+  options: SearchOptions
 ): Promise<WebSearchOutcome> {
   const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
   let status = 0;
@@ -134,13 +160,22 @@ export async function searchWeb(
       signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
       headers: { Authorization: `Bearer ${provider.apiKey}`, "Content-Type": "application/json" },
       // basic ใช้หนึ่งเครดิตต่อการค้น และไม่ขอคำตอบสำเร็จรูป เพราะ AI ของ Javis เป็นผู้ตอบเอง
-      body: JSON.stringify({ query, search_depth: "basic", topic: "general", max_results: MAX_SEARCH_RESULTS, include_answer: false })
+      // ขอวันที่เผยแพร่ของแต่ละหน้า (ไม่คิดเครดิตเพิ่ม) ให้ AI เทียบกับวันนี้ได้ว่าข้อมูลเก่าหรือใหม่
+      body: JSON.stringify({
+        query,
+        search_depth: "basic",
+        topic: "general",
+        max_results: MAX_SEARCH_RESULTS,
+        include_answer: false,
+        include_published_date: true,
+        ...(recency ? { time_range: recency } : {})
+      })
     });
     status = response.status;
 
     const payload: unknown = await response.json();
     if (!response.ok) return { ok: false, status, reason: reasonOf(status), logDetail: sanitizeUpstreamMessage(errorMessageOf(payload)) };
-    return { ok: true, results: readResults(payload) };
+    return { ok: true, results: readResults(payload), ...(recency ? { recency } : {}) };
   } catch (error) {
     // เชื่อมต่อไม่ได้ หมดเวลา หรือคำตอบไม่ใช่ JSON
     const message = error instanceof Error ? error.message : "";
