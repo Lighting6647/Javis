@@ -7,6 +7,8 @@ export const REMEMBER_TOOL = "remember";
 export const FORGET_TOOL = "forget_memory";
 /** เครื่องมือที่ AI ใช้ขอให้เซิร์ฟเวอร์ค้นเว็บ เมื่อการค้นทำเป็นขั้นแยกจากคำขอปกติ */
 export const SEARCH_WEB_TOOL = "search_web";
+/** เครื่องมือที่ AI ใช้ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจากหน้าเว็บภายนอกมาอ่านให้ผู้ใช้ฟัง */
+export const READ_PAGE_TOOL = "read_web_page";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 /**
  * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
@@ -132,6 +134,10 @@ export interface ResponseReducer {
   readonly searchRequest: string | null;
   /** ช่วงเวลาของข้อมูลที่ AI ขอพร้อมคำค้น null คือไม่จำกัดช่วง (หรือไม่ได้ขอค้น) */
   readonly searchRecency: SearchRecency | null;
+  /**
+   * AI ขอให้เซิร์ฟเวอร์ดึงเนื้อหาจาก URL ภายนอกมาอ่านให้ผู้ใช้ฟัง (null = ไม่ได้ขอ)
+   */
+  readonly readRequest: string | null;
 }
 
 export interface ResponseReducerOptions {
@@ -162,6 +168,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   const suggestionBlocks: string[] = [];
   let searchRequest: string | null = null;
   let searchRecency: SearchRecency | null = null;
+  let readRequest: string | null = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
 
@@ -277,6 +284,12 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       const args = parseArguments(item.arguments);
       searchRequest = cleanLine(args.query, MAX_SEARCH_QUERY_LENGTH);
       searchRecency = readRecency(args.recency);
+    } else if (item.type === "function_call" && item.name === READ_PAGE_TOOL && !readRequest) {
+      const targetUrl = safeHttpUrl(parseArguments(item.arguments).url);
+      if (targetUrl) {
+        readRequest = targetUrl;
+        searched = true;
+      }
     }
   };
 
@@ -379,6 +392,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get searchRecency() {
       return searchRecency;
+    },
+    get readRequest() {
+      return readRequest;
     }
   };
 }

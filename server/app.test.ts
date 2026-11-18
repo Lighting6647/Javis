@@ -33,16 +33,16 @@ describe("ขนาดเนื้อหาของคำขอ", () => {
       body: JSON.stringify({ messages: [], padding: "x".repeat(kilobytes * 1024) })
     });
 
-  it("/api/chat รับเนื้อหาขนาดเท่าบันทึกการประชุมยาว ๆ ได้ (ไม่ถูกตัดเพราะขนาด)", async () => {
-    const response = await post("/api/chat", 300);
+  it("/api/chat รับเนื้อหาขนาดเท่าบันทึกการประชุมยาว ๆ และภาพหน้าจอที่บีบอัดแล้วได้ (ไม่ถูกตัดเพราะขนาด)", async () => {
+    const response = await post("/api/chat", 1200);
 
     expect(response.status).not.toBe(413);
     // ผ่านด่านขนาดแล้วจึงถูกปฏิเสธด้วยเหตุอื่น: ยังไม่เข้าสู่ระบบ ยังไม่ตั้งกุญแจ หรือเนื้อหาผิดรูป
     expect([400, 401, 503]).toContain(response.status);
   });
 
-  it("/api/chat ยังมีเพดาน: เนื้อหาที่ใหญ่เกินบันทึกการประชุมที่ยาวที่สุดถูกปฏิเสธ", async () => {
-    expect((await post("/api/chat", 700)).status).toBe(413);
+  it("/api/chat ยังมีเพดาน: เนื้อหาที่ใหญ่เกินเพดานสูงสุด (2MB) ถูกปฏิเสธ", async () => {
+    expect((await post("/api/chat", 2200)).status).toBe(413);
   });
 
   it("เส้นทางอื่นยังรับได้เท่าเดิม: เนื้อหา 300 กิโลไบต์ถูกปฏิเสธ", async () => {

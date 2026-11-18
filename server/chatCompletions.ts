@@ -10,12 +10,19 @@ function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export interface ImageAttachment {
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+
 export interface ChatCompletionsRequestOptions {
   model: string;
   /** คำสั่งระบบ */
   instructions: string;
   /** ข้อความในบทสนทนา รูปแบบ { role, content } */
   messages: ReadonlyArray<{ role: string; content: string }>;
+  /** ภาพหน้าจอที่แนบมากับข้อความล่าสุดของผู้ใช้ (ถ้ามี) */
+  image?: ImageAttachment;
   /** เครื่องมือในรูปแบบของ Responses API รายการที่ไม่ใช่ฟังก์ชัน (เช่น ค้นเว็บ) จะถูกข้าม */
   tools: readonly unknown[];
   maxTokens: number;
@@ -79,12 +86,26 @@ export function toAlternatingTurns(messages: ReadonlyArray<{ role: string; conte
 /** สร้างเนื้อหาคำขอแบบ Chat Completions ที่สตรีมคำตอบ */
 export function toChatCompletionsRequest(options: ChatCompletionsRequestOptions): Json {
   const tools = toChatTools(options.tools);
+  const turns = toAlternatingTurns(options.messages);
+  const lastUserIndex = options.image ? turns.map((turn) => turn.role).lastIndexOf("user") : -1;
+  const formattedTurns = turns.map((turn, index) => {
+    if (options.image && index === lastUserIndex) {
+      return {
+        role: turn.role,
+        content: [
+          { type: "text", text: turn.content },
+          { type: "image_url", image_url: { url: `data:${options.image.mimeType};base64,${options.image.data}` } }
+        ]
+      };
+    }
+    return turn;
+  });
 
   return {
     model: options.model,
     stream: true,
     max_tokens: options.maxTokens,
-    messages: [{ role: "system", content: options.instructions }, ...toAlternatingTurns(options.messages)],
+    messages: [{ role: "system", content: options.instructions }, ...formattedTurns],
     ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
   };

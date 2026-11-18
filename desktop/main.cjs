@@ -1,7 +1,7 @@
 // แอปเดสก์ท็อปของ Javis: หน้าต่างของตัวเอง + เบราว์เซอร์ในตัวสำหรับเปิดเว็บและกรอกฟอร์มตามสั่ง
 // ตัวแอปเป็นเพียงเปลือก หน้าจอและ AI ทั้งหมดมาจากเซิร์ฟเวอร์ Javis ที่ JAVIS_URL
 // จึงไม่มี API key หรือความลับใดอยู่ในแอปนี้
-const { app, BrowserWindow, session, shell } = require("electron");
+const { app, BrowserWindow, desktopCapturer, session, shell } = require("electron");
 const path = require("node:path");
 
 const DEFAULT_SERVER_URL = "http://localhost:8787";
@@ -125,6 +125,14 @@ function configurePermissions() {
     callback(allowApp(permission, details.requestingUrl || contents.getURL()));
   });
   appSession.setPermissionCheckHandler((_contents, permission, origin) => allowApp(permission, origin));
+  if (typeof appSession.setDisplayMediaRequestHandler === "function") {
+    appSession.setDisplayMediaRequestHandler((_request, callback) => {
+      void desktopCapturer
+        .getSources({ types: ["screen"] })
+        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+        .catch(() => callback({}));
+    });
+  }
 
   // หน้าเว็บภายนอกขอสิทธิ์ใดไม่ได้เลย (กล้อง ไมโครโฟน ตำแหน่ง การแจ้งเตือน ฯลฯ)
   const browserSession = session.fromPartition(BROWSER_PARTITION);

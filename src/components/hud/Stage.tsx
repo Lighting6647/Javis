@@ -19,6 +19,8 @@ interface StageProps {
   offline: boolean;
   /** ซ่อนค่าสถิติบนแผงตัวเลขเพื่อความเป็นส่วนตัว */
   metricsHidden?: boolean;
+  /** ชื่อแพลตฟอร์มที่กำลังทำงาน เช่น เว็บ แอปเดสก์ท็อป */
+  platformLabel?: string;
 }
 
 /**
@@ -26,7 +28,15 @@ interface StageProps {
  * อยู่บนจอตลอด (ด้านซ้ายบนจอกว้าง ด้านบนบนจอแคบ)
  * แสดงเฉพาะในธีมโฮโลแกรม ธีมเรียบซ่อนไว้ด้วย CSS
  */
-export function Stage({ phase, statusLabel, readouts, compact, offline, metricsHidden = false }: StageProps) {
+export function Stage({
+  phase,
+  statusLabel,
+  readouts,
+  compact,
+  offline,
+  metricsHidden = false,
+  platformLabel
+}: StageProps) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
   const drawing = phase === "listening" && theme === "holo" && micLevels;
@@ -39,7 +49,7 @@ export function Stage({ phase, statusLabel, readouts, compact, offline, metricsH
     >
       <div className="stage-identity" aria-hidden>
         <span className="stage-id-code">JV-CORE-01</span>
-        <span className="stage-id-sub">System overview</span>
+        <span className="stage-id-sub">{platformLabel ? `System · ${platformLabel}` : "System overview"}</span>
       </div>
 
       <div className={`core hero ${phase}`} aria-hidden>

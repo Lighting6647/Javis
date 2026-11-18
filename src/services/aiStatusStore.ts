@@ -186,10 +186,42 @@ export function createAiStatusStore(load: LoadAiStatus, now: () => number = Date
   };
 }
 
+/** อ่านคำตอบของ /api/status ว่าเซิร์ฟเวอร์เปิดเสียงพูดของ Gemini ให้ใช้ไหม (null = ไม่รู้หรือรุ่นเก่า) */
+export function parseCloudVoiceAvailable(payload: unknown): boolean | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const { voice } = payload as { voice?: unknown };
+  if (typeof voice !== "object" || voice === null) return null;
+  const { cloud } = voice as { cloud?: unknown };
+  return typeof cloud === "boolean" ? cloud : null;
+}
+
+let cloudVoiceAvailable: boolean | null = null;
+const cloudVoiceListeners = new Set<() => void>();
+
+function setCloudVoiceAvailable(next: boolean | null): void {
+  if (next === null || cloudVoiceAvailable === next) return;
+  cloudVoiceAvailable = next;
+  cloudVoiceListeners.forEach((listener) => listener());
+}
+
+/** สถานะความพร้อมของเสียงพูด Gemini ตามที่เซิร์ฟเวอร์รายงานใน /api/status */
+export const cloudVoiceStore = {
+  get: (): boolean | null => cloudVoiceAvailable,
+  subscribe: (listener: () => void): (() => void) => {
+    cloudVoiceListeners.add(listener);
+    return () => {
+      cloudVoiceListeners.delete(listener);
+    };
+  },
+  set: setCloudVoiceAvailable
+};
+
 async function loadAiStatus(): Promise<AiStatus | null> {
   const response = await fetchWithTimeout("/api/status", { timeoutMs: STATUS_TIMEOUT_MS });
   if (!response.ok) return null;
-  return parseAiStatus(await response.json());
+  const payload: unknown = await response.json();
+  setCloudVoiceAvailable(parseCloudVoiceAvailable(payload));
+  return parseAiStatus(payload);
 }
 
 export const aiStatusStore = createAiStatusStore(loadAiStatus);

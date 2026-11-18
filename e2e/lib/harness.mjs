@@ -62,6 +62,7 @@ export async function startApp({ port, env = {} }) {
       PORT: String(port),
       GEMINI_API_KEY: "test-gemini-key",
       GEMINI_BASE_URL: `http://127.0.0.1:${providerPort}`,
+      GEMINI_VOICE_ENABLED: "false",
       WEB_SEARCH_ENABLED: "true",
       AI_RECHECK_SECONDS: "5",
       ...env

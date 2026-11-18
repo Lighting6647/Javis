@@ -5,7 +5,7 @@
  * รูปแบบคำขอและเหตุการณ์ของสตรีมอ้างอิงจากเอกสารของ Google และนิยามชนิดข้อมูลใน SDK ทางการ (@google/genai 3.2.0)
  * ไฟล์นี้ไม่เรียกเครือข่าย จึงทดสอบได้ทั้งหมดด้วยข้อมูลตัวอย่าง
  */
-import { toAlternatingTurns, toChatTools } from "./chatCompletions.js";
+import { type ImageAttachment, toAlternatingTurns, toChatTools } from "./chatCompletions.js";
 
 type Json = Record<string, unknown>;
 
@@ -72,6 +72,8 @@ export interface GeminiInteractionRequestOptions {
   instructions: string;
   /** ข้อความในบทสนทนา รูปแบบ { role, content } */
   messages: ReadonlyArray<{ role: string; content: string }>;
+  /** ภาพหน้าจอที่แนบมากับข้อความล่าสุดของผู้ใช้ (ถ้ามี) */
+  image?: ImageAttachment;
   /** เครื่องมือในรูปแบบของ Responses API รวมถึง { type: "web_search" } ถ้าให้ค้นเว็บ */
   tools: readonly unknown[];
   maxTokens: number;
@@ -87,12 +89,20 @@ export function toGeminiInteractionRequest(options: GeminiInteractionRequestOpti
   const search = options.tools.some((tool) => isObject(tool) && tool.type === "web_search");
   const tools = [...(search ? [{ type: "google_search" }] : []), ...functions];
   const thinkingLevel = geminiThinkingLevel(options.model, options.thinkingLevel);
+  const turns = toAlternatingTurns(options.messages);
+  const lastUserIndex = options.image ? turns.map((turn) => turn.role).lastIndexOf("user") : -1;
 
   return {
     model: options.model,
-    input: toAlternatingTurns(options.messages).map(({ role, content }) => ({
+    input: turns.map(({ role, content }, index) => ({
       type: role === "assistant" ? "model_output" : "user_input",
-      content: [{ type: "text", text: content }]
+      content:
+        options.image && index === lastUserIndex
+          ? [
+              { type: "text", text: content },
+              { type: "image", data: options.image.data, mime_type: options.image.mimeType }
+            ]
+          : [{ type: "text", text: content }]
     })),
     system_instruction: options.instructions,
     ...(tools.length > 0 ? { tools } : {}),

@@ -52,6 +52,14 @@ describe("chatRequestSchema", () => {
     expect(chatRequestSchema.safeParse({ messages, frames: "yes" }).success).toBe(false);
   });
 
+  it("รับภาพหน้าจอที่ผ่านเกณฑ์ และปฏิเสธภาพที่ชนิดหรือข้อมูลไม่ถูกต้อง", () => {
+    const messages = [user("ช่วยอ่านหน้าจอนี้")];
+    const image = { mimeType: "image/jpeg" as const, data: "QUJDRA==" };
+    expect(chatRequestSchema.safeParse({ messages, image }).data?.image).toEqual(image);
+    expect(chatRequestSchema.safeParse({ messages, image: { mimeType: "image/gif", data: "QUJDRA==" } }).success).toBe(false);
+    expect(chatRequestSchema.safeParse({ messages, image: { mimeType: "image/jpeg", data: "not base64!" } }).success).toBe(false);
+  });
+
   describe("ข้อมูลหน้าเว็บจากแอปเดสก์ท็อป", () => {
     const messages = [user("กรอกชื่อ สมชาย ให้หน่อย")];
     const page = {

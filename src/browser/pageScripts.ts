@@ -15,6 +15,7 @@ interface RawContext {
   url: string;
   title: string;
   fields: RawField[];
+  content?: string;
 }
 
 interface RawFillResult {
@@ -86,7 +87,45 @@ function extractFormFields(): RawContext {
     fields.push(field);
   }
 
-  return { url: location.href, title: clean(document.title).slice(0, 120), fields };
+  const readPageText = (): string => {
+    const MAX_CHARS = 4000;
+    const root = document.querySelector("main, article, [role='main']") ?? document.body;
+    if (!root) return "";
+    const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "TEMPLATE", "TEXTAREA", "SELECT", "INPUT"]);
+    const parts: string[] = [];
+    let length = 0;
+
+    const walk = (node: Node) => {
+      if (length >= MAX_CHARS) return;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const chunk = clean(node.textContent);
+        if (!chunk) return;
+        parts.push(chunk);
+        length += chunk.length + 1;
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const el = node as Element;
+      if (SKIP_TAGS.has(el.tagName) || el.getAttribute("aria-hidden") === "true") return;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") return;
+      for (const child of Array.from(el.childNodes)) {
+        walk(child);
+        if (length >= MAX_CHARS) break;
+      }
+    };
+
+    walk(root);
+    return parts.join(" ").slice(0, MAX_CHARS).trim();
+  };
+
+  const content = readPageText();
+  return {
+    url: location.href,
+    title: clean(document.title).slice(0, 120),
+    fields,
+    ...(content ? { content } : {})
+  };
 }
 
 /** กรอกค่าลงช่องที่ติดรหัสไว้ ไม่คลิกปุ่มและไม่ส่งฟอร์ม */

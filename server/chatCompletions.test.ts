@@ -152,6 +152,29 @@ describe("toAlternatingTurns", () => {
     });
     expect(request.messages).toEqual([{ role: "system", content: "ระบบ" }, user("หนึ่ง\n\nสอง")]);
   });
+
+  it("แนบภาพหน้าจอเข้ากับข้อความล่าสุดของผู้ใช้ในรูปแบบ image_url", () => {
+    const request = toChatCompletionsRequest({
+      model: "m",
+      instructions: "ระบบ",
+      messages: [user("ก่อนหน้า"), assistant("ครับ"), user("ช่วยอ่านหน้าจอนี้หน่อย")],
+      image: { mimeType: "image/jpeg", data: "QUJDRA==" },
+      tools: [],
+      maxTokens: 100
+    });
+    expect(request.messages).toEqual([
+      { role: "system", content: "ระบบ" },
+      user("ก่อนหน้า"),
+      assistant("ครับ"),
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "ช่วยอ่านหน้าจอนี้หน่อย" },
+          { type: "image_url", image_url: { url: "data:image/jpeg;base64,QUJDRA==" } }
+        ]
+      }
+    ]);
+  });
 });
 
 describe("createChatCompletionsTranslator", () => {

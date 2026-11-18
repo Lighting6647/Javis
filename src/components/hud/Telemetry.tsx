@@ -7,7 +7,8 @@ const ACCENT_BY_CODE: Record<string, string> = {
   LAT: "cyan",
   MEM: "sky",
   LOG: "amber",
-  ENV: "blue"
+  ENV: "blue",
+  TTS: "blue"
 };
 
 interface TelemetryProps {

@@ -9,11 +9,13 @@ export interface FormField {
   options?: string[];
 }
 
-/** ข้อมูลของหน้าเว็บที่ส่งให้ AI เพื่อให้รู้ว่ามีช่องอะไรให้กรอก */
+/** ข้อมูลของหน้าเว็บที่ส่งให้ AI เพื่อให้รู้ว่ามีช่องอะไรให้กรอกหรือเนื้อหาอะไรบนหน้า */
 export interface PageContext {
   url: string;
   title: string;
   fields: FormField[];
+  /** ข้อความที่อ่านได้จากหน้าเว็บที่เปิดอยู่ (เมื่ออ่านจากเบราว์เซอร์ในตัว) */
+  content?: string;
 }
 
 /** ค่าที่จะกรอกลงช่องหนึ่งช่อง พร้อมชื่อช่องสำหรับแสดงให้ผู้ใช้ตรวจ */
@@ -46,3 +48,4 @@ export const FIELD_ID_PATTERN = /^f\d{1,3}$/;
 export const MAX_FORM_FIELDS = 40;
 export const MAX_FIELD_LABEL_LENGTH = 80;
 export const MAX_FILL_VALUE_LENGTH = 500;
+export const MAX_PAGE_CONTENT_LENGTH = 4000;

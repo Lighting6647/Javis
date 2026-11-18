@@ -1742,5 +1742,27 @@ describe("ConversationController", () => {
       expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
       expect(recognizer.listens).toHaveLength(0);
     });
+
+    it("แนบภาพที่ค้างไว้ผ่าน pendingImageProvider ให้คำถามถัดไปอัตโนมัติเพียงครั้งเดียว", async () => {
+      const { chat, controller } = setup();
+      let pending: { mimeType: "image/jpeg"; data: string } | null = { mimeType: "image/jpeg", data: "QUJDRA==" };
+      controller.setPendingImageProvider(() => {
+        const current = pending;
+        pending = null;
+        return current;
+      });
+
+      controller.sendText("อธิบายภาพนี้หน่อย");
+      await settle();
+      expect(chat.calls[0]?.options.image).toEqual({ mimeType: "image/jpeg", data: "QUJDRA==" });
+      chat.reply("นี่คือแดชบอร์ดครับ");
+      await settle();
+
+      controller.sendText("ขอบคุณ");
+      await settle();
+      expect(chat.calls[1]?.options.image).toBeUndefined();
+      chat.reply("ยินดีครับ");
+      await settle();
+    });
   });
 });
