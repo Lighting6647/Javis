@@ -79,7 +79,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   rate: DEFAULT_SPEECH_RATE,
   cloud: true,
   cloudVoice: null,
-  persona: "assistant"
+  persona: "genz-girl"
 };
 
 /** ตัวพูด: อ่านข้อความออกเสียงด้วยเสียงของอุปกรณ์ */

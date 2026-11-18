@@ -20,35 +20,35 @@ export interface VoicePersonaOption {
  */
 export const VOICE_PERSONAS: readonly VoicePersonaOption[] = [
   {
-    id: "assistant",
-    label: "ผู้ช่วยสุภาพ (Javis ปกติ)",
-    hint: "คมชัด สุขุม เป็นธรรมชาติ เหมาะกับการทำงานทั่วไป",
-    recommendedCloudVoice: null,
-    devicePitch: 1,
-    sampleText: "สวัสดีครับ ผมคือ Javis ผู้ช่วยของคุณ วันนี้ให้ช่วยเรื่องอะไรดีครับ"
-  },
-  {
     id: "genz-girl",
-    label: "สาวน้อย Gen Z สดใส",
+    label: "สาวน้อย Gen Z สดใส (เสียงหลัก)",
     hint: "เสียงเด็กสาว Leda + ลีลาสดใส ร่าเริง เป็นกันเอง",
     recommendedCloudVoice: "Leda",
     devicePitch: 1.24,
     sampleText: "ฮายยย~ หวัดดีค่า! วันนี้มีอะไรให้เค้าช่วยเช็กหรือสรุปให้ บอกมาได้เลยน้า!"
   },
   {
+    id: "assistant",
+    label: "ผู้ช่วยสาวสุภาพ (Javis หญิง)",
+    hint: "เสียงผู้หญิง Kore คมชัด สุภาพ เป็นธรรมชาติ เหมาะกับการทำงานทั่วไป",
+    recommendedCloudVoice: "Kore",
+    devicePitch: 1.12,
+    sampleText: "สวัสดีค่ะ ดิฉันคือ Javis ผู้ช่วยของคุณค่ะ วันนี้ให้ช่วยเรื่องอะไรดีคะ"
+  },
+  {
     id: "upbeat-buddy",
-    label: "สายลุยกระฉับกระเฉง",
-    hint: "เสียง Zephyr + จังหวะคล่องตัว กระตือรือร้น สั่งงานไว",
+    label: "สาวสายลุยกระฉับกระเฉง",
+    hint: "เสียงผู้หญิง Zephyr + จังหวะคล่องตัว กระตือรือร้น สั่งงานไว",
     recommendedCloudVoice: "Zephyr",
-    devicePitch: 1.08,
-    sampleText: "พร้อมลุยแล้วครับ! มีงานด่วนหรือข้อมูลไหนให้ช่วยเช็ก สั่งมาได้เลย!"
+    devicePitch: 1.15,
+    sampleText: "พร้อมลุยแล้วค่ะ! มีงานด่วนหรือข้อมูลไหนให้ช่วยเช็ก สั่งมาได้เลยนะคะ!"
   },
   {
     id: "calm-soft",
-    label: "นุ่มนวลผ่อนคลาย",
-    hint: "เสียง Aoede + น้ำเสียงละมุน ฟังสบาย เหมาะอ่านข่าวหรือบทความยาว ๆ",
+    label: "สาวเสียงนุ่ม ผ่อนคลาย",
+    hint: "เสียงผู้หญิง Aoede + น้ำเสียงละมุน ฟังสบาย เหมาะอ่านข่าวหรือบทความยาว ๆ",
     recommendedCloudVoice: "Aoede",
-    devicePitch: 0.94,
+    devicePitch: 1.05,
     sampleText: "สวัสดีค่ะ ผ่อนคลายได้เลยนะคะ เดี๋ยวช่วยอ่านและสรุปเรื่องสำคัญให้ฟังแบบสบาย ๆ ค่ะ"
   }
 ];
@@ -68,36 +68,36 @@ export function isVoicePersonaId(value: string): value is VoicePersonaId {
  * จัดกลุ่มเสียงยอดนิยมพร้อมคำอธิบายภาษาไทยไว้ด้านบน เพื่อให้ผู้ใช้เลือกทดลองฟังได้ง่าย
  */
 export const GEMINI_TTS_VOICES: readonly GeminiVoiceOption[] = [
-  { id: "Iapetus", label: "Iapetus (ค่าเริ่มต้น)", hint: "คมชัด เป็นธรรมชาติ อ่านภาษาไทยได้ชัดเจน" },
-  { id: "Zephyr", label: "Zephyr", hint: "สดใส กระฉับกระเฉง" },
-  { id: "Aoede", label: "Aoede", hint: "นุ่มนวล อบอุ่น" },
-  { id: "Kore", label: "Kore", hint: "มั่นคง ชัดถ้อยชัดคำ" },
-  { id: "Puck", label: "Puck", hint: "ร่าเริง เป็นกันเอง" },
-  { id: "Charon", label: "Charon", hint: "ทุ้ม สุขุม" },
-  { id: "Fenrir", label: "Fenrir", hint: "กระชับ หนักแน่น" },
-  { id: "Leda", label: "Leda", hint: "อ่อนโยน ฟังสบาย" },
-  { id: "Orus", label: "Orus" },
-  { id: "Callirrhoe", label: "Callirrhoe" },
-  { id: "Autonoe", label: "Autonoe" },
-  { id: "Enceladus", label: "Enceladus" },
-  { id: "Umbriel", label: "Umbriel" },
-  { id: "Algieba", label: "Algieba" },
-  { id: "Despina", label: "Despina" },
-  { id: "Erinome", label: "Erinome" },
-  { id: "Algenib", label: "Algenib" },
-  { id: "Rasalgethi", label: "Rasalgethi" },
-  { id: "Laomedeia", label: "Laomedeia" },
-  { id: "Achernar", label: "Achernar" },
-  { id: "Alnilam", label: "Alnilam" },
-  { id: "Schedar", label: "Schedar" },
-  { id: "Gacrux", label: "Gacrux" },
-  { id: "Pulcherrima", label: "Pulcherrima" },
-  { id: "Achird", label: "Achird" },
-  { id: "Zubenelgenubi", label: "Zubenelgenubi" },
-  { id: "Vindemiatrix", label: "Vindemiatrix" },
-  { id: "Sadachbia", label: "Sadachbia" },
-  { id: "Sadaltager", label: "Sadaltager" },
-  { id: "Sulafat", label: "Sulafat" }
+  { id: "Leda", label: "Leda (หญิง · วัยรุ่นสดใส · เสียงหลัก)", hint: "เสียงเด็กสาว Gen Z ร่าเริง เป็นกันเอง (เสียงหลักของระบบ)" },
+  { id: "Kore", label: "Kore (หญิง · คมชัด สุภาพ)", hint: "เสียงผู้หญิงคมชัด ชัดถ้อยชัดคำ อ่านภาษาไทยเป็นธรรมชาติ" },
+  { id: "Aoede", label: "Aoede (หญิง · นุ่มนวล อบอุ่น)", hint: "เสียงผู้หญิงละมุน ฟังสบาย อ่อนโยน" },
+  { id: "Zephyr", label: "Zephyr (หญิง · สดใส กระฉับกระเฉง)", hint: "เสียงผู้หญิงสว่าง กระตือรือร้น คล่องตัว" },
+  { id: "Sulafat", label: "Sulafat (หญิง · อบอุ่น)", hint: "เสียงผู้หญิงโทนอบอุ่น น่าฟัง" },
+  { id: "Achernar", label: "Achernar (หญิง · นุ่มละมุน)", hint: "เสียงผู้หญิงนุ่มนวล เบาสบาย" },
+  { id: "Despina", label: "Despina (หญิง · ราบรื่น)", hint: "เสียงผู้หญิงลื่นไหล ชวนฟัง" },
+  { id: "Callirrhoe", label: "Callirrhoe (หญิง · สบาย ๆ)", hint: "เสียงผู้หญิงเป็นกันเอง สบาย ๆ" },
+  { id: "Autonoe", label: "Autonoe (หญิง · สว่าง)", hint: "เสียงผู้หญิงสดใส ชัดเจน" },
+  { id: "Erinome", label: "Erinome (หญิง · ชัดเจน)", hint: "เสียงผู้หญิงใส ชัดถ้อยชัดคำ" },
+  { id: "Laomedeia", label: "Laomedeia (หญิง · ร่าเริง)", hint: "เสียงผู้หญิงกระตือรือร้น มีชีวิตชีวา" },
+  { id: "Pulcherrima", label: "Pulcherrima (หญิง · มีพลัง)", hint: "เสียงผู้หญิงชัดเจน ฉะฉาน" },
+  { id: "Vindemiatrix", label: "Vindemiatrix (หญิง · อ่อนโยน)", hint: "เสียงผู้หญิงสุภาพ อ่อนโยน" },
+  { id: "Gacrux", label: "Gacrux (หญิง · สุขุม)", hint: "เสียงผู้หญิงมีวุฒิภาวะ น่าเชื่อถือ" },
+  { id: "Iapetus", label: "Iapetus (ชาย)", hint: "เสียงผู้ชายคมชัด สุภาพ" },
+  { id: "Puck", label: "Puck (ชาย)", hint: "เสียงผู้ชายร่าเริง เป็นกันเอง" },
+  { id: "Charon", label: "Charon (ชาย)", hint: "เสียงผู้ชายทุ้ม สุขุม" },
+  { id: "Fenrir", label: "Fenrir (ชาย)", hint: "เสียงผู้ชายกระชับ หนักแน่น" },
+  { id: "Orus", label: "Orus (ชาย)" },
+  { id: "Enceladus", label: "Enceladus (ชาย)" },
+  { id: "Umbriel", label: "Umbriel (ชาย)" },
+  { id: "Algieba", label: "Algieba (ชาย)" },
+  { id: "Algenib", label: "Algenib (ชาย)" },
+  { id: "Rasalgethi", label: "Rasalgethi (ชาย)" },
+  { id: "Alnilam", label: "Alnilam (ชาย)" },
+  { id: "Schedar", label: "Schedar (ชาย)" },
+  { id: "Achird", label: "Achird (ชาย)" },
+  { id: "Zubenelgenubi", label: "Zubenelgenubi (ชาย)" },
+  { id: "Sadachbia", label: "Sadachbia (ชาย)" },
+  { id: "Sadaltager", label: "Sadaltager (ชาย)" }
 ];
 
 const VALID_GEMINI_VOICE_IDS = new Set(GEMINI_TTS_VOICES.map((voice) => voice.id));

@@ -16,11 +16,12 @@ import { readUpstreamErrorCodes, sanitizeUpstreamMessage } from "./upstreamError
 export const MAX_SPEECH_TEXT_LENGTH = 400;
 /** โมเดลสร้างเสียงหลักและโมเดลสำรองที่พูดภาษาไทยได้ */
 export const DEFAULT_TTS_MODEL = "gemini-3.8-flash-tts";
-export const DEFAULT_TTS_FALLBACK_MODELS = ["gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"] as const;
-/** เสียงที่ Google บรรยายว่า "ชัด" */
-export const DEFAULT_TTS_VOICE = "Iapetus";
-/** ลีลาการพูดที่ส่งไปกับทุกข้อความ */
-const DEFAULT_TTS_STYLE = "Speak in Thai, clearly and calmly, like a courteous personal assistant, at a natural conversational pace.";
+export const DEFAULT_TTS_FALLBACK_MODELS = ["gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"] as const;
+/** เสียงหลักเริ่มต้นของระบบ: Leda (สาวน้อย Gen Z สดใส) */
+export const DEFAULT_TTS_VOICE = "Leda";
+/** ลีลาการพูดเริ่มต้นที่ส่งไปกับทุกข้อความ */
+const DEFAULT_TTS_STYLE =
+  "Speak in Thai as a cheerful, bright young Thai Gen Z woman, energetic, playful, friendly, and natural.";
 
 /** เสียงสำเร็จรูปทั้งหมดที่ Gemini มีให้เลือก */
 export const TTS_VOICES = [
@@ -78,20 +79,25 @@ export const TTS_PERSONAS = ["assistant", "genz-girl", "upbeat-buddy", "calm-sof
 export type TtsPersonaId = (typeof TTS_PERSONAS)[number];
 
 const TTS_PERSONA_CONFIG: Record<TtsPersonaId, { defaultVoice?: (typeof TTS_VOICES)[number]; style?: string; openAiVoice: string }> = {
-  assistant: { openAiVoice: "onyx" },
+  assistant: {
+    defaultVoice: "Kore",
+    style:
+      "Speak in Thai as a polite, warm, natural female personal assistant with a clear feminine voice, at a natural conversational pace.",
+    openAiVoice: "nova"
+  },
   "genz-girl": {
     defaultVoice: "Leda",
-    style: "Speak in Thai like a cheerful, bright Thai Gen Z teenage girl, energetic, playful, friendly, and natural.",
+    style: DEFAULT_TTS_STYLE,
     openAiVoice: "nova"
   },
   "upbeat-buddy": {
     defaultVoice: "Zephyr",
-    style: "Speak in Thai in a lively, upbeat, crisp, enthusiastic companion style.",
+    style: "Speak in Thai as a lively, upbeat, crisp, enthusiastic female companion.",
     openAiVoice: "alloy"
   },
   "calm-soft": {
     defaultVoice: "Aoede",
-    style: "Speak in Thai in a soft, gentle, warm, relaxing storytelling tone.",
+    style: "Speak in Thai as a soft, gentle, warm, relaxing female narrator.",
     openAiVoice: "shimmer"
   }
 };
@@ -172,7 +178,7 @@ export function resolveCloudVoice(env: Env, ai: AiProvider, warn: (message: stri
             apiKey: openAiKey,
             baseUrl: (env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
             model: "gpt-4o-mini-tts",
-            voice: "onyx"
+            voice: "nova"
           }
         }
       : {}),
@@ -192,18 +198,22 @@ export function buildSpeechRequest(
   modelOverride?: string,
   persona?: TtsPersonaId
 ): Json {
+  const model = modelOverride ?? voice.model;
   const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
   const resolvedStyle = preset?.style ?? voice.style;
   const resolvedVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
+  const isLegacyPreview = model.includes("3.1-");
   return {
-    model: modelOverride ?? voice.model,
-    input: [
-      {
-        type: "user_input",
-        // ข้อความถูกอ่านตามตัวอักษร ส่วนลีลาการพูดส่งแยกเป็นคำกำกับ ไม่ปนในข้อความ
-        content: [{ type: "text", text, annotations: [{ type: "speech_metadata", style: resolvedStyle }] }]
-      }
-    ],
+    model,
+    input: isLegacyPreview
+      ? `${resolvedStyle}: ${text}`
+      : [
+          {
+            type: "user_input",
+            // ข้อความถูกอ่านตามตัวอักษร ส่วนลีลาการพูดส่งแยกเป็นคำกำกับ ไม่ปนในข้อความ
+            content: [{ type: "text", text, annotations: [{ type: "speech_metadata", style: resolvedStyle }] }]
+          }
+        ],
     response_format: { type: "audio" },
     generation_config: { speech_config: [{ voice: resolvedVoice }] },
     // ไม่ให้ต้นทางเก็บข้อความของผู้ใช้ไว้
@@ -375,11 +385,11 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
         }
         if (upstream.status === 401 || upstream.status === 403 || upstream.status === 404) {
           pauses.set(candidate, { code: "rejected", until: now() + REJECTED_PAUSE_MS });
-          lastErrorKind = "rejected";
+          if (lastErrorKind !== "quota") lastErrorKind = "rejected";
           continue;
         }
-        lastErrorKind = "failed";
-        break;
+        if (lastErrorKind !== "quota") lastErrorKind = "failed";
+        continue;
       }
 
       const audio = readSpeechAudio(payload);
@@ -387,10 +397,14 @@ export function createSpeechHandler(deps: SpeechHandlerDeps): RequestHandler {
         console.error("Speech upstream returned no audio", candidate);
         const steps = isObject(payload) && Array.isArray(payload.steps) ? payload.steps.map((step) => (isObject(step) ? String(step.type) : "?")) : [];
         lastDetail = diagnosing ? { upstream: { httpStatus: upstream.status, codes: steps, message: "no audio in response" } } : {};
-        lastErrorKind = "failed";
+        if (lastErrorKind !== "quota") lastErrorKind = "failed";
         continue;
       }
 
+      const preset = persona ? TTS_PERSONA_CONFIG[persona] : undefined;
+      const effectiveVoice = chosenVoice ?? preset?.defaultVoice ?? voice.voice;
+      response.setHeader("X-Javis-Speech-Model", candidate);
+      response.setHeader("X-Javis-Speech-Voice", effectiveVoice);
       response.status(200).type("audio/wav").send(audio);
       return;
     }

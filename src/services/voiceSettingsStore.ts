@@ -7,6 +7,7 @@ import {
 } from "../speech/types";
 
 const STORAGE_KEY = "javis.voiceSettings";
+const STORAGE_VERSION = 2;
 
 /** แปลงค่าที่อ่านจากเครื่อง (ซึ่งอาจเสียหายหรือมาจากรุ่นเก่า) ให้เป็นการตั้งค่าที่ใช้ได้เสมอ */
 export function sanitizeVoiceSettings(value: unknown): VoiceSettings {
@@ -29,7 +30,22 @@ export function sanitizeVoiceSettings(value: unknown): VoiceSettings {
 function load(): VoiceSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? sanitizeVoiceSettings(JSON.parse(raw)) : DEFAULT_VOICE_SETTINGS;
+    if (!raw) return DEFAULT_VOICE_SETTINGS;
+    const parsed: unknown = JSON.parse(raw);
+    const sanitized = sanitizeVoiceSettings(parsed);
+    // อัปเกรดค่าเริ่มต้นรุ่นเก่าที่เป็นเสียงผู้ช่วยชาย/ปกติ ให้สลับเป็นเสียงหลัก "สาวน้อย Gen Z สดใส (Leda)" โดยอัตโนมัติ
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { version?: unknown }).version !== STORAGE_VERSION &&
+      sanitized.persona === "assistant" &&
+      (!sanitized.cloudVoice || sanitized.cloudVoice === "Iapetus" || sanitized.cloudVoice === "Kore")
+    ) {
+      const migrated: VoiceSettings = { ...sanitized, persona: "genz-girl", cloudVoice: null };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...migrated, version: STORAGE_VERSION }));
+      return migrated;
+    }
+    return sanitized;
   } catch {
     return DEFAULT_VOICE_SETTINGS;
   }
@@ -44,7 +60,7 @@ export const voiceSettingsStore = {
   update: (patch: Partial<VoiceSettings>): void => {
     current = sanitizeVoiceSettings({ ...current, ...patch });
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, version: STORAGE_VERSION }));
     } catch {
       // เก็บลงเครื่องไม่ได้: การตั้งค่ายังมีผลจนกว่าจะปิดหน้า
     }

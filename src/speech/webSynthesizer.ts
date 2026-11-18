@@ -19,6 +19,12 @@ function isThai(voice: SpeechSynthesisVoice): boolean {
 
 function scoreVoice(voice: SpeechSynthesisVoice): number {
   let score = 0;
+  // ให้ความสำคัญเสียงผู้หญิงภาษาไทยเป็นค่าเริ่มต้นเมื่อระบบมีเสียงให้เลือกหลายเสียง
+  if (/premwadee|achara|kanya|narisa|google\s*ภาษาไทย|google\s*thai|female|woman|girl/i.test(voice.name)) {
+    score += 4;
+  } else if (/niwat|pattara|\bmale\b/i.test(voice.name)) {
+    score -= 2;
+  }
   if (/natural|premium|enhanced|siri/i.test(voice.name)) score += 2;
   if (voice.default) score += 1;
   return score;

@@ -116,7 +116,7 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
   const canSpeak = voices.length > 0 || cloudActive;
   const selectedCloudVoice =
     settings.cloudVoice && isGeminiTtsVoice(settings.cloudVoice) ? settings.cloudVoice : AUTOMATIC_VOICE;
-  const selectedCloudMeta = GEMINI_TTS_VOICES.find((voice) => voice.id === (selectedCloudVoice || "Iapetus"));
+  const selectedCloudMeta = GEMINI_TTS_VOICES.find((voice) => voice.id === (selectedCloudVoice || "Leda"));
   const badge = cloudStatus ? CLOUD_STATUS_BADGE[cloudStatus.mode] : null;
 
   // เสียงที่เคยเลือกอาจถูกถอนออกจากเครื่องไปแล้ว ให้แสดงเป็นอัตโนมัติ
@@ -136,9 +136,15 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
                   type="radio"
                   name="voice-persona"
                   checked={settings.persona === persona.id}
-                  onChange={() =>
-                    voiceSettingsStore.update({ persona: persona.id, cloudVoice: persona.recommendedCloudVoice })
-                  }
+                  onChange={() => {
+                    const next: VoiceSettings = {
+                      ...settings,
+                      persona: persona.id,
+                      cloudVoice: persona.recommendedCloudVoice
+                    };
+                    voiceSettingsStore.update({ persona: persona.id, cloudVoice: persona.recommendedCloudVoice });
+                    synthesizer.applySettings(next);
+                  }}
                 />
                 <span>
                   {persona.label}
@@ -185,7 +191,7 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
                 value={selectedCloudVoice}
                 onChange={(event) => voiceSettingsStore.update({ cloudVoice: event.target.value || null })}
               >
-                <option value={AUTOMATIC_VOICE}>ค่าเริ่มต้นของเซิร์ฟเวอร์ (Iapetus)</option>
+                <option value={AUTOMATIC_VOICE}>ค่าเริ่มต้นของเซิร์ฟเวอร์ (Leda · สาวน้อย Gen Z สดใส)</option>
                 {GEMINI_TTS_VOICES.map((voice) => (
                   <option key={voice.id} value={voice.id}>
                     {voice.label}
