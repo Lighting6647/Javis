@@ -1,11 +1,40 @@
 import { aiAccount, describeAccountCheck, runAccountCheck } from "./aiAccount.js";
+import type { AiProvider } from "./aiProvider.js";
 import { createClaudeAccountProbe } from "./claudeClient.js";
 import { config } from "./config.js";
 
 let running: Promise<void> | null = null;
 
+function probeProvider(ai: AiProvider) {
+  return runAccountCheck({
+    baseUrl: ai.baseUrl,
+    apiKey: ai.apiKey,
+    chatModel: ai.chatModel,
+    transcribeModel: ai.transcribeModel,
+    creditCheck: ai.creditCheck,
+    // Claude ถูกเรียกผ่าน SDK ของ Anthropic จึงมีตัวตรวจของตัวเอง รายอื่นตรวจด้วย HTTP ตามรูปแบบของรายนั้น
+    ...(ai.apiStyle === "claude"
+      ? ai.apiKey
+        ? { probe: createClaudeAccountProbe({ apiKey: ai.apiKey, baseUrl: ai.baseUrl }) }
+        : {}
+      : { apiStyle: ai.apiStyle })
+  });
+}
+
+function buildSettingsReport(ai: AiProvider) {
+  return {
+    hasApiKey: Boolean(ai.apiKey),
+    chatModel: ai.chatModel,
+    transcribeModel: ai.transcribeModel,
+    keyVariable: ai.keyVariable,
+    chatModelVariable: ai.chatModelVariable,
+    providerLabel: ai.label
+  };
+}
+
 /**
  * ตรวจบัญชี AI แล้วบันทึกผลไว้ให้ /health และ /api/status รายงาน
+ * หากบัญชีหลักใช้งานไม่ได้ (quota/auth/model) และมีผู้ให้บริการสำรองพร้อมใช้ จะสลับอัตโนมัติทันที
  * การเรียกซ้อนกันจะรอผลของรอบที่กำลังทำอยู่ ไม่ส่งคำขอซ้ำ
  * @param announce เขียนผลลง log เสมอ ถ้าเป็น false จะเขียนเฉพาะเมื่อสถานะเปลี่ยน
  */
@@ -13,33 +42,33 @@ export function checkAiAccount(announce: boolean): Promise<void> {
   running ??= (async () => {
     const ai = config.ai;
     const before = aiAccount.snapshot();
-    const result = await runAccountCheck({
-      baseUrl: ai.baseUrl,
-      apiKey: ai.apiKey,
-      chatModel: ai.chatModel,
-      transcribeModel: ai.transcribeModel,
-      creditCheck: ai.creditCheck,
-      // Claude ถูกเรียกผ่าน SDK ของ Anthropic จึงมีตัวตรวจของตัวเอง รายอื่นตรวจด้วย HTTP ตามรูปแบบของรายนั้น
-      ...(ai.apiStyle === "claude"
-        ? ai.apiKey
-          ? { probe: createClaudeAccountProbe({ apiKey: ai.apiKey, baseUrl: ai.baseUrl }) }
-          : {}
-        : { apiStyle: ai.apiStyle })
-    });
+    const result = await probeProvider(ai);
+
+    if ((result.chat === "quota" || result.chat === "auth" || result.chat === "model") && config.fallbackAi.length > 0) {
+      for (let idx = 0; idx < config.fallbackAi.length; idx += 1) {
+        const candidate = config.fallbackAi[idx]!;
+        const candidateResult = await probeProvider(candidate);
+        if (candidateResult.chat === "ok") {
+          config.fallbackAi.splice(idx, 1);
+          config.ai = candidate;
+          aiAccount.apply(candidateResult);
+          console.warn(
+            `ตรวจบัญชี AI: ${ai.label} ใช้งานไม่ได้ (${result.chat}) จึงสลับไปใช้ ${candidate.label} (${candidate.chatModel}) อัตโนมัติ`
+          );
+          for (const { level, message } of describeAccountCheck(candidateResult, buildSettingsReport(candidate))) {
+            console[level](message);
+          }
+          return;
+        }
+      }
+    }
+
     aiAccount.apply(result);
 
     const after = aiAccount.snapshot();
     if (!announce && before.chat === after.chat && before.transcribe === after.transcribe) return;
 
-    const settings = {
-      hasApiKey: Boolean(ai.apiKey),
-      chatModel: ai.chatModel,
-      transcribeModel: ai.transcribeModel,
-      keyVariable: ai.keyVariable,
-      chatModelVariable: ai.chatModelVariable,
-      providerLabel: ai.label
-    };
-    for (const { level, message } of describeAccountCheck(result, settings)) console[level](message);
+    for (const { level, message } of describeAccountCheck(result, buildSettingsReport(ai))) console[level](message);
   })().finally(() => {
     running = null;
   });

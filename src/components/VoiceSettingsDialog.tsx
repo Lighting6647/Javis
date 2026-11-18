@@ -1,6 +1,8 @@
-import { AudioLines, Check, Download, Play, RotateCcw, Sparkles, X } from "lucide-react";
+import { AudioLines, Check, Download, Play, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useCloudVoiceStatus } from "../hooks/useCloudVoiceStatus";
+import { describeDuration, formatMeetingDate } from "../meeting/export";
+import { meetingHistoryStore } from "../meeting/meetingHistory";
 import { aiStatusStore, retiringModelsStore } from "../services/aiStatusStore";
 import { customVoicesStore } from "../services/customVoicesStore";
 import { micLevelStore } from "../services/micLevelStore";
@@ -17,6 +19,7 @@ import {
   type VoiceOption,
   type VoiceSettings
 } from "../speech/types";
+import { MeetingExport } from "./MeetingExport";
 import { MemorySection } from "./MemorySection";
 
 const AUTOMATIC_VOICE = "";
@@ -379,6 +382,54 @@ function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
   );
 }
 
+function MeetingHistorySection() {
+  const history = useSyncExternalStore(meetingHistoryStore.subscribe, meetingHistoryStore.get);
+
+  return (
+    <div className="settings-section">
+      <div className="meeting-history-head">
+        <h3>ประวัติสรุปการประชุมย้อนหลัง ({history.length})</h3>
+        {history.length > 0 && (
+          <button type="button" className="studio-pill-btn" onClick={() => meetingHistoryStore.clear()}>
+            ล้างประวัติ
+          </button>
+        )}
+      </div>
+      {history.length === 0 ? (
+        <p className="settings-note">ยังไม่มีประวัติสรุปการประชุมที่บันทึกไว้ในเครื่อง</p>
+      ) : (
+        <div className="meeting-history-list">
+          {history.map((item) => (
+            <details key={item.id} className="meeting-history-item">
+              <summary>
+                <span className="meeting-history-title">
+                  <strong>{formatMeetingDate(item.startedAt)}</strong>
+                  <small>{describeDuration(item.minutes)}</small>
+                </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`ลบประวัติการประชุมวันที่ ${formatMeetingDate(item.startedAt)}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    meetingHistoryStore.remove(item.id);
+                  }}
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </summary>
+              <div className="meeting-history-body">
+                <p className="meeting-history-summary">{item.summary}</p>
+                <MeetingExport record={item} />
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function VoiceSettingsDialog({
   open,
   onClose,
@@ -425,6 +476,7 @@ export function VoiceSettingsDialog({
         <ThemeSection />
         {open && <VoiceSection synthesizer={synthesizer} settings={settings} onOpenRecorder={onOpenRecorder} />}
         <MemorySection />
+        <MeetingHistorySection />
         {/* แอปเดสก์ท็อปเป็นหน้าต่างของตัวเองอยู่แล้ว ไม่ต้องชวนติดตั้ง */}
         {!desktop && <InstallSection installPrompt={installPrompt} />}
 

@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { resolveAiProvider } from "./aiProvider.js";
+import { resolveAiProvider, resolveFallbackAiProviders } from "./aiProvider.js";
 import { MIN_SESSION_SECRET_LENGTH, parseAccessCodes } from "./auth.js";
 import { resolveCloudVoice } from "./speech.js";
 import { resolveWebSearchProvider } from "./webSearch.js";
@@ -88,6 +88,8 @@ export const config = {
    * เลือกจากกุญแจที่ตั้งไว้ (GEMINI_API_KEY หรือ OPENAI_API_KEY) หรือบังคับด้วย AI_PROVIDER
    */
   ai,
+  /** ผู้ให้บริการ AI สำรองสำหรับสลับอัตโนมัติเมื่อบัญชีหลักหมดเครดิตหรือติดโควตา */
+  fallbackAi: resolveFallbackAiProviders(process.env, ai.name),
   /**
    * บริการค้นเว็บภายนอก (Tavily) สำหรับผู้ให้บริการ AI ที่ค้นเว็บเองไม่ได้ หรือค้นได้เฉพาะแบบเสียเงิน
    * null = ไม่ได้ตั้งกุญแจ TAVILY_API_KEY
@@ -116,4 +118,4 @@ export const config = {
     ...(isProduction ? [] : DEV_ORIGINS),
     ...readExtraOrigins()
   ])
-} as const;
+};

@@ -204,3 +204,26 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
     creditCheck: !isOff(env, "AI_CREDIT_CHECK")
   };
 }
+
+/**
+ * สร้างรายการผู้ให้บริการ AI สำรองที่มีกุญแจ API ตั้งไว้ เพื่อสลับอัตโนมัติเมื่อผู้ให้บริการหลักติดปัญหาเครดิต/โควตา
+ */
+export function resolveFallbackAiProviders(
+  env: Env,
+  primaryName?: AiProviderName,
+  warn: (message: string) => void = () => undefined
+): AiProvider[] {
+  const primary = primaryName ?? chooseProvider(env, warn);
+  const candidates: ReadonlyArray<{ name: AiProviderName; keyVar: string }> = [
+    { name: "gemini", keyVar: "GEMINI_API_KEY" },
+    { name: "claude", keyVar: "ANTHROPIC_API_KEY" },
+    { name: "openai", keyVar: "OPENAI_API_KEY" }
+  ];
+  const fallbacks: AiProvider[] = [];
+  for (const candidate of candidates) {
+    if (candidate.name === primary) continue;
+    if (!read(env, candidate.keyVar)) continue;
+    fallbacks.push(resolveAiProvider({ ...env, AI_PROVIDER: candidate.name }, warn));
+  }
+  return fallbacks;
+}

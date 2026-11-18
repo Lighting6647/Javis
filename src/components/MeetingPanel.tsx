@@ -50,11 +50,13 @@ const MeetingLines = memo(function MeetingLines({
   entries,
   canEditSpeaker,
   speakerPresets,
+  speakerFilter,
   onRelabelSpeaker
 }: {
   entries: readonly MeetingEntry[];
   canEditSpeaker: boolean;
   speakerPresets: readonly string[];
+  speakerFilter?: string | null;
   onRelabelSpeaker?: (index: number, speaker?: string, applyToAll?: boolean) => void;
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -73,6 +75,8 @@ const MeetingLines = memo(function MeetingLines({
   };
 
   return entries.map((entry, index) => {
+    const entrySpeaker = entry.speaker ?? "ไม่ระบุผู้พูด";
+    if (speakerFilter && entrySpeaker !== speakerFilter) return null;
     const showBadge = Boolean(entry.speaker) || (canEditSpeaker && speakerPresets.length > 0);
     const isEditing = canEditSpeaker && editingIndex === index;
 
@@ -160,6 +164,7 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
   const { status, startedAt, entries, partial, summary, notice } = state;
   const speakerState = useSyncExternalStore(speakerProfileStore.subscribe, speakerProfileStore.getState);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [speakerFilter, setSpeakerFilter] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   /** ผู้ใช้อยู่ท้ายรายการ จึงเลื่อนตามคำพูดใหม่ให้ */
   const following = useRef(true);
@@ -187,6 +192,8 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
 
   const hasLabeledSpeakers = entries.some((e) => Boolean(e.speaker));
   const speakerStats = hasLabeledSpeakers ? computeSpeakerStats(formatTranscript(entries)) : [];
+  const activeSpeakerFilter =
+    speakerFilter && speakerStats.some((s) => s.speaker === speakerFilter) ? speakerFilter : null;
 
   return (
     <section className={`meeting ${status}`} aria-label="โหมดสรุปการประชุม">
@@ -201,9 +208,28 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
             <span className="recorder-badge">แยกเสียง ({speakerState.profiles.length}): {speakerState.profiles.map((p) => p.label).join(", ")}</span>
           )}
           {speakerStats.length > 0 && (
-            <span className="meeting-speaker-stats" aria-label="สัดส่วนการพูด">
-              {speakerStats.map((s) => `${s.speaker} ${s.sharePercent}%`).join(" · ")}
-            </span>
+            <div className="meeting-speaker-stats" role="group" aria-label="กรองคำพูดตามผู้พูด">
+              {speakerStats.map((s) => {
+                const active = activeSpeakerFilter === s.speaker;
+                return (
+                  <button
+                    key={s.speaker}
+                    type="button"
+                    className={`meeting-stat-chip${active ? " active" : ""}`}
+                    aria-pressed={active}
+                    onClick={() => setSpeakerFilter((prev) => (prev === s.speaker ? null : s.speaker))}
+                    title="คลิกเพื่อกรองดูเฉพาะคำพูดของผู้พูดคนนี้"
+                  >
+                    {s.speaker} {s.sharePercent}%
+                  </button>
+                );
+              })}
+              {activeSpeakerFilter && (
+                <button type="button" className="meeting-stat-chip reset" onClick={() => setSpeakerFilter(null)}>
+                  ดูทั้งหมด ({entries.length})
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -273,7 +299,7 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
           <div className="meeting-empty">
             <FileText size={28} aria-hidden />
             <strong>{status === "recording" ? "กำลังฟังอยู่ เริ่มประชุมได้เลย" : "ยังไม่ได้จดอะไร"}</strong>
-            <p>{status === "recording" ? "คำพูดที่ได้ยินจะขึ้นที่นี่ทีละช่วง พร้อมเวลาที่พูด" : "กดจดต่อเพื่อให้ Javis ฟังและจดอีกครั้ง"}</p>
+            <p>{status === "recording" ? "คำพูดที่ได้ยินจะขึ้นที่นี่ทีละช่วง พร้อมเวลาที่พูด" : "กดจดต่อเพื่อให้เดลลูน่าฟังและจดอีกครั้ง"}</p>
           </div>
         ) : (
           <ol className="meeting-lines" aria-label="คำพูดที่จดได้">
@@ -281,6 +307,7 @@ export function MeetingPanel({ state, onPause, onResume, onFinish, onCancel, onR
               entries={entries}
               canEditSpeaker={status !== "summarizing"}
               speakerPresets={speakerState.profiles.map((p) => p.label)}
+              speakerFilter={activeSpeakerFilter}
               onRelabelSpeaker={onRelabelSpeaker}
             />
             {partial && (

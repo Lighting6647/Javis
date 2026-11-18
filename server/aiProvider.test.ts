@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAiProvider } from "./aiProvider.js";
+import { resolveAiProvider, resolveFallbackAiProviders } from "./aiProvider.js";
 
 // ค่าทดสอบเท่านั้น ไม่ใช่กุญแจจริงของบริการใด
 const OPENAI_KEY = "test-openai-key";
@@ -282,5 +282,25 @@ describe("resolveAiProvider", () => {
 
   it("ค่าว่างหรือมีแต่ช่องว่างนับว่าไม่ได้ตั้ง", () => {
     expect(resolveAiProvider({ GEMINI_API_KEY: "   ", OPENAI_API_KEY: "" }, quiet)).toMatchObject({ name: "openai", apiKey: undefined });
+  });
+});
+
+describe("resolveFallbackAiProviders", () => {
+  it("มีเฉพาะกุญแจหลัก: ไม่มีผู้ให้บริการสำรอง", () => {
+    expect(resolveFallbackAiProviders({ OPENAI_API_KEY: OPENAI_KEY }, "openai", quiet)).toEqual([]);
+  });
+
+  it("ตั้งค่า OpenAI เป็นหลักแต่มีกุญแจ Gemini ด้วย: เตรียม Gemini เป็นสำรอง", () => {
+    const fallbacks = resolveFallbackAiProviders({ AI_PROVIDER: "openai", OPENAI_API_KEY: OPENAI_KEY, GEMINI_API_KEY: GEMINI_KEY }, "openai", quiet);
+    expect(fallbacks.map((p) => p.name)).toEqual(["gemini"]);
+  });
+
+  it("มีครบทั้งสามผู้ให้บริการและหลักเป็น OpenAI: เรียงสำรอง Gemini แล้วตามด้วย Claude", () => {
+    const fallbacks = resolveFallbackAiProviders(
+      { AI_PROVIDER: "openai", OPENAI_API_KEY: OPENAI_KEY, GEMINI_API_KEY: GEMINI_KEY, ANTHROPIC_API_KEY: CLAUDE_KEY },
+      "openai",
+      quiet
+    );
+    expect(fallbacks.map((p) => p.name)).toEqual(["gemini", "claude"]);
   });
 });

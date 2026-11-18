@@ -5,6 +5,7 @@ import type { ConversationController } from "../conversation/controller";
 import { isMeetingStartCommand } from "../meeting/commands";
 import { summaryRequestText } from "../meeting/export";
 import { createMeetingDraftStore } from "../meeting/meetingDraft";
+import { meetingHistoryStore } from "../meeting/meetingHistory";
 import { meetingLock } from "../meeting/meetingLock";
 import { createLiveSpeakerMonitor } from "../meeting/liveSpeakerMonitor";
 import { MEETING_TEXT, MeetingRecorder, type MeetingState } from "../meeting/meetingRecorder";
@@ -72,8 +73,10 @@ export function useMeeting({ ready, controller }: MeetingOptions): Meeting {
               if (event.type === "delta") onDelta(event.text);
             }
           }),
-        onSummary: ({ summary, transcript, minutes, startedAt }) =>
-          controller.addExchange(summaryRequestText(minutes), { text: summary, meeting: { transcript, minutes, startedAt } })
+        onSummary: ({ summary, transcript, minutes, startedAt }) => {
+          meetingHistoryStore.add({ summary, transcript, minutes, startedAt });
+          controller.addExchange(summaryRequestText(minutes), { text: summary, meeting: { transcript, minutes, startedAt } });
+        }
       })
   );
   const state = useSyncExternalStore(recorder.subscribe, recorder.getState);

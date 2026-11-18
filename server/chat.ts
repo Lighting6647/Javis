@@ -736,7 +736,7 @@ interface ReplyOptions {
  * รับประวัติบทสนทนา แล้วสตรีมคำตอบของ AI กลับเป็นเหตุการณ์ NDJSON
  * AI ค้นเว็บเองได้เมื่อจำเป็น ขอเปิดหน้าเว็บ เสนอกรอกฟอร์ม และจำหรือลืมเรื่องของผู้ใช้ได้เมื่อถูกสั่ง
  */
-export const chatHandler: RequestHandler = async (request, response) => {
+export const chatHandler: RequestHandler = async (request, response, next) => {
   const ai = config.ai;
   const { apiKey } = ai;
   if (!apiKey) {
@@ -1073,6 +1073,16 @@ export const chatHandler: RequestHandler = async (request, response) => {
   if (!reply.ok) {
     const { codes, logDetail } = reply.rejection;
     const failure = describeUpstreamFailure("chat", reply.status, codes);
+    if (failure.reason === "quota" && config.fallbackAi.length > 0 && !response.headersSent) {
+      const nextProvider = config.fallbackAi.shift();
+      if (nextProvider?.apiKey) {
+        config.ai = nextProvider;
+        console.warn(
+          `สลับผู้ให้บริการ AI อัตโนมัติจาก ${ai.label} ไปยัง ${nextProvider.label} (${nextProvider.chatModel}) เนื่องจากโควตาหรือเครดิตหมด`
+        );
+        return chatHandler(request, response, next);
+      }
+    }
     // ต้นทางปฏิเสธรูปแบบคำขอ (400): บันทึกข้อความที่ปิดบังแล้วไว้ให้ผู้ดูแลหาสาเหตุ กรณีอื่นรหัสก็บอกสาเหตุพอแล้ว
     const detail = reply.status === 400 && failure.reason === "unknown" ? logDetail : "";
     console.error("Chat upstream failed", reply.status, failure.reason, codes.join(","), detail);
