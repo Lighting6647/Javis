@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
-import { Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
@@ -21,6 +21,7 @@ import {
 import { Stage } from "./components/hud/Stage";
 import { PHASE_LABEL } from "./conversation/messages";
 import { useAiStatus } from "./hooks/useAiStatus";
+import { useCloudVoiceStatus } from "./hooks/useCloudVoiceStatus";
 import { useConversation } from "./hooks/useConversation";
 import { useHandsFree } from "./hooks/useHandsFree";
 import { useHudTelemetry } from "./hooks/useHudTelemetry";
@@ -29,7 +30,14 @@ import { useMeeting } from "./hooks/useMeeting";
 import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
 import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
+import { appCommands } from "./conversation/appCommands";
 import { memoryStore } from "./memory/memoryStore";
+import {
+  type CapturedScreenImage,
+  canCaptureScreen,
+  captureScreenImage,
+  isScreenCaptureVoiceCommand
+} from "./services/screenCapture";
 
 const PRIVACY_NOTE = "เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของอุปกรณ์หรือเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
 const HANDS_FREE_PRIVACY_NOTE =
@@ -65,6 +73,12 @@ export default function App() {
   const [metricsHidden, setMetricsHidden] = useState(false);
   const [latenciesMs, setLatenciesMs] = useState<number[]>([]);
   const [desktop] = useState(isDesktopApp);
+  const [screenCaptureAvailable] = useState(canCaptureScreen);
+  const [capturingScreen, setCapturingScreen] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [pendingCapture, setPendingCapture] = useState<CapturedScreenImage | null>(null);
+  const pendingCaptureRef = useRef<CapturedScreenImage | null>(null);
+  const captureHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const memories = useSyncExternalStore(memoryStore.subscribe, memoryStore.get);
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
@@ -100,8 +114,15 @@ export default function App() {
           ? "ไมโครโฟนปิดอยู่"
           : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
+  const cloudVoiceStatus = useCloudVoiceStatus(synthesizer);
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
-  const readouts = useHudTelemetry({ platformLabel, messageCount: messages.length, lastReplyMs });
+  const readouts = useHudTelemetry({
+    platformLabel,
+    messageCount: messages.length,
+    lastReplyMs,
+    cloudVoiceStatus,
+    cloudVoiceName: voiceSettings.cloudVoice
+  });
   // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป ส่วนบนเว็บ หน้าที่เปิดแสดงในพื้นที่หลักข้างแผงสถานะ
   const stageShown = ready && !(showingWeb && desktop);
 
@@ -112,8 +133,11 @@ export default function App() {
   const elsewhereHint = handsFree.heldElsewhere && !active;
   // เริ่มจดการประชุมไม่สำเร็จ: ไม่มีแผงการประชุมให้แสดงสาเหตุ จึงแจ้งที่แถบล่าง
   const meetingNotice = inMeeting ? null : meeting.state.notice;
+  const shownCapture = ready && !inMeeting ? pendingCapture : null;
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
-  const footerShown = !inMeeting && (dockShown || Boolean(replyStrip || pendingFill || notice || meetingNotice || speechHint || heard));
+  const footerShown =
+    !inMeeting &&
+    (dockShown || Boolean(replyStrip || pendingFill || shownCapture || captureError || notice || meetingNotice || speechHint || heard));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
   useEffect(() => {
@@ -121,6 +145,32 @@ export default function App() {
     reset();
     browserStore.close();
   }, [ready, reset]);
+
+  // อัปเดตข้อมูลหน้าจอปัจจุบันให้ระบบอ่านหน้าจอใช้เมื่อผู้ใช้กดปุ่มหรือสั่งด้วยเสียง
+  const buildScreenSummary = useCallback((): string | null => {
+    if (!ready) return null;
+    const viewName = showingWeb
+      ? `หน้าเว็บ (${browser.title || browser.requestedUrl})`
+      : inMeeting
+        ? "โหมดสรุปการประชุม"
+        : messages.length === 0
+          ? "หน้าหลัก Central Voice Studio"
+          : "หน้าสนทนา";
+    const stats = metricsHidden ? "ซ่อนค่าสถิติไว้" : readouts.map((r) => `${r.label}: ${r.value}`).join(", ");
+    const lines = [`มุมมอง: ${viewName}`, `สถานะ: ${statusLabel}`, `แผงข้อมูล: ${stats}`];
+    if (!metricsHidden && memories.length > 0) {
+      lines.push(`ความจำที่บันทึกไว้: ${memories.slice(-3).map((m) => m.text).join(" / ")}`);
+    }
+    if (lastReply) {
+      lines.push(`ข้อความล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
+    }
+    return lines.join("\n").slice(0, 2500);
+  }, [ready, showingWeb, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
+
+  useEffect(() => {
+    controller.setScreenContextProvider(buildScreenSummary);
+    return () => controller.setScreenContextProvider(undefined);
+  }, [controller, buildScreenSummary]);
 
   // เข้าใช้งานได้แล้ว: โหลดหน้าตั้งค่า แผงการประชุม และตัวแสดงหน้าเว็บล่วงหน้าตอนเครื่องว่าง กดเปิดแล้วจึงขึ้นทันที
   useEffect(() => {
@@ -170,6 +220,70 @@ export default function App() {
     setSettingsOpen(false);
     setSettingsUsed(false);
   };
+
+  const sendMessage = useCallback(
+    (text: string, options?: Parameters<typeof sendText>[1]) => {
+      if (captureError) setCaptureError(null);
+      const current = pendingCaptureRef.current;
+      if (current && !options?.image) {
+        pendingCaptureRef.current = null;
+        setPendingCapture(null);
+        sendText(text, {
+          ...options,
+          speak: options?.speak ?? true,
+          image: { mimeType: current.mimeType, data: current.data }
+        });
+        return;
+      }
+      sendText(text, options);
+    },
+    [captureError, sendText]
+  );
+
+  const handleCaptureScreen = useCallback(async () => {
+    if (capturingScreen) return;
+    setCaptureError(null);
+    setCapturingScreen(true);
+    try {
+      const captured = await captureScreenImage();
+      if (!captured) return;
+      pendingCaptureRef.current = captured;
+      setPendingCapture(captured);
+    } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : "ไม่สามารถจับภาพหน้าจอได้ครับ");
+    } finally {
+      setCapturingScreen(false);
+    }
+  }, [capturingScreen]);
+
+  useEffect(() => {
+    pendingCaptureRef.current = pendingCapture;
+  }, [pendingCapture]);
+
+  useEffect(() => {
+    captureHandlerRef.current = handleCaptureScreen;
+  }, [handleCaptureScreen]);
+
+  useEffect(() => {
+    controller.setPendingImageProvider(() => {
+      const current = pendingCaptureRef.current;
+      if (!current) return null;
+      pendingCaptureRef.current = null;
+      setPendingCapture(null);
+      return { mimeType: current.mimeType, data: current.data };
+    });
+    return () => controller.setPendingImageProvider(undefined);
+  }, [controller]);
+
+  useEffect(() => {
+    if (!ready || !screenCaptureAvailable || inMeeting) return;
+    return appCommands.register({
+      matches: isScreenCaptureVoiceCommand,
+      run: () => {
+        void captureHandlerRef.current();
+      }
+    });
+  }, [ready, screenCaptureAvailable, inMeeting]);
 
   return (
     <div className={`app${stageShown ? " has-stage" : ""}`}>
@@ -261,6 +375,7 @@ export default function App() {
           compact={messages.length > 0 || showingWeb || inMeeting}
           offline={aiDown}
           metricsHidden={metricsHidden}
+          platformLabel={platformLabel}
         />
       )}
 
@@ -284,7 +399,11 @@ export default function App() {
               metricsHidden={metricsHidden}
               onToggleMetricsHidden={() => setMetricsHidden((prev) => !prev)}
               onRecheckAi={ai.recheck}
-              onSuggest={sendText}
+              onSendAndSpeak={(text) => sendMessage(text, { speak: true })}
+              canCaptureScreen={screenCaptureAvailable}
+              onCaptureScreen={handleCaptureScreen}
+              capturingScreen={capturingScreen}
+              onSuggest={sendMessage}
               onOpenLink={desktop ? browserStore.open : undefined}
               onShowFramed={desktop ? undefined : browserStore.showFramed}
               onLinkOpened={markLinkOpened}
@@ -302,7 +421,17 @@ export default function App() {
             fallback={showingWeb ? <MainViewSkeleton label="หน้าเว็บ" /> : null}
             onDismiss={browserStore.close}
           >
-            {desktop ? <BrowserView browser={browser} /> : <FrameView browser={browser} />}
+            {desktop ? (
+              <BrowserView
+                browser={browser}
+                onReadPage={() => sendMessage("ช่วยสรุปและอ่านเนื้อหาหน้าเว็บนี้ให้ฟังหน่อย", { speak: true })}
+              />
+            ) : (
+              <FrameView
+                browser={browser}
+                onReadPage={() => sendMessage("ช่วยสรุปและอ่านเนื้อหาหน้าเว็บนี้ให้ฟังหน่อย", { speak: true })}
+              />
+            )}
           </LazyBoundary>
         )}
         {inMeeting && (
@@ -324,6 +453,46 @@ export default function App() {
             <p className="reply-strip"><strong>Javis</strong> {replyStrip}</p>
           )}
           {pendingFill && <FillCard request={pendingFill} onConfirm={confirmFill} onCancel={cancelFill} />}
+          {shownCapture && (
+            <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
+              <img
+                src={`data:${shownCapture.mimeType};base64,${shownCapture.data}`}
+                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ Javis วิเคราะห์"
+                className="capture-preview-thumb"
+              />
+              <div className="capture-preview-meta">
+                <strong>พร้อมวิเคราะห์ภาพหน้าจอ</strong>
+                <span>
+                  {shownCapture.width}×{shownCapture.height} — พิมพ์ พูดถาม หรือกดอ่านภาพทันที
+                </span>
+              </div>
+              <div className="capture-preview-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => sendMessage("ช่วยอ่านและอธิบายสิ่งที่เห็นในภาพหน้าจอนี้ให้ฟังหน่อย", { speak: true })}
+                >
+                  <Volume2 size={14} aria-hidden /> อ่านภาพนี้เลย
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => {
+                    pendingCaptureRef.current = null;
+                    setPendingCapture(null);
+                  }}
+                  aria-label="ยกเลิกภาพที่แนบไว้"
+                >
+                  <X size={16} aria-hidden />
+                </button>
+              </div>
+            </div>
+          )}
+          {captureError && (
+            <div className="toast error" role="alert">
+              {captureError}
+            </div>
+          )}
           {notice && (
             <div className={`toast ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>
               {notice.text}
@@ -359,7 +528,11 @@ export default function App() {
               onStop={handsFree.capable ? handsFree.disable : stop}
               onInterrupt={interrupt}
               onFinishListening={finishListening}
-              onSend={sendText}
+              onSend={sendMessage}
+              canCaptureScreen={screenCaptureAvailable}
+              onCaptureScreen={handleCaptureScreen}
+              capturingScreen={capturingScreen}
+              hasAttachment={Boolean(shownCapture)}
             />
           )}
         </footer>

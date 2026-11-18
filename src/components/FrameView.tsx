@@ -1,4 +1,4 @@
-import { ExternalLink, Globe, LoaderCircle, RotateCw, X } from "lucide-react";
+import { ExternalLink, Globe, LoaderCircle, RotateCw, Volume2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type BrowserState, browserStore } from "../browser/browserStore";
 import { hostOf } from "../conversation/richText";
@@ -14,6 +14,8 @@ const FRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups 
 
 interface FrameViewProps {
   browser: BrowserState;
+  /** สั่งให้ Javis ดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง */
+  onReadPage?: () => void;
 }
 
 /**
@@ -21,7 +23,7 @@ interface FrameViewProps {
  * ไม่ต้องออกจาก Javis และ Javis ยังฟังต่อได้ แสดงเฉพาะหน้าที่เซิร์ฟเวอร์ตรวจแล้วว่าเจ้าของเว็บยอมให้แสดงในกรอบ
  * (แอปเดสก์ท็อปใช้เบราว์เซอร์ในตัวที่ src/components/BrowserView.tsx ซึ่งแสดงได้ทุกเว็บ)
  */
-export function FrameView({ browser }: FrameViewProps) {
+export function FrameView({ browser, onReadPage }: FrameViewProps) {
   /** เพิ่มเพื่อโหลดหน้าเดิมใหม่ */
   const [reloads, setReloads] = useState(0);
   /** กรอบที่โหลดนานเกินกำหนด จำเป็นรายกรอบ จึงหายเองเมื่อเปิดหน้าใหม่หรือโหลดเสร็จ */
@@ -55,6 +57,18 @@ export function FrameView({ browser }: FrameViewProps) {
           <span>{browser.title}</span>
         </div>
 
+        {onReadPage && (
+          <button
+            type="button"
+            className="browser-read-btn"
+            onClick={onReadPage}
+            aria-label="อ่านหน้านี้ให้ฟัง"
+            title="ให้ Javis ดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
+          >
+            <Volume2 size={15} aria-hidden />
+            <span>อ่านหน้านี้</span>
+          </button>
+        )}
         <a className="icon-button" href={url} target="_blank" rel="noopener noreferrer" aria-label="เปิดหน้านี้ในแท็บใหม่" title="เปิดหน้านี้ในแท็บใหม่">
           <ExternalLink size={16} aria-hidden />
         </a>

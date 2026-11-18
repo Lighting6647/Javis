@@ -20,14 +20,15 @@ import {
 } from "./security.js";
 import { createSpeechHandler } from "./speech.js";
 import { transcribeHandler } from "./transcribe.js";
+import { getJevTelemetry, routeVoiceTurn } from "./jevRouter.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
 /**
- * ขนาดเนื้อหาสูงสุดของ /api/chat: บันทึกการประชุมยาวสุด 80,000 ตัวอักษร (server/meeting.ts) ซึ่งตัวอักษรไทยใช้ 3 ไบต์
- * รวมกับประวัติบทสนทนาและความจำเต็มเพดาน ยังไม่ถึงค่านี้
+ * ขนาดเนื้อหาสูงสุดของ /api/chat: รองรับทั้งบันทึกการประชุมยาวสุด 80,000 ตัวอักษรและภาพหน้าจอที่บีบอัดแล้ว (สูงสุด ~1.2MB base64)
+ * แต่ยังคงจำกัดเพดานไว้ที่ 2MB เพื่อป้องกันคำขอขนาดใหญ่ผิดปกติ
  */
-const CHAT_BODY_LIMIT = "500kb";
+const CHAT_BODY_LIMIT = "2mb";
 
 export interface AppOptions {
   /**
@@ -80,6 +81,23 @@ export function createApp(options: AppOptions = {}): Express {
     await settleStatus();
     // voice.cloud บอกหน้าเว็บว่าเซิร์ฟเวอร์นี้มีเสียงพูดของ Gemini ให้ใช้ไหม หน้าเว็บจึงไม่ต้องลองขอเมื่อไม่มี
     response.set("Cache-Control", "no-store").json({ ai: aiAccount.snapshot(), voice: { cloud: config.cloudVoice !== null } });
+  });
+  app.get("/api/router/telemetry", requireAuth, (_request, response) => {
+    response.set("Cache-Control", "no-store").json({ ok: true, telemetry: getJevTelemetry() });
+  });
+  app.post("/api/router/classify", requireAuth, async (request, response) => {
+    const body = request.body as { goal?: unknown; notes?: unknown; gapsCount?: unknown } | undefined;
+    const goal = typeof body?.goal === "string" ? body.goal.trim() : "";
+    if (!goal) {
+      response.status(400).json({ ok: false, error: "กรุณาระบุข้อความ goal สำหรับ JEV Router" });
+      return;
+    }
+    const decision = await routeVoiceTurn({
+      goal,
+      notes: Array.isArray(body?.notes) ? body.notes.map(String) : [],
+      gapsCount: typeof body?.gapsCount === "number" ? body.gapsCount : 0,
+    });
+    response.json({ ok: true, decision, telemetry: getJevTelemetry() });
   });
   app.get("/api/auth/session", sessionHandler);
   app.post("/api/auth/login", loginRateLimiter, loginHandler);

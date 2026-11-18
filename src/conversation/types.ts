@@ -144,17 +144,33 @@ export type ChatEvent =
   /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
   | { type: "suggestions"; html: string[] };
 
+export interface CapturedImage {
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+
 export interface ChatStreamOptions {
   signal: AbortSignal;
   onEvent: (event: ChatEvent) => void;
-  /** หน้าเว็บที่ผู้ใช้เปิดอยู่ในแอปเดสก์ท็อป ส่งไปให้ AI รู้ว่ามีช่องอะไรให้กรอก */
+  /** หน้าเว็บที่ผู้ใช้เปิดอยู่ในแอป (แอปเดสก์ท็อปส่งช่องกรอกและข้อความ เว็บในเบราว์เซอร์ส่งที่อยู่และชื่อหน้า) */
   page?: PageContext | null;
+  /** สรุปข้อมูลที่แสดงอยู่บนหน้าจอแอป Javis ตอนนี้ สำหรับคำสั่งอ่านหน้าจอ */
+  screen?: string | null;
+  /** ภาพหน้าจอ/โปรแกรมที่ผู้ใช้จับมาให้ AI อ่าน */
+  image?: CapturedImage;
   /** ความจำของผู้ใช้ที่เก็บในอุปกรณ์ ส่งไปให้ AI ใช้ปรับคำตอบ */
   memories?: MemoryEntry[];
   /** แอปแสดงหน้าเว็บในกรอบของตัวเองได้ ขอให้เซิร์ฟเวอร์ตรวจมาด้วยว่าหน้าที่จะเปิดยอมให้แสดงในกรอบไหม */
   frames?: boolean;
   /** ขอให้สรุปบันทึกการประชุมนี้ แทนการตอบบทสนทนา (โหมดสรุปการประชุม) */
   meeting?: MeetingTranscript;
+}
+
+export interface SendTextOptions {
+  /** บังคับอ่านคำตอบออกเสียง แม้ไม่ได้เปิดไมโครโฟนสนทนาอยู่ (เช่น กดปุ่มอ่านหน้าจอหรือดึงเว็บมาอ่าน) */
+  speak?: boolean;
+  /** ภาพหน้าจอที่แนบไปกับคำสั่งนี้ */
+  image?: CapturedImage;
 }
 
 /** ส่งประวัติบทสนทนาไปขอคำตอบ เรียก onEvent ทีละเหตุการณ์ และคืนข้อความคำตอบเต็มเมื่อจบ */

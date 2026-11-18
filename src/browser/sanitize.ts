@@ -3,6 +3,7 @@ import {
   FIELD_ID_PATTERN,
   MAX_FIELD_LABEL_LENGTH,
   MAX_FORM_FIELDS,
+  MAX_PAGE_CONTENT_LENGTH,
   type FillResult,
   type FormField,
   type PageContext
@@ -56,10 +57,16 @@ export function sanitizePageContext(value: unknown): PageContext | null {
     fields.push(field);
   }
 
+  const content =
+    typeof value.content === "string"
+      ? value.content.replace(/\s+/g, " ").trim().slice(0, MAX_PAGE_CONTENT_LENGTH)
+      : "";
+
   return {
     url,
     title: typeof value.title === "string" ? value.title.trim().slice(0, MAX_TITLE_LENGTH) : "",
-    fields
+    fields,
+    ...(content ? { content } : {})
   };
 }
 

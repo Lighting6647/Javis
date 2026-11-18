@@ -4,6 +4,7 @@ import { type FillDecision, interpretFillDecision } from "./fillDecision";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import { createSentenceChunker } from "./sentenceChunker";
 import {
+  type CapturedImage,
   ChatError,
   type ChatTurn,
   type ConversationMessage,
@@ -13,6 +14,7 @@ import {
   type MemoryNote,
   type Notice,
   type PageLink,
+  type SendTextOptions,
   type StreamChat
 } from "./types";
 
@@ -47,8 +49,10 @@ export interface ConversationDeps {
    * ใช้กับหน้าที่เซิร์ฟเวอร์ตรวจแล้วว่าเจ้าของเว็บยอมให้แสดงในกรอบ ผู้ใช้จึงเห็นหน้านั้นโดยไม่ต้องออกจาก Javis
    */
   showPage?: (url: string, title: string) => boolean;
-  /** อ่านหน้าเว็บที่เปิดอยู่ในเบราว์เซอร์ในตัว มีเฉพาะในแอปเดสก์ท็อป */
+  /** อ่านหน้าเว็บที่เปิดอยู่ในเบราว์เซอร์ในตัว หรือหน้าเว็บที่แสดงในกรอบ */
   getPageContext?: () => Promise<PageContext | null>;
+  /** อ่านสรุปข้อมูลที่กำลังแสดงอยู่บนหน้าจอแอป Javis สำหรับคำสั่งอ่านหน้าจอ */
+  getScreenContext?: () => string | null;
   /** กรอกค่าลงฟอร์มของหน้าเว็บที่เปิดอยู่ เรียกหลังผู้ใช้ยืนยันแล้วเท่านั้น */
   fillPage?: (pageUrl: string, values: FillValue[]) => Promise<FillResult>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
@@ -120,8 +124,18 @@ export class ConversationController {
   private listenFailures = 0;
   /** โหมดฟังตลอดเวลา: จำนวนครั้งติดกันที่การฟังจบเร็วผิดปกติโดยไม่ได้ยินอะไร */
   private quickListens = 0;
+  private screenContextProvider?: () => string | null;
+  private pendingImageProvider?: () => CapturedImage | null;
 
   constructor(private readonly deps: ConversationDeps) {}
+
+  setScreenContextProvider(provider: (() => string | null) | undefined): void {
+    this.screenContextProvider = provider;
+  }
+
+  setPendingImageProvider(provider: (() => CapturedImage | null) | undefined): void {
+    this.pendingImageProvider = provider;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -204,7 +218,7 @@ export class ConversationController {
   };
 
   /** ส่งข้อความที่พิมพ์ ใช้ได้ทั้งตอนสนทนาด้วยเสียงและตอนไม่ได้เปิดเสียง */
-  sendText = (text: string): void => {
+  sendText = (text: string, options?: SendTextOptions): void => {
     const clean = text.trim().slice(0, MESSAGE_LENGTH_LIMIT);
     if (!clean) return;
 
@@ -212,7 +226,8 @@ export class ConversationController {
     // พิมพ์แทรกระหว่างรอสิทธิ์ไมโครโฟน: ถือว่ายังไม่ได้เปิดโหมดเสียง
     // ยกเว้นโหมดฟังตลอดเวลา ซึ่งต้องกลับมาฟังต่อเองหลังตอบ เพราะไม่มีปุ่มให้ผู้ใช้แตะเปิดใหม่
     if (this.state.phase === "starting" && !this.deps.handsFree) this.update({ active: false });
-    void this.handle(clean, epoch);
+    if (options?.speak) void this.deps.synthesizer.prepare().catch(() => undefined);
+    void this.handle(clean, epoch, options);
   };
 
   /**
@@ -447,7 +462,7 @@ export class ConversationController {
   }
 
   /** รับคำพูดหรือข้อความของผู้ใช้: ถ้าเป็นคำยืนยัน/ยกเลิกรายการกรอกฟอร์มให้จัดการเอง ไม่เช่นนั้นส่งไปถาม AI */
-  private async handle(userText: string, epoch: number): Promise<void> {
+  private async handle(userText: string, epoch: number, options?: SendTextOptions): Promise<void> {
     if (this.deps.onCommand?.(userText)) {
       // แอปรับคำสั่งนี้ไปทำเอง (เช่นเริ่มจดการประชุม): ออกจากโหมดเสียง เพื่อให้โหมดนั้นใช้ไมโครโฟนต่อได้
       this.stop();
@@ -456,7 +471,7 @@ export class ConversationController {
 
     const decision = this.state.pendingFillId ? interpretFillDecision(userText) : null;
     if (!decision) {
-      await this.respond(userText, epoch);
+      await this.respond(userText, epoch, options);
       return;
     }
 
@@ -527,7 +542,7 @@ export class ConversationController {
     };
   }
 
-  private async respond(userText: string, epoch: number): Promise<void> {
+  private async respond(userText: string, epoch: number, options?: SendTextOptions): Promise<void> {
     // คำถามใหม่แทนที่รายการกรอกฟอร์มที่ยังไม่ได้ยืนยัน เพื่อไม่ให้มีรายการเก่าค้างรอกดผิด
     if (this.state.pendingFillId) {
       this.setFillStatus(this.state.pendingFillId, "cancelled");
@@ -551,8 +566,10 @@ export class ConversationController {
 
     const page = (await this.deps.getPageContext?.().catch(() => null)) ?? null;
     if (epoch !== this.epoch) return;
+    const screen = (this.screenContextProvider ?? this.deps.getScreenContext)?.() ?? null;
 
-    const speakReply = this.state.active && this.voiceReplies;
+    const speakReply = (this.state.active && this.voiceReplies) || Boolean(options?.speak);
+    const attachedImage: CapturedImage | undefined = options?.image ?? this.pendingImageProvider?.() ?? undefined;
     let speech: Promise<void> = Promise.resolve();
     const chunker = createSentenceChunker((sentence) => {
       speech = speech.then(async () => {
@@ -570,6 +587,8 @@ export class ConversationController {
       reply = await this.deps.chat(toChatTurns(history), {
         signal: request.signal,
         page,
+        ...(screen ? { screen } : {}),
+        ...(attachedImage ? { image: attachedImage } : {}),
         memories: this.deps.memory?.list().map(({ id, text }) => ({ id, text })),
         frames: Boolean(this.deps.showPage),
         onEvent: (event) => {

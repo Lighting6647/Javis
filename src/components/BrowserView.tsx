@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Globe, LoaderCircle, RotateCw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, LoaderCircle, RotateCw, Volume2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type BrowserState, browserStore } from "../browser/browserStore";
 import { buildFillScript, EXTRACT_FIELDS_SCRIPT } from "../browser/pageScripts";
@@ -17,13 +17,15 @@ interface FailLoadEvent extends Event {
 
 interface BrowserViewProps {
   browser: BrowserState;
+  /** สั่งให้ Javis อ่านและสรุปหน้าเว็บนี้ให้ฟัง */
+  onReadPage?: () => void;
 }
 
 /**
  * เบราว์เซอร์ในตัวของแอปเดสก์ท็อป: แสดงหน้าเว็บที่ผู้ใช้สั่งเปิด
  * และเป็นตัวกลางให้ Javis อ่านช่องกรอกข้อมูลกับกรอกค่าตามที่ผู้ใช้ยืนยัน
  */
-export function BrowserView({ browser }: BrowserViewProps) {
+export function BrowserView({ browser, onReadPage }: BrowserViewProps) {
   const viewRef = useRef<WebviewElement>(null);
   const [ready, setReady] = useState(false);
   /** หน้าแรกถูกโหลดผ่าน src ตอนสร้าง หลังจากนั้นจึงสั่งเปลี่ยนหน้าด้วย loadURL */
@@ -151,6 +153,18 @@ export function BrowserView({ browser }: BrowserViewProps) {
           <span>{browser.title}</span>
         </div>
 
+        {onReadPage && (
+          <button
+            type="button"
+            className="browser-read-btn"
+            onClick={onReadPage}
+            aria-label="อ่านหน้านี้ให้ฟัง"
+            title="ให้ Javis สรุปและอ่านเนื้อหาหน้าเว็บนี้ให้ฟัง"
+          >
+            <Volume2 size={15} aria-hidden />
+            <span>อ่านหน้านี้</span>
+          </button>
+        )}
         <button type="button" className="icon-button" onClick={browserStore.close} aria-label="ปิดหน้าเว็บ">
           <X size={17} aria-hidden />
         </button>

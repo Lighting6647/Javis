@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeAiState, formatHudDate, formatLatency } from "./hudTelemetry";
+import { describeAiState, describeCloudVoiceState, formatHudDate, formatLatency } from "./hudTelemetry";
 
 describe("formatLatency", () => {
   it.each([
@@ -45,5 +45,25 @@ describe("describeAiState", () => {
     ["unsupported", "ไม่รองรับ", "bad"]
   ] as const)("สถานะ %j แสดงเป็น %j", (state, text, tone) => {
     expect(describeAiState(state)).toEqual({ text, tone });
+  });
+});
+
+describe("describeCloudVoiceState", () => {
+  it("แสดงชื่อเสียง Gemini เมื่อพร้อมใช้งาน", () => {
+    expect(describeCloudVoiceState({ mode: "active" }, null)).toEqual({ text: "Gemini", tone: "ok" });
+    expect(describeCloudVoiceState({ mode: "active" }, "Zephyr")).toEqual({ text: "Gemini · Zephyr", tone: "ok" });
+  });
+
+  it("แสดงสถานะพักชั่วคราวเมื่อโควตาหรือการเชื่อมต่อสะดุด", () => {
+    expect(describeCloudVoiceState({ mode: "paused", reason: "quota", until: 1000 }, "Zephyr")).toEqual({
+      text: "พักชั่วคราว",
+      tone: "wait"
+    });
+  });
+
+  it("แสดงว่าใช้เสียงในอุปกรณ์เมื่อปิดหรือเซิร์ฟเวอร์ไม่รองรับ", () => {
+    expect(describeCloudVoiceState(null, null)).toEqual({ text: "ในอุปกรณ์" });
+    expect(describeCloudVoiceState({ mode: "off" }, "Zephyr")).toEqual({ text: "ในอุปกรณ์" });
+    expect(describeCloudVoiceState({ mode: "unavailable" }, null)).toEqual({ text: "ในอุปกรณ์" });
   });
 });

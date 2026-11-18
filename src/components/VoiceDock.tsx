@@ -1,4 +1,4 @@
-import { AudioLines, LoaderCircle, Mic, SendHorizontal, ShieldCheck, Square } from "lucide-react";
+import { AudioLines, LoaderCircle, Mic, Monitor, SendHorizontal, ShieldCheck, Square } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { MESSAGE_LENGTH_LIMIT } from "../conversation/controller";
 import type { Phase } from "../conversation/types";
@@ -22,6 +22,14 @@ interface VoiceDockProps {
   onInterrupt: () => void;
   onFinishListening: () => void;
   onSend: (text: string) => void;
+  /** อุปกรณ์นี้จับภาพหน้าจอ/หน้าต่างอื่นได้ */
+  canCaptureScreen?: boolean;
+  /** จับภาพหน้าจอหรือโปรแกรมอื่นให้ AI ช่วยอ่าน */
+  onCaptureScreen?: () => Promise<void> | void;
+  /** กำลังจับภาพหน้าจออยู่ */
+  capturingScreen?: boolean;
+  /** มีภาพหน้าจอแนบอยู่และพร้อมส่งกับข้อความถัดไป */
+  hasAttachment?: boolean;
 }
 
 const ORB_LABEL: Record<Phase, string> = {
@@ -59,7 +67,11 @@ export function VoiceDock({
   onStop,
   onInterrupt,
   onFinishListening,
-  onSend
+  onSend,
+  canCaptureScreen,
+  onCaptureScreen,
+  capturingScreen,
+  hasAttachment
 }: VoiceDockProps) {
   const [input, setInput] = useState("");
 
@@ -71,7 +83,7 @@ export function VoiceDock({
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const text = input.trim();
+    const text = input.trim() || (hasAttachment ? "ช่วยอ่านและอธิบายสิ่งที่เห็นในภาพหน้าจอนี้ให้ฟังหน่อย" : "");
     if (!text) return;
     onSend(text);
     setInput("");
@@ -123,12 +135,24 @@ export function VoiceDock({
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="พิมพ์ข้อความถึง Javis…"
+            placeholder={hasAttachment ? "พิมพ์คำถามเกี่ยวกับภาพ หรือกดส่งเพื่อให้ Javis อ่านเลย…" : "พิมพ์ข้อความถึง Javis…"}
             aria-label="ข้อความถึง Javis"
             maxLength={MESSAGE_LENGTH_LIMIT}
             enterKeyHint="send"
           />
-          <button type="submit" disabled={!input.trim()} aria-label="ส่งข้อความ">
+          {canCaptureScreen && onCaptureScreen && (
+            <button
+              type="button"
+              className="dock-capture-btn"
+              onClick={() => void onCaptureScreen()}
+              disabled={capturingScreen}
+              aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ Javis อ่าน"
+              title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ Javis อ่าน"
+            >
+              <Monitor size={17} aria-hidden />
+            </button>
+          )}
+          <button type="submit" disabled={!input.trim() && !hasAttachment} aria-label="ส่งข้อความ">
             <SendHorizontal size={18} aria-hidden />
           </button>
         </form>

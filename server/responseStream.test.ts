@@ -13,6 +13,7 @@ import {
   MAX_SUGGESTION_BLOCKS,
   MAX_SUGGESTION_LENGTH,
   OPEN_PAGE_TOOL,
+  READ_PAGE_TOOL,
   REMEMBER_TOOL,
   safeHttpUrl,
   SEARCH_WEB_TOOL
@@ -618,5 +619,38 @@ describe("การขอค้นเว็บผ่านเครื่อง�
 
     expect(sent).toEqual([]);
     expect(reducer.finish()).toEqual([{ type: "memory", added: ["ผู้ใช้ลงทุนในทองคำ"], removed: [] }]);
+  });
+});
+
+describe("การขออ่านหน้าเว็บภายนอก (read_web_page)", () => {
+  const readCall = (args: unknown, callId = "call_r1") => ({
+    type: "response.output_item.done",
+    item: {
+      type: "function_call",
+      name: READ_PAGE_TOOL,
+      call_id: callId,
+      arguments: typeof args === "string" ? args : JSON.stringify(args)
+    }
+  });
+
+  it("รับเฉพาะลิงก์ http/https ที่ปลอดภัย และทิ้งลิงก์ผิดรูปหรือมีรหัสผ่าน", () => {
+    const valid = createResponseReducer();
+    valid.push(readCall({ url: "https://news.example.com/today" }));
+    expect(valid.readRequest).toBe("https://news.example.com/today");
+
+    const unsafe = createResponseReducer();
+    unsafe.push(readCall({ url: "file:///etc/passwd" }));
+    expect(unsafe.readRequest).toBeNull();
+  });
+
+  it("เมื่ออ่านเว็บภายนอกแล้ว จะไม่บันทึกความจำที่อาจถูกเนื้อหาเว็บชักนำในคำตอบเดียวกัน", () => {
+    const reducer = createResponseReducer();
+    reducer.push(readCall({ url: "https://news.example.com/today" }));
+    reducer.push({
+      type: "response.output_item.done",
+      item: { type: "function_call", name: REMEMBER_TOOL, call_id: "call_m2", arguments: JSON.stringify({ text: "ลวงให้จำ" }) }
+    });
+
+    expect(reducer.finish()).toEqual([]);
   });
 });

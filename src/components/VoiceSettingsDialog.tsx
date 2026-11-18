@@ -1,10 +1,12 @@
-import { Check, Download, Play, RotateCcw, X } from "lucide-react";
+import { Check, Download, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { micLevelsAvailable } from "../speech/sessionMeter";
+import { useCloudVoiceStatus } from "../hooks/useCloudVoiceStatus";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
-import { MemorySection } from "./MemorySection";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
+import type { CloudVoiceStatus } from "../speech/cloudVoice";
+import { GEMINI_TTS_VOICES, isGeminiTtsVoice } from "../speech/cloudVoices";
+import { micLevelsAvailable } from "../speech/sessionMeter";
 import {
   DEFAULT_VOICE_SETTINGS,
   MAX_SPEECH_RATE,
@@ -13,6 +15,7 @@ import {
   type VoiceOption,
   type VoiceSettings
 } from "../speech/types";
+import { MemorySection } from "./MemorySection";
 
 const SAMPLE_SENTENCE = "สวัสดีครับ ผมคือ Javis ผู้ช่วยของคุณ วันนี้ให้ช่วยเรื่องอะไรดีครับ";
 const AUTOMATIC_VOICE = "";
@@ -38,11 +41,29 @@ function describeRate(rate: number): string {
   return `${rate < DEFAULT_VOICE_SETTINGS.rate ? "ช้าลง" : "เร็วขึ้น"} ${rate.toFixed(1)} เท่า`;
 }
 
+const CLOUD_STATUS_BADGE: Record<CloudVoiceStatus["mode"], { label: string; tone: "ok" | "wait" | "muted" }> = {
+  active: { label: "พร้อมใช้", tone: "ok" },
+  paused: { label: "พักชั่วคราว", tone: "wait" },
+  off: { label: "ปิดอยู่", tone: "muted" },
+  unavailable: { label: "ไม่รองรับ", tone: "muted" }
+};
+
+function describeCloudStatus(status: CloudVoiceStatus): string {
+  if (status.mode === "active") return "กำลังใช้เสียงพูดของ Gemini (คมชัดเป็นธรรมชาติ)";
+  if (status.mode === "off") return "ปิดเสียง Gemini อยู่ — ใช้เสียงในอุปกรณ์แทน";
+  if (status.mode === "unavailable") return "เซิร์ฟเวอร์นี้ไม่ได้เปิดเสียง Gemini — ใช้เสียงในอุปกรณ์แทน";
+  if (status.reason === "quota") return "โควตาเสียง Gemini หมดชั่วคราว — สลับไปใช้เสียงในอุปกรณ์อัตโนมัติ";
+  if (status.reason === "rejected") return "โมเดลเสียง Gemini ไม่พร้อมใช้ — สลับไปใช้เสียงในอุปกรณ์อัตโนมัติ";
+  return "บริการเสียง Gemini พักชั่วคราว — สลับไปใช้เสียงในอุปกรณ์อัตโนมัติ";
+}
+
 /** ส่วนตั้งค่าเสียง สร้างใหม่ทุกครั้งที่เปิด จึงโหลดรายการเสียงล่าสุดของอุปกรณ์เสมอ */
 function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, "synthesizer" | "settings">) {
   /** null = กำลังโหลดรายการเสียง */
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
+  const cloudStatus = useCloudVoiceStatus(synthesizer);
   const rateId = useId();
+  const cloudVoiceId = useId();
 
   useEffect(() => {
     let stale = false;
@@ -76,14 +97,12 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
     );
   }
 
-  if (voices.length === 0) {
-    return (
-      <p className="callout" role="status">
-        อุปกรณ์นี้ยังไม่มีเสียงพูดภาษาไทย ติดตั้งเสียงภาษาไทยในการตั้งค่าของอุปกรณ์ แล้วเปิดหน้านี้อีกครั้ง
-        ระหว่างนี้คำตอบจะแสดงเป็นข้อความ
-      </p>
-    );
-  }
+  const cloudActive = cloudStatus?.mode === "active";
+  const canSpeak = voices.length > 0 || cloudActive;
+  const selectedCloudVoice =
+    settings.cloudVoice && isGeminiTtsVoice(settings.cloudVoice) ? settings.cloudVoice : AUTOMATIC_VOICE;
+  const selectedCloudMeta = GEMINI_TTS_VOICES.find((voice) => voice.id === (selectedCloudVoice || "Iapetus"));
+  const badge = cloudStatus ? CLOUD_STATUS_BADGE[cloudStatus.mode] : null;
 
   // เสียงที่เคยเลือกอาจถูกถอนออกจากเครื่องไปแล้ว ให้แสดงเป็นอัตโนมัติ
   const selectedVoice = voices.some((voice) => voice.id === settings.voiceId)
@@ -92,59 +111,111 @@ function VoiceSection({ synthesizer, settings }: Pick<VoiceSettingsDialogProps, 
 
   return (
     <>
-      <fieldset>
-        <legend>เสียงพูด</legend>
-        <label className="voice-option">
-          <input
-            type="radio"
-            name="voice"
-            checked={selectedVoice === AUTOMATIC_VOICE}
-            onChange={() => voiceSettingsStore.update({ voiceId: null })}
-          />
-          <span>อัตโนมัติ <small>เลือกเสียงที่ดีที่สุดให้</small></span>
-        </label>
-        {voices.map((voice) => (
-          <label className="voice-option" key={voice.id}>
+      {cloudStatus && (
+        <fieldset className="cloud-voice-box">
+          <legend>
+            <Sparkles size={13} aria-hidden /> เสียงพูดของ Gemini (Cloud TTS)
+            {badge && <span className={`cloud-voice-badge ${badge.tone}`}>{badge.label}</span>}
+          </legend>
+
+          <label className="voice-option">
+            <input
+              type="checkbox"
+              checked={settings.cloud}
+              onChange={(event) => voiceSettingsStore.update({ cloud: event.target.checked })}
+            />
+            <span>
+              ใช้เสียงพูดของ Gemini
+              <small>{describeCloudStatus(cloudStatus)}</small>
+            </span>
+          </label>
+
+          {settings.cloud && cloudStatus.mode !== "unavailable" && (
+            <div className="cloud-voice-picker">
+              <label htmlFor={cloudVoiceId}>โทนเสียง Gemini</label>
+              <select
+                id={cloudVoiceId}
+                value={selectedCloudVoice}
+                onChange={(event) => voiceSettingsStore.update({ cloudVoice: event.target.value || null })}
+              >
+                <option value={AUTOMATIC_VOICE}>ค่าเริ่มต้นของเซิร์ฟเวอร์ (Iapetus)</option>
+                {GEMINI_TTS_VOICES.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.label}
+                  </option>
+                ))}
+              </select>
+              {selectedCloudMeta?.hint && <small className="cloud-voice-hint">{selectedCloudMeta.hint}</small>}
+            </div>
+          )}
+        </fieldset>
+      )}
+
+      {voices.length === 0 ? (
+        <p className="callout" role="status">
+          {cloudActive
+            ? "อุปกรณ์นี้ไม่มีเสียงพูดภาษาไทยในเครื่อง ตอนนี้ใช้เสียงพูดของ Gemini อยู่ (เมื่อออฟไลน์คำตอบจะแสดงเป็นข้อความ)"
+            : "อุปกรณ์นี้ยังไม่มีเสียงพูดภาษาไทย ติดตั้งเสียงภาษาไทยในการตั้งค่าของอุปกรณ์ แล้วเปิดหน้านี้อีกครั้ง ระหว่างนี้คำตอบจะแสดงเป็นข้อความ"}
+        </p>
+      ) : (
+        <fieldset>
+          <legend>{cloudStatus ? "เสียงสำรองในอุปกรณ์" : "เสียงพูด"}</legend>
+          <label className="voice-option">
             <input
               type="radio"
               name="voice"
-              checked={selectedVoice === voice.id}
-              onChange={() => voiceSettingsStore.update({ voiceId: voice.id })}
+              checked={selectedVoice === AUTOMATIC_VOICE}
+              onChange={() => voiceSettingsStore.update({ voiceId: null })}
             />
-            <span>{voice.name}</span>
+            <span>อัตโนมัติ <small>เลือกเสียงที่ดีที่สุดให้</small></span>
           </label>
-        ))}
-      </fieldset>
+          {voices.map((voice) => (
+            <label className="voice-option" key={voice.id}>
+              <input
+                type="radio"
+                name="voice"
+                checked={selectedVoice === voice.id}
+                onChange={() => voiceSettingsStore.update({ voiceId: voice.id })}
+              />
+              <span>{voice.name}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
 
-      <div className="rate-control">
-        <label htmlFor={rateId}>
-          ความเร็วในการพูด <output htmlFor={rateId}>{describeRate(settings.rate)}</output>
-        </label>
-        <input
-          id={rateId}
-          type="range"
-          min={MIN_SPEECH_RATE}
-          max={MAX_SPEECH_RATE}
-          step={0.1}
-          value={settings.rate}
-          aria-valuetext={describeRate(settings.rate)}
-          onChange={(event) => voiceSettingsStore.update({ rate: Number(event.target.value) })}
-        />
-        <div className="rate-scale" aria-hidden><span>ช้า</span><span>เร็ว</span></div>
-      </div>
+      {canSpeak && (
+        <>
+          <div className="rate-control">
+            <label htmlFor={rateId}>
+              ความเร็วในการพูด <output htmlFor={rateId}>{describeRate(settings.rate)}</output>
+            </label>
+            <input
+              id={rateId}
+              type="range"
+              min={MIN_SPEECH_RATE}
+              max={MAX_SPEECH_RATE}
+              step={0.1}
+              value={settings.rate}
+              aria-valuetext={describeRate(settings.rate)}
+              onChange={(event) => voiceSettingsStore.update({ rate: Number(event.target.value) })}
+            />
+            <div className="rate-scale" aria-hidden><span>ช้า</span><span>เร็ว</span></div>
+          </div>
 
-      <div className="settings-actions">
-        <button type="button" className="btn btn-secondary" onClick={preview}>
-          <Play size={16} aria-hidden /> ทดลองฟัง
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => voiceSettingsStore.update(DEFAULT_VOICE_SETTINGS)}
-        >
-          <RotateCcw size={15} aria-hidden /> ค่าเริ่มต้น
-        </button>
-      </div>
+          <div className="settings-actions">
+            <button type="button" className="btn btn-secondary" onClick={preview}>
+              <Play size={16} aria-hidden /> ทดลองฟัง
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => voiceSettingsStore.update(DEFAULT_VOICE_SETTINGS)}
+            >
+              <RotateCcw size={15} aria-hidden /> ค่าเริ่มต้น
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 }

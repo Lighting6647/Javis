@@ -104,6 +104,29 @@ describe("toGeminiInteractionRequest", () => {
     ]);
   });
 
+  it("แนบภาพหน้าจอในส่วน content ของ user_input ล่าสุดตามรูปแบบ Interactions API", () => {
+    const request = toGeminiInteractionRequest({
+      ...baseRequest,
+      messages: [
+        { role: "user", content: "ก่อนหน้า" },
+        { role: "assistant", content: "ครับ" },
+        { role: "user", content: "อ่านหน้าจอนี้" }
+      ],
+      image: { mimeType: "image/jpeg", data: "QUJDRA==" }
+    });
+    expect(request.input).toEqual([
+      { type: "user_input", content: [{ type: "text", text: "ก่อนหน้า" }] },
+      { type: "model_output", content: [{ type: "text", text: "ครับ" }] },
+      {
+        type: "user_input",
+        content: [
+          { type: "text", text: "อ่านหน้าจอนี้" },
+          { type: "image", data: "QUJDRA==", mime_type: "image/jpeg" }
+        ]
+      }
+    ]);
+  });
+
   it("ใช้โหมด validated เฉพาะตอนที่มีทั้งการค้นของ Google และเครื่องมือของ Javis", () => {
     const searchOnly = toGeminiInteractionRequest({ ...baseRequest, tools: [WEB_SEARCH] });
     expect(searchOnly.tools).toEqual([{ type: "google_search" }]);

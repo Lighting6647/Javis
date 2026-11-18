@@ -22,6 +22,18 @@ describe("sanitizePageContext", () => {
     });
   });
 
+  it("รับเนื้อหาหน้าเว็บและตัดข้อความที่ยาวเกินกำหนด", () => {
+    const context = sanitizePageContext({
+      url: "https://news.example.com/",
+      title: "ข่าว",
+      fields: [],
+      content: `  สรุป   ข่าว  \n ${"ก".repeat(4500)}`
+    });
+
+    expect(context?.content).toHaveLength(4000);
+    expect(context?.content?.startsWith("สรุป ข่าว ก")).toBe(true);
+  });
+
   it.each([
     ["ไม่ใช่ออบเจกต์", "text"],
     ["ที่อยู่ไม่ใช่ http", { url: "file:///C:/secret.html", title: "", fields: [] }],

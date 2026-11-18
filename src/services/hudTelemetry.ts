@@ -1,3 +1,4 @@
+import type { CloudVoiceStatus } from "../speech/cloudVoice";
 import type { AiServiceState } from "./aiStatusStore";
 
 /**
@@ -38,4 +39,18 @@ const AI_STATE_TEXT: Record<AiServiceState, { text: string; tone: ReadoutTone }>
 /** สถานะบริการ AI ตามที่เซิร์ฟเวอร์รายงาน เป็นคำสั้นสำหรับแผงตัวเลข (รายละเอียดเต็มอยู่ที่แถบแจ้งเตือน) */
 export function describeAiState(state: AiServiceState | null): { text: string; tone: ReadoutTone } {
   return AI_STATE_TEXT[state ?? "unchecked"];
+}
+
+/** สถานะเสียงพูดของ Gemini สำหรับแสดงบนแผงตัวเลขของจอ Studio */
+export function describeCloudVoiceState(
+  status: CloudVoiceStatus | null,
+  cloudVoice: string | null
+): { text: string; tone?: ReadoutTone } {
+  if (!status || status.mode === "off" || status.mode === "unavailable") {
+    return { text: "ในอุปกรณ์" };
+  }
+  if (status.mode === "paused") {
+    return { text: "พักชั่วคราว", tone: "wait" };
+  }
+  return { text: cloudVoice ? `Gemini · ${cloudVoice}` : "Gemini", tone: "ok" };
 }

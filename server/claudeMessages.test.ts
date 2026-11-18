@@ -130,6 +130,25 @@ describe("toClaudeMessages", () => {
     // ข้อความระบบขึ้นต้นบทสนทนาไม่ได้ จึงถูกข้ามเหมือนคำตอบที่ไม่มีคำถามนำหน้า
     expect(toClaudeMessages([{ role: "system", content: note }, ...messages.slice(0, 1)])).toEqual([{ role: "user", content: "สวัสดี" }]);
   });
+
+  it("แนบภาพ base64 เข้ากับข้อความล่าสุดของผู้ใช้เมื่อส่ง image", () => {
+    const messages = [
+      { role: "user", content: "สวัสดี" },
+      { role: "assistant", content: "สวัสดีครับ" },
+      { role: "user", content: "อ่านภาพหน้าจอนี้" }
+    ];
+    expect(toClaudeMessages(messages, { mimeType: "image/jpeg", data: "QUJDRA==" })).toEqual([
+      { role: "user", content: "สวัสดี" },
+      { role: "assistant", content: "สวัสดีครับ" },
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "QUJDRA==" } },
+          { type: "text", text: "อ่านภาพหน้าจอนี้" }
+        ]
+      }
+    ]);
+  });
 });
 
 describe("memoryOperatorNote", () => {

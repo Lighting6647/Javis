@@ -14,6 +14,8 @@ import { createSpeechServices, handsFreeAvailable } from "../speech";
 interface ConversationOptions {
   /** เซสชันผ่านการตรวจแล้วและใช้งานได้ บทสนทนาที่เก็บไว้จะถูกคืนให้หลังจากนี้เท่านั้น */
   ready: boolean;
+  /** อ่านสรุปข้อมูลที่กำลังแสดงบนหน้าจอ Javis สำหรับคำสั่งอ่านหน้าจอ */
+  getScreenContext?: () => string | null;
 }
 
 /**
@@ -29,7 +31,7 @@ const runsInBrowserTab = (): boolean => !isDesktopApp() && !Capacitor.isNativePl
 const conversationOwner = (): string | null => sessionStore.get()?.name ?? null;
 
 /** ผูกตัวควบคุมบทสนทนาเข้ากับ React และหยุดเสียงทั้งหมดเมื่อออกจากหน้า */
-export function useConversation({ ready }: ConversationOptions) {
+export function useConversation({ ready, getScreenContext }: ConversationOptions) {
   const [inBrowser] = useState(runsInBrowserTab);
   const [{ controller, synthesizer }] = useState(() => {
     const services = createSpeechServices();
@@ -56,8 +58,14 @@ export function useConversation({ ready }: ConversationOptions) {
           }
         : undefined,
       getPageContext: async () => {
-        if (!browserStore.get().requestedUrl) return null;
-        return (await browserStore.getBridge()?.getContext()) ?? null;
+        const current = browserStore.get();
+        if (!current.requestedUrl) return null;
+        if (isDesktopApp()) return (await browserStore.getBridge()?.getContext()) ?? null;
+        return {
+          url: current.currentUrl || current.requestedUrl,
+          title: current.title || current.currentUrl || current.requestedUrl,
+          fields: []
+        };
       },
       fillPage: async (pageUrl, values) =>
         (await browserStore.getBridge()?.fill(pageUrl, values)) ?? {
@@ -71,6 +79,10 @@ export function useConversation({ ready }: ConversationOptions) {
   });
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const voiceSettings = useSyncExternalStore(voiceSettingsStore.subscribe, voiceSettingsStore.get);
+
+  useEffect(() => {
+    if (getScreenContext) controller.setScreenContextProvider(getScreenContext);
+  }, [controller, getScreenContext]);
 
   useEffect(() => controller.stop, [controller]);
 

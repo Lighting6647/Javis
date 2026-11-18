@@ -4,7 +4,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClaudeEffort } from "./aiProvider.js";
-import { toAlternatingTurns } from "./chatCompletions.js";
+import { type ImageAttachment, toAlternatingTurns } from "./chatCompletions.js";
 
 type Json = Record<string, unknown>;
 /** เนื้อหาของคำขอแบบสตรีม ตามที่ SDK กำหนด */
@@ -80,6 +80,8 @@ export interface ClaudeRequestOptions {
   personalInstructions: string;
   /** ข้อความในบทสนทนา รูปแบบ { role, content } */
   messages: ReadonlyArray<{ role: string; content: string }>;
+  /** ภาพหน้าจอที่แนบมากับข้อความล่าสุดของผู้ใช้ (ถ้ามี) */
+  image?: ImageAttachment;
   /** เครื่องมือในรูปแบบของ Responses API รวมถึง { type: "web_search" } ถ้าให้ค้นเว็บ */
   tools: readonly unknown[];
   maxTokens: number;
@@ -96,11 +98,34 @@ export interface ClaudeRequestOptions {
  * จัดบทสนทนาให้เริ่มที่ผู้ใช้และสลับผู้พูดทุกข้อความ ตามที่ Claude กำหนด
  * ข้อความ role "system" คือข้อความระบบกลางบทสนทนา ซึ่งต้องตามหลังข้อความของผู้ใช้ทันที (ดู memoryOperatorNote)
  */
-export function toClaudeMessages(messages: ReadonlyArray<{ role: string; content: string }>): ClaudeMessage[] {
-  return toAlternatingTurns(messages).map(({ role, content }) => ({
-    role: role === "assistant" || role === "system" ? role : "user",
-    content
-  }));
+export function toClaudeMessages(
+  messages: ReadonlyArray<{ role: string; content: string }>,
+  image?: ImageAttachment
+): ClaudeMessage[] {
+  const turns = toAlternatingTurns(messages);
+  const lastUserIndex = image ? turns.map((turn) => turn.role).lastIndexOf("user") : -1;
+  return turns.map(({ role, content }, index): ClaudeMessage => {
+    if (image && index === lastUserIndex) {
+      return {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: image.mimeType,
+              data: image.data
+            }
+          },
+          { type: "text", text: content }
+        ]
+      };
+    }
+    return {
+      role: role === "assistant" || role === "system" ? role : "user",
+      content
+    };
+  });
 }
 
 /**
@@ -125,7 +150,7 @@ export function toClaudeRequest(options: ClaudeRequestOptions): ClaudeRequest {
       { type: "text", text: options.fixedInstructions, cache_control: { type: "ephemeral" } },
       { type: "text", text: options.personalInstructions }
     ],
-    messages: toClaudeMessages(options.messages),
+    messages: toClaudeMessages(options.messages, options.image),
     ...(tools.length > 0 ? { tools } : {}),
     ...(extras && options.effort ? { output_config: { effort: options.effort } } : {}),
     // Claude อาจปฏิเสธคำขอที่ไม่มีพิษภัยได้ (ตัวกรองความปลอดภัยทำงานพลาด) ให้ Anthropic ลองตอบด้วยโมเดลสำรองในคำขอเดียวกัน
