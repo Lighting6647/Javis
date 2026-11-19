@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { describeLinkStatus, needsPopupHelp } from "../conversation/pageLink";
 import { hostOf, sourceLabel, splitLinks } from "../conversation/richText";
 import type { ConversationMessage, FillRequest } from "../conversation/types";
+import { FeedbackButtons } from "./FeedbackButtons";
 import { MeetingExport } from "./MeetingExport";
 import { PopupHelp } from "./PopupHelp";
 import { SearchSuggestions } from "./SearchSuggestions";
@@ -142,6 +143,9 @@ export function MessageBubble({ message, onOpenLink, onShowFramed, onLinkOpened,
       )}
 
       {message.suggestions && message.suggestions.length > 0 && <SearchSuggestions blocks={message.suggestions} />}
+
+      {/* คำติชมของทุกคำตอบ เก็บบนเซิร์ฟเวอร์เพื่อใช้ปรับปรุงคำตอบ (npm run learn) */}
+      {!fromUser && message.text && <FeedbackButtons reply={message.text} />}
     </article>
   );
 }

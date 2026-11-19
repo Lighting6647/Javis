@@ -18,7 +18,7 @@ export const MIC_GRANTED = ["--use-fake-device-for-media-stream", "--use-fake-ui
 export const MIC_NOT_GRANTED = ["--use-fake-device-for-media-stream"];
 
 /** ตัวแปรของเครื่องนักพัฒนาที่ต้องไม่หลุดเข้าเซิร์ฟเวอร์ทดสอบ: กุญแจจริง และการตั้งค่าที่เปลี่ยนพฤติกรรม */
-const DEVELOPER_SETTINGS = /^(ANTHROPIC_|OPENAI_|GEMINI_|TAVILY_|AI_|WEB_SEARCH|WEB_FRAMES|ACCESS_CODES|SESSION_SECRET|DIAGNOSTIC_)/;
+const DEVELOPER_SETTINGS = /^(ANTHROPIC_|OPENAI_|GEMINI_|TAVILY_|AI_|WEB_SEARCH|WEB_FRAMES|ACCESS_CODES|SESSION_SECRET|DIAGNOSTIC_|DATABASE_URL$)/;
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

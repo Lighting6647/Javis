@@ -489,9 +489,58 @@ try {
       const summarySize = await overflow(page);
       check(`${label} คำสรุปในบทสนทนา: ไม่ล้นจอแนวนอน`, summarySize.page <= 0 && summarySize.header <= 0, JSON.stringify(summarySize));
       await shot(page, `summary-${theme}-${viewport.width}`);
+      // ปุ่ม 👍/👎 ใต้คำตอบ: กด 👎 แล้วช่องหมายเหตุต้องไม่ล้นจอ ส่งแล้วเห็นข้อความขอบคุณ
+      const summary = page.locator(".thread .message.assistant").last();
+      check(`${label} มีปุ่ม 👍/👎 ใต้คำตอบ`, (await summary.locator(".feedback-buttons button").count()) === 2);
+      await summary.getByRole("button", { name: "คำตอบนี้ไม่ดี" }).click();
+      await summary.locator(".feedback-note input").fill("สรุปยาวเกินไป อยากได้เป็นข้อ ๆ สั้นกว่านี้ ".repeat(4));
+      const noteSize = await overflow(page);
+      const noteRight = await summary.locator(".feedback-note").evaluate((node) => Math.round(node.getBoundingClientRect().right - window.innerWidth));
+      check(`${label} ช่องหมายเหตุ 👎: ไม่ล้นจอแนวนอน`, noteSize.page <= 0 && noteRight <= 0, JSON.stringify({ ...noteSize, noteRight }));
+      await shot(page, `feedback-${theme}-${viewport.width}`);
+      await summary.getByRole("button", { name: "ส่งคำติชม" }).click();
+      await summary.locator(".feedback-status").waitFor({ timeout: 5000 });
+      check(`${label} ส่งคำติชมแล้วเห็นข้อความรับทราบ`, (await summary.locator(".feedback-status").textContent())?.includes("รับทราบ") === true);
       check(`${label}: คอนโซลไม่มีข้อผิดพลาดหรือคำเตือน`, problems.length === 0, describeProblems(problems));
       await context.close();
     }
+  }
+
+  // ---------- 7. ความจำซิงก์กับเซิร์ฟเวอร์ และคำติชมถูกเก็บ ----------
+  if (wanted(7) && !app.live) {
+    const context = await openContext({ stubAi: true });
+    // ความจำที่มีอยู่ในเครื่องก่อนเปิดแอป (ผู้ใช้ไม่ได้เข้าสู่ระบบ ใช้ช่อง _)
+    await context.addInitScript(() => {
+      if (!sessionStorage.getItem("seeded")) {
+        localStorage.setItem("javis.memories:_", JSON.stringify([{ id: "mlocal1", text: "ผู้ใช้ชอบคำตอบสั้น", createdAt: 1 }]));
+        sessionStorage.setItem("seeded", "1");
+      }
+    });
+    const { page, problems } = await openPage(context, { expectListening: false });
+    // ความจำบนเซิร์ฟเวอร์ที่จำไว้จากอุปกรณ์อื่น
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch("/api/memories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memories: [{ id: "mremote1", text: "ผู้ใช้ทำงานด้านไอที", createdAt: 0 }, { id: "mlocal1", text: "ผู้ใช้ชอบคำตอบสั้น", createdAt: 1 }] })
+      });
+      return response.status;
+    });
+    check("กรณีที่ 7: บันทึกความจำขึ้นเซิร์ฟเวอร์ได้", seeded === 200);
+    await page.reload();
+    await page.waitForSelector(".status-pill");
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem("javis.memories:_") ?? "[]")).length === 2, null, { timeout: 5000 }).catch(() => undefined);
+    const local = await page.evaluate(() => JSON.parse(localStorage.getItem("javis.memories:_") ?? "[]").map((item) => item.id));
+    check("กรณีที่ 7: ความจำจากเซิร์ฟเวอร์รวมเข้ากับความจำในเครื่อง", JSON.stringify(local) === JSON.stringify(["mremote1", "mlocal1"]), JSON.stringify(local));
+    const status = await page.evaluate(async () => (await (await fetch("/api/status")).json()).storage);
+    check("กรณีที่ 7: /api/status บอกที่เก็บข้อมูล (memory เมื่อไม่มี DATABASE_URL)", status === "memory", String(status));
+    const summary = await page.evaluate(async () => {
+      await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rating: "up" }) });
+      return (await (await fetch("/api/feedback/summary?days=7")).json()).summary;
+    });
+    check("กรณีที่ 7: สรุปคำติชม 7 วันนับคำติชมที่ส่ง", summary?.up >= 1 && summary?.days === 7, JSON.stringify(summary));
+    check("กรณีที่ 7: คอนโซลไม่มีข้อผิดพลาด", problems.length === 0, describeProblems(problems));
+    await context.close();
   }
 } catch (error) {
   check("ชุดตรวจเดินจนจบ", false, String(error?.stack ?? error).split("\n").slice(0, 4).join(" | "));

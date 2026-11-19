@@ -27,6 +27,8 @@ import { z } from "zod";
 import { fetchProjectCloudStatus } from "./cloudControl.js";
 import { runProjectAction } from "./projectRunner.js";
 import { findProject, listProjects } from "./projects.js";
+import { createUserRoutes } from "./userRoutes.js";
+import { getUserStore } from "./userStore.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
@@ -100,6 +102,8 @@ export function createApp(options: AppOptions = {}): Express {
       ai: aiAccount.snapshot(),
       voice: { cloud: config.cloudVoice !== null },
       retiring: aiAccount.getRetiring(),
+      // ที่เก็บความจำ/คำติชม: postgres = ถาวรข้ามอุปกรณ์, memory = หายเมื่อเซิร์ฟเวอร์รีสตาร์ต
+      storage: getUserStore().kind,
       provider: {
         name: config.ai.name,
         label: config.ai.label,
@@ -157,6 +161,12 @@ export function createApp(options: AppOptions = {}): Express {
     }
     response.json({ ok: true, item: updated, telemetry: getJevTelemetry() });
   });
+  // ความจำและคำติชมบนเซิร์ฟเวอร์ (server/userStore.ts): Postgres เมื่อตั้ง DATABASE_URL ไม่อย่างนั้นเก็บในหน่วยความจำ
+  const userRoutes = createUserRoutes(getUserStore);
+  app.get("/api/memories", requireAuth, userRoutes.getMemories);
+  app.put("/api/memories", requireAuth, userRoutes.putMemories);
+  app.post("/api/feedback", requireAuth, userRoutes.postFeedback);
+  app.get("/api/feedback/summary", requireAuth, userRoutes.feedbackSummary);
   app.get("/api/auth/session", sessionHandler);
   app.post("/api/auth/login", loginRateLimiter, loginHandler);
   app.post(

@@ -560,6 +560,19 @@ iframe.browser-frame { width: 100%; }
 .fill-status.pending, .fill-status.filled { color: var(--accent); background: var(--accent-soft); }
 .fill-status.failed { color: var(--danger); background: var(--danger-soft); }
 
+/* ---------- Feedback (👍/👎 ใต้คำตอบ) ---------- */
+.feedback-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; align-self: flex-start; max-width: 100%; }
+.feedback-buttons button, .feedback-note button { display: inline-grid; place-items: center; width: 32px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--text-muted); background: transparent; transition: color .15s, background .15s, border-color .15s; }
+.feedback-buttons button:hover:not(:disabled), .feedback-note button:hover { color: var(--accent); border-color: var(--accent-ring); background: var(--accent-soft); }
+.feedback-buttons button:active:not(:disabled), .feedback-note button:active { transform: scale(.94); }
+.feedback-buttons button:focus-visible, .feedback-note button:focus-visible, .feedback-note input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.feedback-buttons button:disabled { opacity: .5; cursor: progress; }
+.feedback-error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.feedback-status { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; max-width: 100%; color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.feedback-note { display: flex; align-items: center; gap: 4px; width: min(100%, 360px); }
+.feedback-note input { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--text); background: var(--surface); font: inherit; font-size: 13px; }
+.feedback-note button { flex: none; }
+
 /* ---------- Memory ---------- */
 .memory-note { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; max-width: 100%; padding: 4px 6px 4px 10px; border-radius: var(--radius-full); color: var(--accent); background: var(--accent-soft); font-size: 12px; font-weight: 500; }
 .memory-note svg { flex: none; }

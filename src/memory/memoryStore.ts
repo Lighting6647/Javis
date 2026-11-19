@@ -9,7 +9,7 @@ export const MAX_MEMORIES = 50;
 export const MAX_MEMORY_LENGTH = 200;
 export const MEMORY_ID_PATTERN = /^m[a-z0-9]{1,12}$/;
 
-/** เรื่องหนึ่งเรื่องที่ Javis จำเกี่ยวกับผู้ใช้ เก็บอยู่ในอุปกรณ์นี้เท่านั้น */
+/** เรื่องหนึ่งเรื่องที่ Javis จำเกี่ยวกับผู้ใช้ เก็บในอุปกรณ์ และซิงก์ขึ้นเซิร์ฟเวอร์ (src/memory/memorySync.ts) */
 export interface MemoryItem {
   id: string;
   text: string;
@@ -78,6 +78,11 @@ function load(): MemoryItem[] {
 let items = load();
 const listeners = new Set<() => void>();
 
+/** การเปลี่ยนแปลงที่ผู้ใช้ทำเอง (จำ ลืม ล้าง) ส่งรหัสของเรื่องที่ถูกลบไปด้วย ให้ตัวซิงก์บันทึกขึ้นเซิร์ฟเวอร์ */
+export type MemoryMutationListener = (removedIds: string[]) => void;
+const mutationListeners = new Set<MemoryMutationListener>();
+const notifyMutation = (removedIds: string[]) => mutationListeners.forEach((listener) => listener(removedIds));
+
 function commit(next: MemoryItem[]): void {
   items = next;
   try {
@@ -95,7 +100,7 @@ sessionStore.subscribe(() => {
   listeners.forEach((listener) => listener());
 });
 
-/** ความจำระยะยาวของ Javis เก็บในอุปกรณ์ แยกตามผู้ใช้ที่เข้าสู่ระบบ */
+/** ความจำระยะยาวของ Javis เก็บในอุปกรณ์ แยกตามผู้ใช้ที่เข้าสู่ระบบ และซิงก์กับเซิร์ฟเวอร์ */
 export const memoryStore = {
   get: (): MemoryItem[] => items,
   subscribe: (listener: () => void): (() => void) => {
@@ -111,16 +116,39 @@ export const memoryStore = {
     if (!clean || items.some((item) => item.text.toLowerCase() === clean.toLowerCase())) return null;
 
     const item: MemoryItem = { id: nextId(), text: clean, createdAt: Date.now() };
-    commit([...items, item].slice(-MAX_MEMORIES));
+    const next = [...items, item];
+    const dropped = next.slice(0, Math.max(0, next.length - MAX_MEMORIES)).map((entry) => entry.id);
+    commit(next.slice(-MAX_MEMORIES));
+    notifyMutation(dropped);
     return item;
   },
 
   /** ลืมเรื่องหนึ่งเรื่อง คืนรายการที่ถูกลบ หรือ null ถ้าไม่พบ */
   remove(id: string): MemoryItem | null {
     const found = items.find((item) => item.id === id) ?? null;
-    if (found) commit(items.filter((item) => item.id !== id));
+    if (found) {
+      commit(items.filter((item) => item.id !== id));
+      notifyMutation([id]);
+    }
     return found;
   },
 
-  clear: (): void => commit([])
+  clear: (): void => {
+    const removed = items.map((item) => item.id);
+    commit([]);
+    notifyMutation(removed);
+  },
+
+  /** แทนที่ทั้งรายการด้วยข้อมูลที่รวมกับเซิร์ฟเวอร์แล้ว (ไม่นับเป็นการเปลี่ยนของผู้ใช้ จึงไม่บันทึกกลับซ้ำ) */
+  replace: (next: MemoryItem[]): void => commit(sanitizeMemories(next)),
+
+  /** ผู้ใช้ปัจจุบัน (ชื่อที่เข้าสู่ระบบ หรือ _ ) ใช้ตรวจว่าผลจากเซิร์ฟเวอร์ยังเป็นของคนเดิม */
+  owner: (): string => sessionStore.get()?.name ?? ANONYMOUS_OWNER,
+
+  subscribeMutations: (listener: MemoryMutationListener): (() => void) => {
+    mutationListeners.add(listener);
+    return () => {
+      mutationListeners.delete(listener);
+    };
+  }
 };
