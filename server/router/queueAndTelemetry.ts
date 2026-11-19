@@ -185,3 +185,74 @@ export function resolveReviewItem(id: string, status: Exclude<ReviewItemStatus, 
   }
   return { ...target };
 }
+
+/** สถานะทั้งหมดของ router ที่เก็บลงฐานข้อมูลได้ (ไม่มีข้อความดิบของผู้ใช้ คิวเก็บเฉพาะ redactedGoal) */
+export interface JevRouterState {
+  version: 1;
+  telemetry: {
+    decisions: number;
+    heldAtGate: number;
+    blockedByNoul: number;
+    fastTierCount: number;
+    proTierCount: number;
+    totalLatencyMs: number;
+    totalCostUsd: number;
+    estimatedHeavyLlmCostUsd: number;
+    lastBusReaders: number;
+    queues: Record<QueueBucket, number>;
+    workerRuns: Record<string, number>;
+    recentLog: JevTelemetrySnapshot["recentLog"];
+  };
+  reviewQueue: ReviewQueueItem[];
+}
+
+export function exportJevState(): JevRouterState {
+  return {
+    version: 1,
+    telemetry: {
+      ...telemetryState,
+      queues: { ...telemetryState.queues },
+      workerRuns: { ...telemetryState.workerRuns },
+      recentLog: telemetryState.recentLog.map((entry) => ({ ...entry }))
+    },
+    reviewQueue: reviewQueue.map((item) => ({ ...item }))
+  };
+}
+
+const num = (value: unknown, fallback = 0) => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
+
+/** โหลดสถานะที่อ่านจากฐานข้อมูล ข้อมูลผิดรูปถูกข้ามเพื่อไม่ให้ router พัง คืน false เมื่อใช้ไม่ได้ */
+export function importJevState(raw: unknown): boolean {
+  if (typeof raw !== "object" || raw === null) return false;
+  const state = raw as Partial<JevRouterState>;
+  if (state.version !== 1 || typeof state.telemetry !== "object" || state.telemetry === null) return false;
+  const t = state.telemetry;
+  telemetryState.decisions = num(t.decisions);
+  telemetryState.heldAtGate = num(t.heldAtGate);
+  telemetryState.blockedByNoul = num(t.blockedByNoul);
+  telemetryState.fastTierCount = num(t.fastTierCount);
+  telemetryState.proTierCount = num(t.proTierCount);
+  telemetryState.totalLatencyMs = num(t.totalLatencyMs);
+  telemetryState.totalCostUsd = num(t.totalCostUsd);
+  telemetryState.estimatedHeavyLlmCostUsd = num(t.estimatedHeavyLlmCostUsd);
+  telemetryState.lastBusReaders = num(t.lastBusReaders);
+  const queues = (t.queues ?? {}) as Partial<Record<QueueBucket, unknown>>;
+  telemetryState.queues = {
+    fast: num(queues.fast),
+    research: num(queues.research),
+    reasoning: num(queues.reasoning),
+    review: num(queues.review)
+  };
+  const runs = (t.workerRuns ?? {}) as Record<string, unknown>;
+  telemetryState.workerRuns = Object.fromEntries(WORKER_ROLES.map((slot) => [slot.id, num(runs[slot.id])]));
+  telemetryState.recentLog = Array.isArray(t.recentLog) ? t.recentLog.slice(0, MAX_LOG) : [];
+  reviewQueue.length = 0;
+  if (Array.isArray(state.reviewQueue)) {
+    for (const item of state.reviewQueue.slice(0, MAX_REVIEW_ITEMS)) {
+      if (item && typeof item.id === "string" && /^rev_[a-zA-Z0-9-]{4,32}$/.test(item.id)) {
+        reviewQueue.push({ ...item, redactedGoal: redactGoalSummary(String(item.redactedGoal ?? "")) });
+      }
+    }
+  }
+  return true;
+}

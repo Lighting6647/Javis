@@ -1,6 +1,7 @@
 import cors from "cors";
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
+import { rateLimitStore } from "./rateLimitStore.js";
 import helmet from "helmet";
 import type { IncomingHttpHeaders } from "node:http";
 import { config, normalizeOrigin } from "./config.js";
@@ -77,6 +78,7 @@ export const corsMiddleware = cors((request, callback) => {
 });
 
 export const chatRateLimiter = rateLimit({
+  store: rateLimitStore("chat"),
   windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
   limit: config.chatRateLimitMax,
   standardHeaders: "draft-8",
@@ -97,6 +99,7 @@ export const chatRateLimiter = rateLimit({
  * คำขอสนทนาปกติ (ไม่มีบันทึกการประชุม) ไม่ถูกนับ
  */
 export const meetingRateLimiter = rateLimit({
+  store: rateLimitStore("meeting"),
   windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
   limit: MEETING_RATE_LIMIT_MAX,
   standardHeaders: "draft-8",
@@ -117,6 +120,7 @@ export const meetingRateLimiter = rateLimit({
  * รหัส "rate" ให้หน้าเว็บแยกออกจากโควตาของ Google หมด ซึ่งต้องพักนานกว่า
  */
 export const speechRateLimiter = rateLimit({
+  store: rateLimitStore("speech"),
   windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
   limit: config.chatRateLimitMax * 3,
   standardHeaders: "draft-8",
@@ -131,6 +135,7 @@ export const speechRateLimiter = rateLimit({
 });
 
 export const transcribeRateLimiter = rateLimit({
+  store: rateLimitStore("transcribe"),
   windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
   limit: config.chatRateLimitMax,
   standardHeaders: "draft-8",
@@ -146,6 +151,7 @@ export const transcribeRateLimiter = rateLimit({
 
 /** กันการเดารหัสเข้าใช้งาน: นับเฉพาะครั้งที่ล้มเหลว */
 export const loginRateLimiter = rateLimit({
+  store: rateLimitStore("login"),
   windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
   limit: LOGIN_MAX_FAILED_ATTEMPTS,
   skipSuccessfulRequests: true,

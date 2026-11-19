@@ -1,6 +1,8 @@
 import {
   enqueueReviewItem,
+  exportJevState,
   getJevTelemetry,
+  importJevState,
   listReviewQueue,
   recordTelemetry,
   redactGoalSummary,
@@ -12,8 +14,12 @@ import { DEFAULT_GATE, evaluateLocalSystemOne, resolveRoutedModel } from "./syst
 import type { JevRouteDecision, JevStateIn } from "./types.js";
 
 export * from "./types.js";
+export { routerPersistence } from "./persistence.js";
+export type { JevRouterState } from "./queueAndTelemetry.js";
 export {
   buildStateBusSnapshot,
+  exportJevState,
+  importJevState,
   DEFAULT_GATE,
   evaluateLocalSystemOne,
   getJevTelemetry,

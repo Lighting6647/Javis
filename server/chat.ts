@@ -42,7 +42,7 @@ import { describeUpstreamFailure } from "./upstreamError.js";
 import { MAX_READ_TEXT_LENGTH, readWebPage } from "./webReader.js";
 import { searchCache } from "./searchUsage.js";
 import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
-import { resolveRoutedModel, routeVoiceTurn } from "./jevRouter.js";
+import { resolveRoutedModel, routerPersistence, routeVoiceTurn } from "./jevRouter.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -804,11 +804,14 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
 
   // JEV System-One Pre-Flight Router (Choice / Score / Noul Safety Gate): ตัดสินในเครื่อง ไม่ส่งคำถามออกไปภายนอก
   const latestUserGoal = messages.at(-1)?.content ?? "";
+  // โหลดคิว/telemetry จากฐานข้อมูลครั้งแรกของ instance แล้วบันทึกหลังตัดสิน (ไม่รอ เพื่อไม่หน่วงคำตอบ)
+  await routerPersistence.load();
   const jevRoute = routeVoiceTurn({
     goal: latestUserGoal,
     notes: meeting ? ["meeting-summary-mode"] : image ? ["screen-capture-vision"] : [],
     evidenceCount: memories?.length ?? 0
   });
+  void routerPersistence.save();
   if (!jevRoute.safeToRun) {
     response.status(400).json({
       error: "คำสั่งถูกระงับโดย JEV Noul Safety Gate เพื่อความปลอดภัยของระบบ",

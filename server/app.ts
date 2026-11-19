@@ -21,7 +21,7 @@ import {
 import { createSpeechHandler } from "./speech.js";
 import { createVoiceReplicationHandlers } from "./voiceReplication.js";
 import { transcribeHandler } from "./transcribe.js";
-import { getJevTelemetry, listReviewQueue, resolveReviewItem, routeVoiceTurn } from "./jevRouter.js";
+import { getJevTelemetry, listReviewQueue, resolveReviewItem, routerPersistence, routeVoiceTurn } from "./jevRouter.js";
 import { createSearchUsageReader } from "./searchUsage.js";
 import { z } from "zod";
 import { fetchProjectCloudStatus } from "./cloudControl.js";
@@ -125,31 +125,36 @@ export function createApp(options: AppOptions = {}): Express {
   app.get("/api/search/usage", requireAuth, async (_request, response) => {
     response.set("Cache-Control", "no-store").json({ search: await readSearchUsage() });
   });
-  app.get("/api/router/telemetry", requireAuth, (_request, response) => {
+  // คิวและ telemetry ของ router: โหลดจากฐานข้อมูลก่อนอ่าน (เห็นข้อมูลของทุก instance) และบันทึกหลังแก้ เมื่อมี DATABASE_URL
+  app.get("/api/router/telemetry", requireAuth, async (_request, response) => {
+    await routerPersistence.load(true);
     response.set("Cache-Control", "no-store").json({ ok: true, telemetry: getJevTelemetry() });
   });
-  app.post("/api/router/classify", requireAuth, (request, response) => {
+  app.post("/api/router/classify", requireAuth, async (request, response) => {
     const body = request.body as { goal?: unknown; notes?: unknown; gapsCount?: unknown } | undefined;
     const goal = typeof body?.goal === "string" ? body.goal.trim() : "";
     if (!goal) {
       response.status(400).json({ ok: false, error: "กรุณาระบุข้อความ goal สำหรับ JEV Router" });
       return;
     }
+    await routerPersistence.load(true);
     const decision = routeVoiceTurn({
       goal,
       notes: Array.isArray(body?.notes) ? body.notes.map(String) : [],
       gapsCount: typeof body?.gapsCount === "number" ? body.gapsCount : 0,
     });
+    await routerPersistence.save();
     response.json({ ok: true, decision, telemetry: getJevTelemetry() });
   });
-  app.get("/api/router/queue", requireAuth, (_request, response) => {
+  app.get("/api/router/queue", requireAuth, async (_request, response) => {
+    await routerPersistence.load(true);
     response.set("Cache-Control", "no-store").json({
       ok: true,
       items: listReviewQueue(),
       telemetry: getJevTelemetry(),
     });
   });
-  app.post("/api/router/queue/:id/decision", requireAuth, (request, response) => {
+  app.post("/api/router/queue/:id/decision", requireAuth, async (request, response) => {
     const rawId = request.params.id;
     const id = typeof rawId === "string" ? rawId : "";
     const parsedDecision = z.object({ decision: z.enum(["approved", "rejected"]) }).safeParse(request.body);
@@ -157,7 +162,9 @@ export function createApp(options: AppOptions = {}): Express {
       response.status(400).json({ ok: false, error: "ข้อมูลคำขออนุมัติไม่ถูกต้องครับ" });
       return;
     }
+    await routerPersistence.load(true);
     const updated = resolveReviewItem(id, parsedDecision.data.decision);
+    if (updated) await routerPersistence.save();
     if (!updated) {
       response.status(404).json({ ok: false, error: "ไม่พบรายการในคิวตรวจสอบครับ" });
       return;
