@@ -43,6 +43,7 @@ import { MAX_READ_TEXT_LENGTH, readWebPage } from "./webReader.js";
 import { searchCache } from "./searchUsage.js";
 import { searchWeb, type WebSearchOutcome, type WebSearchResult } from "./webSearch.js";
 import { resolveRoutedModel, routerPersistence, routeVoiceTurn } from "./jevRouter.js";
+import { selectRelevantMemories } from "./memoryRelevance.js";
 
 export const MAX_CHAT_MESSAGES = 24;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -796,7 +797,10 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   const clientGone = new AbortController();
   response.on("close", () => clientGone.abort());
 
-  const { messages, page, screen, image, memories, diagnose, meeting } = parsed.data;
+  const { messages, page, screen, image, memories: allMemories, diagnose, meeting } = parsed.data;
+  // ความจำเกิน 20 เรื่อง: ส่งให้ AI เฉพาะเรื่องที่เกี่ยวกับคำถาม (เลือกในเครื่อง ไม่มีค่าใช้จ่าย) ส่วนการจำ/ลืมยังตรวจกับทุกเรื่อง
+  const userTurns = messages.filter((message) => message.role === "user");
+  const memories = selectRelevantMemories(allMemories, userTurns.slice(-2).map((message) => message.content).join(" "));
   const meetingHistory = parsed.data.meetingHistory ?? [];
   const hasMeetingHistory = meetingHistory.length > 0;
   const pageFields = page?.fields ?? [];
@@ -809,7 +813,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   const jevRoute = routeVoiceTurn({
     goal: latestUserGoal,
     notes: meeting ? ["meeting-summary-mode"] : image ? ["screen-capture-vision"] : [],
-    evidenceCount: memories?.length ?? 0
+    evidenceCount: allMemories?.length ?? 0
   });
   void routerPersistence.save();
   if (!jevRoute.safeToRun) {
@@ -1152,7 +1156,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     response.flushHeaders();
   };
 
-  const reducer = createResponseReducer({ pageFields, memories });
+  const reducer = createResponseReducer({ pageFields, memories: allMemories });
   const send = (event: unknown) => {
     openStream();
     response.write(`${JSON.stringify(event)}\n`);
