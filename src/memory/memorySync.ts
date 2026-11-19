@@ -1,6 +1,6 @@
-import { fetchSessionStatus } from "../services/authApi";
 import { sessionStore } from "../services/sessionStore";
-import { fetchServerMemories, saveServerMemories, type ServerMemory } from "../services/userDataApi";
+import { sessionAllowsSync, startListSync, type ListSyncDeps } from "../services/serverSync";
+import { fetchServerMemories, saveServerMemories } from "../services/userDataApi";
 import { MAX_MEMORIES, memoryStore, sanitizeMemories, type MemoryItem } from "./memoryStore";
 
 /**
@@ -24,85 +24,21 @@ export function mergeMemories(local: MemoryItem[], remote: MemoryItem[], removed
   return merged.slice(-MAX_MEMORIES);
 }
 
-const sameList = (a: MemoryItem[], b: MemoryItem[]) =>
+const sameList = (a: readonly MemoryItem[], b: readonly MemoryItem[]) =>
   a.length === b.length && a.every((item, index) => item.id === b[index]?.id && item.text === b[index]?.text);
 
-export interface MemorySyncDeps {
-  fetchRemote: () => Promise<ServerMemory[]>;
-  saveRemote: (items: ServerMemory[]) => Promise<unknown>;
-  store: Pick<typeof memoryStore, "get" | "replace" | "owner" | "subscribeMutations">;
-  onSessionChange: (listener: () => void) => () => void;
-  /**
-   * เซิร์ฟเวอร์ยอมให้ผู้ใช้ปัจจุบันใช้ข้อมูลบนเซิร์ฟเวอร์ไหม (ไม่บังคับล็อกอิน หรือล็อกอินแล้ว)
-   * ยังไม่ล็อกอินบนเซิร์ฟเวอร์ที่บังคับ: ไม่ต้องลองเรียก เพราะจะได้ 401 ทุกครั้ง
-   */
-  canSync?: () => Promise<boolean>;
-}
+export type MemorySyncDeps = Omit<ListSyncDeps<MemoryItem>, "merge" | "same">;
 
 /**
  * ซิงก์ความจำกับเซิร์ฟเวอร์: ดึงมารวมตอนเปิดแอปและตอนเปลี่ยนผู้ใช้ แล้วบันทึกกลับทุกครั้งที่จำหรือลืม
  * เซิร์ฟเวอร์ไม่ตอบ (ออฟไลน์ ยังไม่เข้าสู่ระบบ ฐานข้อมูลล่ม) ความจำในเครื่องยังใช้ได้ตามเดิม
- * คืนฟังก์ชันหยุดซิงก์ และ promise ของการดึงครั้งแรก (ใช้ในเทสต์)
  */
 export function startMemorySync(deps: MemorySyncDeps = defaultDeps()) {
-  const removedIds = new Set<string>();
-  let saving: Promise<unknown> = Promise.resolve();
-  /** ขอบันทึกตามลำดับ เพื่อไม่ให้คำขอเก่าที่มาถึงช้าทับรายการใหม่ */
-  /** ผลตรวจสิทธิ์ของผู้ใช้ปัจจุบัน ตรวจครั้งเดียวต่อผู้ใช้ */
-  let allowed: { owner: string; result: Promise<boolean> } | null = null;
-  const canSync = () => {
-    const owner = deps.store.owner();
-    if (allowed?.owner !== owner) {
-      allowed = { owner, result: (deps.canSync?.() ?? Promise.resolve(true)).catch(() => false) };
-    }
-    return allowed.result;
-  };
-
-  const save = () => {
-    const owner = deps.store.owner();
-    saving = saving
-      .catch(() => undefined)
-      .then(async () => (deps.store.owner() === owner && (await canSync()) ? deps.saveRemote(deps.store.get()) : undefined))
-      .catch(() => undefined);
-    return saving;
-  };
-
-  const pull = async () => {
-    const owner = deps.store.owner();
-    let remote: ServerMemory[];
-    try {
-      if (!(await canSync())) return;
-      remote = await deps.fetchRemote();
-    } catch {
-      return;
-    }
-    // เปลี่ยนผู้ใช้ระหว่างรอ: ผลนี้ไม่ใช่ของผู้ใช้ปัจจุบัน
-    if (deps.store.owner() !== owner) return;
-    const local = deps.store.get();
-    const merged = mergeMemories(local, remote, removedIds);
-    if (!sameList(merged, local)) deps.store.replace(merged);
-    if (!sameList(merged, sanitizeMemories(remote))) await save();
-  };
-
-  const stopMutations = deps.store.subscribeMutations((removed) => {
-    removed.forEach((id) => removedIds.add(id));
-    void save();
+  return startListSync<MemoryItem>({
+    ...deps,
+    merge: (local, remote, removed) => mergeMemories([...local], [...remote], removed),
+    same: sameList
   });
-  const stopSession = deps.onSessionChange(() => {
-    removedIds.clear();
-    allowed = null;
-    void pull();
-  });
-  const initial = pull();
-
-  return {
-    ready: initial,
-    flush: () => saving,
-    stop: () => {
-      stopMutations();
-      stopSession();
-    }
-  };
 }
 
 function defaultDeps(): MemorySyncDeps {
@@ -111,9 +47,6 @@ function defaultDeps(): MemorySyncDeps {
     saveRemote: saveServerMemories,
     store: memoryStore,
     onSessionChange: sessionStore.subscribe,
-    canSync: async () => {
-      const status = await fetchSessionStatus();
-      return !status.authRequired || status.authenticated;
-    }
+    canSync: sessionAllowsSync
   };
 }

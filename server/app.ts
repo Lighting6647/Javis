@@ -91,6 +91,9 @@ export function createApp(options: AppOptions = {}): Express {
     speechRateLimiter,
     voiceReplication.replicateVoice
   );
+  // ประวัติประชุม 15 ครั้งพร้อมบันทึกคำพูดใหญ่กว่าคำขอทั่วไป จึงมีตัวอ่านเนื้อหาของตัวเอง (ต้องอยู่ก่อนตัวอ่าน 200kb)
+  const userRoutes = createUserRoutes(getUserStore);
+  app.put("/api/meetings", requireAuth, express.json({ limit: "2mb" }), userRoutes.putMeetings);
   app.use("/api", express.json({ limit: "200kb" }));
   app.get("/api/voices", requireAuth, voiceReplication.listVoices);
   app.delete("/api/voices/:id", requireAuth, voiceReplication.deleteVoice);
@@ -162,7 +165,7 @@ export function createApp(options: AppOptions = {}): Express {
     response.json({ ok: true, item: updated, telemetry: getJevTelemetry() });
   });
   // ความจำและคำติชมบนเซิร์ฟเวอร์ (server/userStore.ts): Postgres เมื่อตั้ง DATABASE_URL ไม่อย่างนั้นเก็บในหน่วยความจำ
-  const userRoutes = createUserRoutes(getUserStore);
+  app.get("/api/meetings", requireAuth, userRoutes.getMeetings);
   app.get("/api/memories", requireAuth, userRoutes.getMemories);
   app.put("/api/memories", requireAuth, userRoutes.putMemories);
   app.post("/api/feedback", requireAuth, userRoutes.postFeedback);

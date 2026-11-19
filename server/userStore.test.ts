@@ -6,6 +6,7 @@ import {
   createPostgresUserStore,
   ownerOf,
   redactFreeText,
+  sanitizeStoredMeetings,
   sanitizeStoredMemories,
   summarizeFeedback
 } from "./userStore.js";
@@ -50,6 +51,33 @@ describe("sanitizeStoredMemories (กฎความจำเดิม)", () => 
 
   it("ข้อมูลที่ไม่ใช่รายการคืนรายการว่าง", () => {
     expect(sanitizeStoredMemories({ a: 1 })).toEqual({ memories: [], rejected: 0 });
+  });
+});
+
+describe("sanitizeStoredMeetings", () => {
+  it("เรียงใหม่สุดก่อน เก็บไม่เกิน 15 ครั้ง และข้ามรายการผิดรูปหรือซ้ำ", () => {
+    const items = Array.from({ length: 20 }, (_, index) => ({ id: `mtg-${index}`, startedAt: index, minutes: 3, summary: `ครั้งที่ ${index}`, transcript: "" }));
+    const clean = sanitizeStoredMeetings([...items, { id: "mtg-1", startedAt: 1, minutes: 1, summary: "ซ้ำ" }, { id: "bad id", startedAt: 1, minutes: 1, summary: "x" }, { id: "mtg-x", startedAt: 1, minutes: 1, summary: "  " }]);
+    expect(clean).toHaveLength(15);
+    expect(clean[0]?.id).toBe("mtg-19");
+    expect(clean.at(-1)?.id).toBe("mtg-5");
+  });
+
+  it("ตัดความยาว คงการขึ้นบรรทัดใหม่ ตัดอักขระควบคุม และเติม endedAt", () => {
+    const newline = String.fromCharCode(10);
+    const [record] = sanitizeStoredMeetings([
+      { id: "mtg-1", startedAt: 5, minutes: 9999.4, summary: `สรุป${String.fromCharCode(7)}`, transcript: `บรรทัดหนึ่ง${newline}บรรทัดสอง${"ก".repeat(30_000)}` }
+    ]);
+    expect(record).toMatchObject({ endedAt: 5, minutes: 1440, summary: "สรุป" });
+    expect(record?.transcript.startsWith(`บรรทัดหนึ่ง${newline}บรรทัดสอง`)).toBe(true);
+    expect(record?.transcript.length).toBe(20_000);
+  });
+
+  it("ร้านค้าในหน่วยความจำแยกประวัติประชุมตามผู้ใช้", async () => {
+    const store = createMemoryUserStore();
+    await store.putMeetings("light", [{ id: "mtg-1", startedAt: 1, minutes: 1, summary: "ของไลท์", transcript: "" }]);
+    expect(await store.getMeetings("light")).toHaveLength(1);
+    expect(await store.getMeetings("nurse")).toEqual([]);
   });
 });
 
@@ -179,6 +207,14 @@ describe("createPostgresUserStore", () => {
     const sql = fakeSql(() => [{ data: [{ id: "m1", text: "ชอบชา" }, { id: "m2", text: "OTP 5555" }] }]);
     const store = createPostgresUserStore({ query: sql.run });
     expect(await store.getMemories("light")).toEqual([{ id: "m1", text: "ชอบชา", createdAt: 0 }]);
+  });
+
+  it("บันทึกและอ่านประวัติประชุมเป็นเอกสาร meetings ของผู้ใช้", async () => {
+    const sql = fakeSql((text) => (text.startsWith("SELECT") ? [{ data: [{ id: "mtg-1", startedAt: 1, minutes: 2, summary: "สรุป", transcript: "" }] }] : []));
+    const store = createPostgresUserStore({ query: sql.run });
+    await store.putMeetings("light", [{ id: "mtg-2", startedAt: 2, minutes: 2, summary: "ใหม่", transcript: "" }]);
+    expect(sql.calls[0]?.params.slice(0, 2)).toEqual(["light", "meetings"]);
+    expect((await store.getMeetings("light")).map((item) => item.id)).toEqual(["mtg-1"]);
   });
 
   it("ยังไม่มีข้อมูลคืนรายการว่าง", async () => {

@@ -1,5 +1,15 @@
-/** ประวัติสรุปการประชุมที่บันทึกไว้ในเครื่อง (LocalStorage) */
+import { sessionStore } from "../services/sessionStore";
+
+/** ผู้ใช้ที่ไม่ได้เข้าสู่ระบบ ตรงกับช่องร่วมของเซิร์ฟเวอร์ */
+const ANONYMOUS_OWNER = "_";
+
+/** ประวัติสรุปการประชุมที่บันทึกไว้ในเครื่อง (LocalStorage) และซิงก์ขึ้นเซิร์ฟเวอร์ (src/meeting/meetingSync.ts) */
 export interface SavedMeetingRecord {
+  /**
+   * ผู้ใช้ที่ประชุมครั้งนี้ ใช้เลือกว่าจะซิงก์ขึ้นบัญชีใดบนเซิร์ฟเวอร์ (เครื่องเดียวกันอาจมีหลายคนใช้)
+   * รายการรุ่นเก่าไม่มีค่านี้ จะถูกผูกกับผู้ใช้คนแรกที่ซิงก์
+   */
+  owner?: string;
   id: string;
   startedAt: number;
   endedAt: number;
@@ -38,7 +48,8 @@ function loadHistory(): SavedMeetingRecord[] {
       .slice(0, MAX_HISTORY_ITEMS)
       .map((item) => ({
         ...item,
-        endedAt: typeof item.endedAt === "number" && Number.isFinite(item.endedAt) ? item.endedAt : item.startedAt
+        endedAt: typeof item.endedAt === "number" && Number.isFinite(item.endedAt) ? item.endedAt : item.startedAt,
+        owner: typeof item.owner === "string" && item.owner ? item.owner : undefined
       }));
   } catch {
     return [];
@@ -47,6 +58,9 @@ function loadHistory(): SavedMeetingRecord[] {
 
 let history: SavedMeetingRecord[] = loadHistory();
 const listeners = new Set<() => void>();
+const mutationListeners = new Set<(removedIds: string[]) => void>();
+const notifyMutation = (removedIds: string[]) => mutationListeners.forEach((listener) => listener(removedIds));
+const currentOwner = () => sessionStore.get()?.name ?? ANONYMOUS_OWNER;
 
 function commitHistory(next: SavedMeetingRecord[]): void {
   history = next;
@@ -64,6 +78,7 @@ export const meetingHistoryStore = {
   add: (entry: { startedAt: number; minutes: number; summary: string; transcript: string; endedAt?: number }): SavedMeetingRecord => {
     const now = entry.endedAt ?? Date.now();
     const record: SavedMeetingRecord = {
+      owner: currentOwner(),
       id: `mtg-${entry.startedAt}`,
       startedAt: entry.startedAt,
       endedAt: now,
@@ -72,18 +87,31 @@ export const meetingHistoryStore = {
       transcript: entry.transcript.trim()
     };
     const deduplicated = history.filter((item) => item.startedAt !== record.startedAt && item.id !== record.id);
-    const next = [record, ...deduplicated].slice(0, MAX_HISTORY_ITEMS);
-    commitHistory(next);
+    const all = [record, ...deduplicated];
+    commitHistory(all.slice(0, MAX_HISTORY_ITEMS));
+    notifyMutation(all.slice(MAX_HISTORY_ITEMS).map((item) => item.id));
     return record;
   },
   remove: (id: string): void => {
     const next = history.filter((item) => item.id !== id);
     if (next.length === history.length) return;
     commitHistory(next);
+    notifyMutation([id]);
   },
   clear: (): void => {
     if (history.length === 0) return;
+    const removed = history.map((item) => item.id);
     commitHistory([]);
+    notifyMutation(removed);
+  },
+  /** แทนที่ทั้งรายการด้วยประวัติที่รวมกับเซิร์ฟเวอร์แล้ว (ไม่นับเป็นการเปลี่ยนของผู้ใช้) */
+  replace: (next: SavedMeetingRecord[]): void => commitHistory(next.filter(isValidRecord).slice(0, MAX_HISTORY_ITEMS)),
+  owner: currentOwner,
+  subscribeMutations: (listener: (removedIds: string[]) => void): (() => void) => {
+    mutationListeners.add(listener);
+    return () => {
+      mutationListeners.delete(listener);
+    };
   },
   subscribe: (listener: () => void): (() => void) => {
     listeners.add(listener);

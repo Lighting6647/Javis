@@ -5,6 +5,9 @@ import {
   describeDbError,
   MAX_FEEDBACK_NOTE,
   MAX_FEEDBACK_REPLY,
+  MAX_MEETING_SUMMARY,
+  MAX_MEETING_TRANSCRIPT,
+  MAX_STORED_MEETINGS,
   MAX_STORED_MEMORIES,
   ownerOf,
   summarizeFeedback,
@@ -24,6 +27,22 @@ const memoriesBodySchema = z.object({
       })
     )
     .max(MAX_STORED_MEMORIES)
+});
+
+const meetingsBodySchema = z.object({
+  meetings: z
+    .array(
+      z.object({
+        id: z.string().max(64),
+        startedAt: z.number().finite(),
+        endedAt: z.number().finite().optional(),
+        minutes: z.number().finite(),
+        // หน้าเว็บอาจมีบันทึกยาวกว่าที่เซิร์ฟเวอร์เก็บ จึงรับไว้แล้วตัดตอนทำความสะอาด
+        summary: z.string().max(MAX_MEETING_SUMMARY * 4),
+        transcript: z.string().max(MAX_MEETING_TRANSCRIPT * 5)
+      })
+    )
+    .max(MAX_STORED_MEETINGS)
 });
 
 const feedbackBodySchema = z.object({
@@ -94,5 +113,30 @@ export function createUserRoutes(getStore: () => UserStore) {
     }
   };
 
-  return { getMemories, putMemories, postFeedback, feedbackSummary };
+  const getMeetings: RequestHandler = async (_request, response) => {
+    response.set("Cache-Control", "no-store");
+    try {
+      const meetings = await getStore().getMeetings(ownerOf(response.locals.userName));
+      response.json({ meetings, storage: getStore().kind });
+    } catch (error) {
+      failed(response, error, "อ่านประวัติประชุม");
+    }
+  };
+
+  const putMeetings: RequestHandler = async (request, response) => {
+    response.set("Cache-Control", "no-store");
+    const parsed = meetingsBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: `ประวัติประชุมไม่ถูกต้อง (สูงสุด ${MAX_STORED_MEETINGS} ครั้ง)` });
+      return;
+    }
+    try {
+      const meetings = await getStore().putMeetings(ownerOf(response.locals.userName), parsed.data.meetings);
+      response.json({ meetings, storage: getStore().kind });
+    } catch (error) {
+      failed(response, error, "บันทึกประวัติประชุม");
+    }
+  };
+
+  return { getMemories, putMemories, getMeetings, putMeetings, postFeedback, feedbackSummary };
 }

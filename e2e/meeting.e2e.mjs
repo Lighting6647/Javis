@@ -539,6 +539,21 @@ try {
       return (await (await fetch("/api/feedback/summary?days=7")).json()).summary;
     });
     check("กรณีที่ 7: สรุปคำติชม 7 วันนับคำติชมที่ส่ง", summary?.up >= 1 && summary?.days === 7, JSON.stringify(summary));
+    // ประวัติประชุมจากอุปกรณ์อื่นบนเซิร์ฟเวอร์ ต้องเข้ามาอยู่ในประวัติของเครื่องนี้หลังเปิดแอปใหม่
+    const meetingSeeded = await page.evaluate(async () => {
+      const response = await fetch("/api/meetings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetings: [{ id: "mtg-1700000000000", startedAt: 1700000000000, endedAt: 1700000600000, minutes: 10, summary: "สรุปประชุมจากอุปกรณ์อื่น", transcript: "สมชาย: เริ่มประชุม" }] })
+      });
+      return response.status;
+    });
+    check("กรณีที่ 7: บันทึกประวัติประชุมขึ้นเซิร์ฟเวอร์ได้", meetingSeeded === 200);
+    await page.reload();
+    await page.waitForSelector(".status-pill");
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem("javis.meetingHistory") ?? "[]")).some((item) => item.id === "mtg-1700000000000"), null, { timeout: 5000 }).catch(() => undefined);
+    const history = await page.evaluate(() => JSON.parse(localStorage.getItem("javis.meetingHistory") ?? "[]").map((item) => item.summary));
+    check("กรณีที่ 7: ประวัติประชุมจากเซิร์ฟเวอร์รวมเข้ากับประวัติในเครื่อง", history.includes("สรุปประชุมจากอุปกรณ์อื่น"), JSON.stringify(history));
     check("กรณีที่ 7: คอนโซลไม่มีข้อผิดพลาด", problems.length === 0, describeProblems(problems));
     await context.close();
   }

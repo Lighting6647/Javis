@@ -53,10 +53,31 @@ export interface MemorySaveResult {
   rejected: number;
 }
 
+/** ประวัติสรุปการประชุมหนึ่งครั้ง (รูปแบบเดียวกับ javis.meetingHistory ในหน้าเว็บ) */
+export interface StoredMeeting {
+  id: string;
+  startedAt: number;
+  endedAt: number;
+  minutes: number;
+  summary: string;
+  transcript: string;
+}
+
+export const MAX_STORED_MEETINGS = 15;
+export const MAX_MEETING_SUMMARY = 4000;
+/** บันทึกคำพูดเต็มอยู่ในเครื่อง เซิร์ฟเวอร์เก็บส่วนต้นพอให้ค้นและอ่านทวนได้ */
+export const MAX_MEETING_TRANSCRIPT = 20_000;
+const MEETING_ID_PATTERN = /^mtg-[A-Za-z0-9_-]{1,40}$/;
+/** อักขระควบคุมยกเว้นขึ้นบรรทัดใหม่และแท็บ (บันทึกคำพูดมีหลายบรรทัด) */
+// eslint-disable-next-line no-control-regex
+const CONTROL_EXCEPT_NEWLINE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
 export interface UserStore {
   readonly kind: StorageKind;
   getMemories(user: string): Promise<StoredMemory[]>;
   putMemories(user: string, items: unknown): Promise<MemorySaveResult>;
+  getMeetings(user: string): Promise<StoredMeeting[]>;
+  putMeetings(user: string, items: unknown): Promise<StoredMeeting[]>;
   addFeedback(user: string, input: FeedbackInput): Promise<FeedbackRecord>;
   /** คำติชมย้อนหลัง user = null คือทุกผู้ใช้ (ใช้ในสคริปต์ npm run learn) */
   listFeedback(options: { user: string | null; days: number; rating?: FeedbackRating }): Promise<FeedbackRecord[]>;
@@ -107,6 +128,30 @@ export function sanitizeStoredMemories(value: unknown): MemorySaveResult {
     });
   }
   return { memories: memories.slice(-MAX_STORED_MEMORIES), rejected };
+}
+
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** ทำประวัติประชุมให้ปลอดภัย: รูปแบบถูกต้อง ไม่ซ้ำ ใหม่สุดก่อน ไม่เกิน 15 ครั้ง และตัดความยาว */
+export function sanitizeStoredMeetings(value: unknown): StoredMeeting[] {
+  if (!Array.isArray(value)) return [];
+  const byId = new Map<string, StoredMeeting>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { id, startedAt, endedAt, minutes, summary, transcript } = raw as Record<string, unknown>;
+    if (typeof id !== "string" || !MEETING_ID_PATTERN.test(id) || !finite(startedAt) || !finite(minutes)) continue;
+    const cleanSummary = typeof summary === "string" ? summary.replace(CONTROL_EXCEPT_NEWLINE, "").trim().slice(0, MAX_MEETING_SUMMARY) : "";
+    if (!cleanSummary || byId.has(id)) continue;
+    byId.set(id, {
+      id,
+      startedAt,
+      endedAt: finite(endedAt) ? endedAt : startedAt,
+      minutes: Math.min(Math.max(0, Math.round(minutes)), 1440),
+      summary: cleanSummary,
+      transcript: typeof transcript === "string" ? transcript.replace(CONTROL_EXCEPT_NEWLINE, "").trim().slice(0, MAX_MEETING_TRANSCRIPT) : ""
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_STORED_MEETINGS);
 }
 
 /** ชื่อผู้ใช้สำหรับแยกข้อมูล: ชื่อที่เข้าสู่ระบบ หรือช่องร่วมเมื่อเซิร์ฟเวอร์ไม่บังคับล็อกอิน */
@@ -162,6 +207,7 @@ export function summarizeFeedback(records: FeedbackRecord[], days: number): Feed
 /** เก็บในหน่วยความจำของกระบวนการ: ระบบเดิมเมื่อไม่มี DATABASE_URL (หายเมื่อรีสตาร์ต) */
 export function createMemoryUserStore(now: () => number = Date.now): UserStore {
   const memories = new Map<string, StoredMemory[]>();
+  const meetings = new Map<string, StoredMeeting[]>();
   const feedback: FeedbackRecord[] = [];
   const MAX_FEEDBACK_IN_MEMORY = 2000;
 
@@ -172,6 +218,12 @@ export function createMemoryUserStore(now: () => number = Date.now): UserStore {
       const result = sanitizeStoredMemories(items);
       memories.set(user, result.memories);
       return { memories: [...result.memories], rejected: result.rejected };
+    },
+    getMeetings: async (user) => [...(meetings.get(user) ?? [])],
+    putMeetings: async (user, items) => {
+      const clean = sanitizeStoredMeetings(items);
+      meetings.set(user, clean);
+      return [...clean];
     },
     addFeedback: async (user, input) => {
       const record = cleanFeedback(user, input, now());
@@ -217,6 +269,12 @@ export function createPostgresUserStore(db: Database, now: () => number = Date.n
       const result = sanitizeStoredMemories(items);
       await writeDocument(user, "memories", result.memories);
       return result;
+    },
+    getMeetings: async (user) => sanitizeStoredMeetings(await readDocument(user, "meetings")),
+    putMeetings: async (user, items) => {
+      const clean = sanitizeStoredMeetings(items);
+      await writeDocument(user, "meetings", clean);
+      return clean;
     },
     addFeedback: async (user, input) => {
       const record = cleanFeedback(user, input, now());

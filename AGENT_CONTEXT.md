@@ -24,7 +24,7 @@
 | **JEV System-One Pre-Flight Router** | `server/router/index.ts`, `server/router/systemOne.ts`, `server/router/queueAndTelemetry.ts`, `server/router/stateBus.ts`, `src/components/RouterPanel.tsx` | คัดกรองทุกเทิร์นก่อนออกเครือข่าย (`Choice` → `Score` → `Noul Safety Gate` → `Tier Routing` `flash-lite` / `pro` / `halt`) และส่งรายการที่ความมั่นใจ `< 0.85` เข้าคิว Human Review |
 | **Voice Persona, Cloud TTS & Voice Replication** | `server/speech.ts`, `server/voiceReplication.ts`, `src/speech/cloudVoices.ts`, `src/speech/voiceRecorder.ts`, `src/components/VoiceRecorderDialog.tsx`, `src/components/VoiceSettingsDialog.tsx` | สังเคราะห์เสียงผ่าน `gemini-3.8-flash-tts` → `gemini-3.8-flash-lite-tts` → สำรอง OpenAI `gpt-4o-mini-tts` → เสียงในเครื่อง; รองรับบันทึก/อัปโหลด 24kHz mono WAV + `trimSilenceSamples` เพื่อสร้างเสียงจำลอง 2 ขั้นตอน |
 | **On-Device Speaker ID & Meeting Mode** | `src/meeting/speakerProfile.ts`, `src/meeting/liveSpeakerMonitor.ts`, `src/meeting/meetingRecorder.ts`, `src/meeting/export.ts`, `src/meeting/meetingHistory.ts`, `src/hooks/useMeeting.ts`, `src/components/MeetingPanel.tsx`, `src/components/MeetingExport.tsx` | สกัดเวกเตอร์ความถี่เสียงพูด 10 มิติบนเครื่อง (8 ย่าน `85–4,000 Hz` + ZCR + Spectral Centroid), รองรับผู้พูดหลายคน (สูงสุด 12 คน), Threshold Slider `0.72–0.95`, Live Calibration, JSON Export/Import, แก้ชื่อผู้พูดรายบรรทัด/ทั้งกลุ่ม, กรองตามผู้พูด, Export `.txt`/`.md`/`.csv`, เก็บประวัติย้อนหลัง 15 การประชุม, และค้นประวัติด้วย Tool `search_meeting_history` |
-| **Server Storage, Memory Sync & Feedback** | `server/db.ts`, `server/userStore.ts`, `server/userRoutes.ts`, `src/memory/memorySync.ts`, `src/services/userDataApi.ts`, `src/components/FeedbackButtons.tsx` | เก็บความจำ/คำติชมบน Postgres (`@neondatabase/serverless`) เมื่อมี `DATABASE_URL` ไม่อย่างนั้นเก็บในหน่วยความจำ แยกตามชื่อผู้ใช้ที่ล็อกอิน (`_` เมื่อไม่บังคับล็อกอิน); หน้าแอปรวมความจำสองฝั่งและบันทึกกลับทุกครั้งที่จำ/ลืม; ปุ่ม 👍/👎 ใต้ทุกคำตอบ |
+| **Server Storage, Memory Sync & Feedback** | `server/db.ts`, `server/userStore.ts`, `server/userRoutes.ts`, `src/memory/memorySync.ts`, `src/meeting/meetingSync.ts`, `src/services/serverSync.ts`, `src/services/userDataApi.ts`, `src/components/FeedbackButtons.tsx` | เก็บความจำ/คำติชมบน Postgres (`@neondatabase/serverless`) เมื่อมี `DATABASE_URL` ไม่อย่างนั้นเก็บในหน่วยความจำ แยกตามชื่อผู้ใช้ที่ล็อกอิน (`_` เมื่อไม่บังคับล็อกอิน); หน้าแอปรวมความจำสองฝั่งและบันทึกกลับทุกครั้งที่จำ/ลืม; ปุ่ม 👍/👎 ใต้ทุกคำตอบ |
 | **Web, Browser Bridge & Projects Control** | `src/App.tsx`, `src/components/BrowserView.tsx`, `src/components/FrameView.tsx`, `src/components/FillCard.tsx`, `src/components/ProjectsPanel.tsx`, `src/services/screenCapture.ts` | เบราว์เซอร์ในตัว Electron / Iframe, กรอกฟอร์มแบบต้องยืนยันทุกครั้ง (ห้ามแตะรหัสผ่าน/บัตร/OTP), วิเคราะห์ภาพหน้าจอ, และจัดการสถานะ GitHub/Vercel ของโปรเจกต์ |
 
 ---
@@ -41,6 +41,7 @@
 | `POST /api/transcribe` | `requireAuth` | แปลงเสียงอัดจากแอปเดสก์ท็อปเป็นข้อความ (`audio/*`) |
 | `GET /api/voices`, `POST /api/voices/replicate`, `DELETE /api/voices/:id` | `requireAuth` | อ่าน สร้าง และลบโปรไฟล์เสียงจำลอง (Gemini 3.8 Voice Replication) |
 | `GET /api/memories`, `PUT /api/memories` | `requireAuth` | อ่าน/บันทึกความจำของผู้ใช้ (สูงสุด 50 เรื่อง เรื่องละ 200 ตัวอักษร ไม่เก็บรหัสผ่าน OTP เลข ≥13 หลัก ตอบ `rejected` = จำนวนที่ไม่เก็บ) |
+| `GET /api/meetings`, `PUT /api/meetings` | `requireAuth` | อ่าน/บันทึกประวัติสรุปการประชุมของผู้ใช้ (สูงสุด 15 ครั้ง คำสรุป ≤4,000 บันทึกคำพูด ≤20,000 ตัวอักษร รับเนื้อหาได้ 2MB) |
 | `POST /api/feedback`, `GET /api/feedback/summary?days=7` | `requireAuth` | เก็บคำติชม `up`/`down` + หมายเหตุ และสรุปรายวัน |
 | `GET /api/search/usage` | `requireAuth` | รายงานโควตาการใช้บริการค้นเว็บ (Tavily / Grounded Search) |
 | `GET /api/router/telemetry`, `POST /api/router/classify`, `GET /api/router/queue`, `POST /api/router/queue/:id/decision` | `requireAuth` | ตรวจวัดและอนุมัติคำขอจาก JEV Pre-Flight Router |
@@ -55,7 +56,7 @@
 - `javis.voiceSettings` — โทนเสียง Persona (`genz-girl`, `assistant`, `upbeat-buddy`, `calm-soft`), เสียง Cloud (`cloud`, `cloudVoice`), ความเร็ว (`rate`)
 - `javis.speakerProfile` — รายการโปรไฟล์เสียง 10 มิติ (`profiles` สูงสุด 12 คน) และค่า `threshold` (`0.72–0.95`, ค่าเริ่มต้น `0.86`) พร้อมรองรับข้อมูลโปรไฟล์เดี่ยวรุ่นเก่า
 - `javis.meetingDraft` — บันทึกการประชุมที่ยังไม่สรุป (กู้คืนอัตโนมัติเมื่อเปิดแท็บใหม่หลังหลุดกลางประชุม)
-- `javis.meetingHistory` — คลังประวัติสรุปการประชุมย้อนหลังในเครื่อง (สูงสุด 15 รายการ)
+- `javis.meetingHistory` — คลังประวัติสรุปการประชุมย้อนหลังในเครื่อง (สูงสุด 15 รายการ แต่ละรายการมี `owner`) ซิงก์กับ `/api/meetings` (`src/meeting/meetingSync.ts`)
 - `javis.memories:<ชื่อผู้ใช้>` — ความจำถาวรเกี่ยวกับผู้ใช้ (แนบเข้าบริบทคำถาม AI) ซิงก์กับ `/api/memories` (`src/memory/memorySync.ts`)
 
 ---

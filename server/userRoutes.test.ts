@@ -69,6 +69,26 @@ describe("API ความจำและคำติชมบนเซิร์
     expect(body.summary.recentDownNotes.map((item) => item.note)).toEqual(["ตอบยาวเกินไป"]);
   });
 
+  it("PUT แล้ว GET /api/meetings ได้ประวัติประชุม ใหม่สุดก่อน และรับบันทึกยาวกว่า 200kb ได้", async () => {
+    setUserStoreForTests(createMemoryUserStore());
+    const long = "ก".repeat(90_000);
+    const put = await send("/api/meetings", "PUT", {
+      meetings: [
+        { id: "mtg-1", startedAt: 1, endedAt: 2, minutes: 5, summary: "ประชุมเก่า", transcript: long },
+        { id: "mtg-2", startedAt: 10, endedAt: 20, minutes: 30, summary: "ประชุมใหม่", transcript: "สั้น" }
+      ]
+    });
+    expect(put.status).toBe(200);
+    const body = (await (await send("/api/meetings", "GET")).json()) as { meetings: Array<{ id: string; transcript: string }> };
+    expect(body.meetings.map((item) => item.id)).toEqual(["mtg-2", "mtg-1"]);
+    expect(body.meetings[1]?.transcript.length).toBe(20_000);
+  });
+
+  it("ปฏิเสธประวัติประชุมเกิน 15 ครั้ง", async () => {
+    const meetings = Array.from({ length: 16 }, (_, index) => ({ id: `mtg-${index}`, startedAt: index, minutes: 1, summary: "ส", transcript: "" }));
+    expect((await send("/api/meetings", "PUT", { meetings })).status).toBe(400);
+  });
+
   it("ปฏิเสธคำติชมที่ไม่ใช่ up/down", async () => {
     expect((await send("/api/feedback", "POST", { rating: "meh" })).status).toBe(400);
   });
@@ -78,6 +98,8 @@ describe("API ความจำและคำติชมบนเซิร์
       kind: "postgres",
       getMemories: () => Promise.reject(new Error("connect failed postgres://user:pw@host/db")),
       putMemories: () => Promise.reject(new Error("down")),
+      getMeetings: () => Promise.reject(new Error("down")),
+      putMeetings: () => Promise.reject(new Error("down")),
       addFeedback: () => Promise.reject(new Error("down")),
       listFeedback: () => Promise.reject(new Error("down"))
     };
