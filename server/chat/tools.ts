@@ -1,0 +1,228 @@
+/**
+ * นิยามเครื่องมือ (function tools) ที่ส่งให้ AI ในแต่ละคำขอ (แยกจาก server/chat.ts โดยพฤติกรรมไม่เปลี่ยน)
+ */
+import {
+  FILL_FORM_TOOL,
+  FORGET_TOOL,
+  INSPECT_PROJECTS_TOOL,
+  MAX_MEMORY_LENGTH,
+  OPEN_PAGE_TOOL,
+  PROPOSE_PROJECT_ACTION_TOOL,
+  READ_PAGE_TOOL,
+  REMEMBER_TOOL,
+  SEARCH_MEETING_HISTORY_TOOL,
+  SEARCH_RECENCIES,
+  SEARCH_WEB_TOOL
+} from "../responseStream.js";
+
+export const SEARCH_MEETING_HISTORY_TOOL_DEFINITION = {
+  type: "function",
+  name: SEARCH_MEETING_HISTORY_TOOL,
+  description: "ค้นหาบันทึกและคำสรุปการประชุมย้อนหลังในเครื่องของผู้ใช้ตามชื่อผู้พูด หัวข้อ หรือคำสำคัญ",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["query"],
+    properties: {
+      query: {
+        type: "string",
+        description: "คำค้น เช่น ชื่อผู้พูด (คุณเอ, ไลท์) หัวข้องาน หรือส่งข้อความว่าง \"\" เพื่อดูการประชุมครั้งล่าสุด"
+      }
+    }
+  }
+} as const;
+
+export const PROJECT_TOOL_DEFINITIONS = [
+  {
+    type: "function",
+    name: INSPECT_PROJECTS_TOOL,
+    description:
+      "ตรวจสถานะโปรเจกต์ของทีม (รายชื่อโฟลเดอร์, สาขา Git, ไฟล์ที่แก้ไขค้าง, GitHub Commit/CI และสถานะ Vercel) ใช้เมื่อผู้ใช้ถามภาพรวมหรือสถานะโปรเจกต์",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "include_cloud"],
+      properties: {
+        project: {
+          type: "string",
+          description: "ชื่อหรือรหัสโปรเจกต์ที่ต้องการตรวจ (เช่น tamsang, javis, บัญชี) หรือส่งข้อความว่าง \"\" เพื่อดูภาพรวมทุกโปรเจกต์"
+        },
+        include_cloud: {
+          type: "boolean",
+          description: "ดึงสถานะ GitHub/Vercel ออนไลน์ด้วยหรือไม่ (ใช้ true เมื่อผู้ใช้เจาะจงถามสถานะออนไลน์หรือ 1 โปรเจกต์)"
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    name: PROPOSE_PROJECT_ACTION_TOOL,
+    description:
+      "เสนอคำสั่งควบคุมโปรเจกต์ให้ผู้ใช้กดยืนยันก่อนรันจริง (build, test, lint ในเครื่อง หรือ redeploy บน Vercel)",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "action", "reason"],
+      properties: {
+        project: { type: "string", description: "ชื่อหรือรหัสโปรเจกต์เป้าหมาย เช่น tamsang, tracking, javis" },
+        action: { type: "string", enum: ["build", "test", "lint", "redeploy"], description: "คำสั่งที่จะเสนอให้ผู้ใช้ยืนยัน" },
+        reason: { type: "string", description: "คำอธิบายสั้น ๆ ภาษาไทยว่ากำลังจะทำอะไรกับโปรเจกต์นี้" }
+      }
+    }
+  }
+] as const;
+
+export const READ_PAGE_TOOL_DEFINITION = {
+  type: "function",
+  name: READ_PAGE_TOOL,
+  description:
+    "ดึงข้อความจากหน้าเว็บภายนอก (URL https://) มาอ่านและสรุปให้ผู้ใช้ฟัง ใช้เมื่อผู้ใช้ส่งลิงก์ หรือขอให้อ่านเนื้อหาจากหน้าเว็บที่เปิดอยู่บนหน้าจอ",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["url"],
+    properties: {
+      url: { type: "string", description: "URL เต็มของหน้าเว็บที่จะดึงข้อมูล ขึ้นต้นด้วย https://" }
+    }
+  }
+} as const;
+
+export const OPEN_PAGE_TOOL_DEFINITION = {
+  type: "function",
+  name: OPEN_PAGE_TOOL,
+  description:
+    "เปิดหน้าเว็บในเบราว์เซอร์ของผู้ใช้ เรียกทันทีเมื่อผู้ใช้สั่งให้เปิดเว็บไซต์หรือเปิดหน้าค้นหา โดยไม่ต้องพูดก่อน ระบบจะบอกผู้ใช้เองว่าเปิดแล้ว " +
+    "เครื่องมือนี้ไม่ส่งเนื้อหาของหน้าเว็บกลับมา จึงใช้หาข้อมูลมาตอบไม่ได้",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["url", "title"],
+    properties: {
+      url: { type: "string", description: "URL เต็มของหน้าที่จะเปิด ขึ้นต้นด้วย https://" },
+      title: { type: "string", description: "ชื่อสั้น ๆ ของหน้านั้นเป็นภาษาไทย เช่น ผลค้นหาร้านกาแฟใกล้ฉัน" }
+    }
+  }
+} as const;
+
+export const FILL_FORM_TOOL_DEFINITION = {
+  type: "function",
+  name: FILL_FORM_TOOL,
+  description:
+    "เสนอค่าที่จะกรอกลงช่องของหน้าเว็บที่ผู้ใช้เปิดอยู่ ผู้ใช้จะเห็นรายการและต้องยืนยันก่อนจึงจะกรอกจริง " +
+    "ใช้เฉพาะเมื่อผู้ใช้สั่งให้กรอก ใส่เฉพาะช่องและค่าที่ผู้ใช้บอกมา ระบบไม่กดส่งฟอร์มให้",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["fields"],
+    properties: {
+      fields: {
+        type: "array",
+        description: "ช่องที่จะกรอก เฉพาะช่องที่ผู้ใช้สั่ง",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["field_id", "value"],
+          properties: {
+            field_id: { type: "string", description: "รหัสช่องจากรายการช่องของหน้าเว็บ เช่น f1" },
+            value: {
+              type: "string",
+              description:
+                "ค่าที่ผู้ใช้บอกให้กรอก สำหรับช่องแบบเลือกรายการให้ใช้ข้อความของตัวเลือก สำหรับช่องติ๊กให้ใช้ true หรือ false"
+            }
+          }
+        }
+      }
+    }
+  }
+} as const;
+
+export const MEMORY_TOOL_DEFINITIONS = [
+  {
+    type: "function",
+    name: REMEMBER_TOOL,
+    description:
+      "จำข้อมูลเกี่ยวกับผู้ใช้ไว้ใช้ในบทสนทนาครั้งต่อไป ใช้เมื่อผู้ใช้บอกข้อมูลที่ควรจำหรือสั่งให้จำ ผู้ใช้จะเห็นสิ่งที่จำและยกเลิกได้",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["text"],
+      properties: {
+        text: {
+          type: "string",
+          description: `สิ่งที่จะจำ เขียนเป็นประโยคสั้นภาษาไทยหนึ่งเรื่อง ไม่เกิน ${MAX_MEMORY_LENGTH} ตัวอักษร เช่น ผู้ใช้ชื่อไลท์ ทำงานด้านไอที`
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    name: FORGET_TOOL,
+    description: "ลบความจำหนึ่งเรื่องเมื่อผู้ใช้สั่งให้ลืม",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["memory_id"],
+      properties: {
+        memory_id: { type: "string", description: "รหัสของความจำจากรายการความจำ เช่น m3" }
+      }
+    }
+  }
+] as const;
+
+export const SEARCH_WEB_TOOL_DEFINITION = {
+  type: "function",
+  name: SEARCH_WEB_TOOL,
+  description:
+    "ค้นเว็บเพื่อหาข้อมูลปัจจุบันมาตอบผู้ใช้ ใช้เมื่อคำถามต้องใช้ข้อมูลล่าสุด ข่าว ราคา สภาพอากาศ หรือข้อเท็จจริงที่อาจเปลี่ยนไปแล้ว " +
+    "เมื่อเรียกแล้วระบบจะค้นและตอบผู้ใช้ต่อให้เอง ไม่ใช้เพื่อเปิดหน้าเว็บให้ผู้ใช้ดู",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["query", "recency"],
+    properties: {
+      query: {
+        type: "string",
+        description: "คำค้นสั้น ๆ ที่ตรงกับสิ่งที่ผู้ใช้อยากรู้ เรื่องที่เปลี่ยนตามเวลาให้ต่อท้ายด้วยวันที่และปี พ.ศ. ของวันนี้ เช่น ราคาทองคำแท่ง ตามด้วยวันที่ของวันนี้"
+      },
+      recency: {
+        type: "string",
+        enum: SEARCH_RECENCIES,
+        description:
+          "ช่วงเวลาของข้อมูลที่ต้องการ นับย้อนจากวันนี้: day สำหรับราคา สภาพอากาศ และข่าววันนี้ week สำหรับข่าวช่วงนี้ " +
+          "month หรือ year สำหรับเรื่องล่าสุดที่ไม่เปลี่ยนทุกวัน any สำหรับข้อเท็จจริงที่ไม่ขึ้นกับเวลา"
+      }
+    }
+  }
+} as const;
+
+/** เครื่องมือค้นเว็บของผู้ให้บริการเอง ในรูปแบบกลางที่ตัวแปลงของแต่ละรายเข้าใจ */
+export const PROVIDER_SEARCH_TOOL = { type: "web_search" } as const;
+
+/**
+ * เครื่องมือค้นเว็บที่ใส่ในคำขอ
+ * - provider: เครื่องมือค้นของผู้ให้บริการ ซึ่งค้นและตอบในคำขอเดียวกัน
+ * - request: เครื่องมือของ Javis ที่ AI ใช้ขอให้เซิร์ฟเวอร์ค้นในขั้นแยก
+ */
+export type SearchTool = "none" | "provider" | "request";
+
+export function buildTools(search: SearchTool, withFormFill: boolean, withMeetingHistory = false): unknown[] {
+  return [
+    ...(search === "provider" ? [PROVIDER_SEARCH_TOOL] : []),
+    ...(search === "request" ? [SEARCH_WEB_TOOL_DEFINITION] : []),
+    OPEN_PAGE_TOOL_DEFINITION,
+    READ_PAGE_TOOL_DEFINITION,
+    ...PROJECT_TOOL_DEFINITIONS,
+    ...MEMORY_TOOL_DEFINITIONS,
+    ...(withFormFill ? [FILL_FORM_TOOL_DEFINITION] : []),
+    ...(withMeetingHistory ? [SEARCH_MEETING_HISTORY_TOOL_DEFINITION] : [])
+  ];
+}

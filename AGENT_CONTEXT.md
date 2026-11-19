@@ -8,7 +8,7 @@
 
 - **ชื่อผู้ช่วยฝั่งผู้ใช้ (Product / Voice Persona):** **เดลลูน่า (DelLuna)** — แสดงผลบนหน้าเว็บ, PWA, และ System Prompt (`DL · CENTRAL VOICE STUDIO`)
 - **รหัสโปรเจกต์ & เทคโนโลยีหลัก (`package.json`):** `javis-thai-voice-agent` (`TypeScript ~5.9`, `React 19`, `Vite 7`, `Express 5`, `Zod 4`, `Vitest 5`, `Playwright`, `Electron 45`, `Capacitor 8`)
-- **บุคลิกคำตอบในแอป (`server/chat.ts` `CORE_INSTRUCTIONS`):**
+- **บุคลิกคำตอบในแอป (`server/chat/instructions.ts` `CORE_INSTRUCTIONS`):**
   - แทนตัวเป็น **เดลลูน่า (DelLuna)** ใช้สรรพนามและคำลงท้ายสุภาพแบบผู้หญิง (`ค่ะ`, `นะคะ`)
   - ตอบสั้น กระชับ เป็นภาษาพูดธรรมชาติ (3–4 ประโยค เว้นวรรคระหว่างประโยค) **ห้ามใช้ Markdown, หัวข้อ, ตาราง, อีโมจิ** ในข้อความคำตอบปกติเพราะระบบจะอ่านออกเสียงทันที
   - ตอบภาษาไทยเป็นหลัก ยกเว้นผู้ใช้ขอภาษาอื่น
@@ -20,7 +20,7 @@
 | แกนระบบ | ไฟล์สำคัญ | หน้าที่และจุดเชื่อมต่อ |
 | :--- | :--- | :--- |
 | **Core Backend App** | `server/app.ts`, `server/index.ts`, `server/config.ts`, `api/index.ts`, `server/rateLimitStore.ts` | Express 5 API Server (พอร์ต `8787` ในเครื่อง / Serverless บน Vercel), Security (`helmet`, `originGuard`, `corsMiddleware`, rate limiters ที่นับใน Postgres เมื่อมี `DATABASE_URL` และถอยไปนับในหน่วยความจำเมื่อฐานข้อมูลล่ม), Auth Session |
-| **Multi-Provider AI & Auto-Failover** | `server/aiProvider.ts`, `server/accountMonitor.ts`, `server/aiAccount.ts`, `server/chat.ts`, `server/claudeClient.ts` | รองรับ **Google Gemini** (`gemini-3.5-flash-lite`), **OpenAI** (`gpt-6-luna`), **Anthropic Claude** (`claude-haiku-5-5`) พร้อม `resolveFallbackAiProviders` สลับผู้ให้บริการสำรองอัตโนมัติเมื่อบัญชีหลักติด `quota` / `auth` / `model` |
+| **Multi-Provider AI & Auto-Failover** | `server/aiProvider.ts`, `server/accountMonitor.ts`, `server/aiAccount.ts`, `server/chat.ts` (handler) + `server/chat/schema.ts` (รูปแบบคำขอ) + `server/chat/instructions.ts` (system prompt) + `server/chat/tools.ts` (นิยามเครื่องมือ), `server/claudeClient.ts` | รองรับ **Google Gemini** (`gemini-3.5-flash-lite`), **OpenAI** (`gpt-6-luna`), **Anthropic Claude** (`claude-haiku-5-5`) พร้อม `resolveFallbackAiProviders` สลับผู้ให้บริการสำรองอัตโนมัติเมื่อบัญชีหลักติด `quota` / `auth` / `model` |
 | **JEV System-One Pre-Flight Router** | `server/router/index.ts`, `server/router/systemOne.ts`, `server/router/queueAndTelemetry.ts`, `server/router/persistence.ts`, `server/router/stateBus.ts`, `src/components/RouterPanel.tsx` | คัดกรองทุกเทิร์นก่อนออกเครือข่าย (`Choice` → `Score` → `Noul Safety Gate` → `Tier Routing` `flash-lite` / `pro` / `halt`) และส่งรายการที่ความมั่นใจ `< 0.85` เข้าคิว Human Review; คิวและ telemetry เก็บในตาราง `app_state` เมื่อมี `DATABASE_URL` |
 | **Voice Persona, Cloud TTS & Voice Replication** | `server/speech.ts`, `server/voiceReplication.ts`, `src/speech/cloudVoices.ts`, `src/speech/voiceRecorder.ts`, `src/components/VoiceRecorderDialog.tsx`, `src/components/VoiceSettingsDialog.tsx` | สังเคราะห์เสียงผ่าน `gemini-3.8-flash-tts` → `gemini-3.8-flash-lite-tts` → สำรอง OpenAI `gpt-4o-mini-tts` → เสียงในเครื่อง; รองรับบันทึก/อัปโหลด 24kHz mono WAV + `trimSilenceSamples` เพื่อสร้างเสียงจำลอง 2 ขั้นตอน |
 | **On-Device Speaker ID & Meeting Mode** | `src/meeting/speakerProfile.ts`, `src/meeting/liveSpeakerMonitor.ts`, `src/meeting/meetingRecorder.ts`, `src/meeting/export.ts`, `src/meeting/meetingHistory.ts`, `src/hooks/useMeeting.ts`, `src/components/MeetingPanel.tsx`, `src/components/MeetingExport.tsx` | สกัดเวกเตอร์ความถี่เสียงพูด 10 มิติบนเครื่อง (8 ย่าน `85–4,000 Hz` + ZCR + Spectral Centroid), รองรับผู้พูดหลายคน (สูงสุด 12 คน), Threshold Slider `0.72–0.95`, Live Calibration, JSON Export/Import, แก้ชื่อผู้พูดรายบรรทัด/ทั้งกลุ่ม, กรองตามผู้พูด, Export `.txt`/`.md`/`.csv`, เก็บประวัติย้อนหลัง 15 การประชุม, และค้นประวัติด้วย Tool `search_meeting_history` |
@@ -67,8 +67,8 @@
 1. **การเพิ่มคำสั่งทำงานทันทีในเครื่อง (Zero-Quota Voice Commands):**
    - ตัวอย่าง: `src/meeting/commands.ts` (`isMeetingStartCommand`), `src/conversation/voiceCommands.ts` (`matchVoiceSwitchCommand`), `src/services/screenCapture.ts` (`isScreenCaptureVoiceCommand`)
    - รูปแบบชื่อเรียก (`NAME`): รองรับทั้ง **"เดลลูน่า / เดลูนา / DelLuna"** และชื่อเดิม (`นีน่า`, `Nina`, `จาวิส`, `Javis`)
-2. **การเพิ่ม Tool ให้ AI ฝั่ง Backend (`server/chat.ts`):**
-   - นิยาม Schema ด้วยเครื่องมือฟังก์ชันใน `buildTools(...)`, ส่งคำแนะนำวิธีเรียกใช้ใน `CORE_INSTRUCTIONS` / `buildInstructionParts`, จัดการผลลัพธ์ใน Stream Reducer และอย่าให้รันคำสั่งที่เปลี่ยนแปลงข้อมูลผู้ใช้หรือระบบภายนอกโดยไม่ผ่านการยืนยัน (`FillCard` / `ProjectActionCard`)
+2. **การเพิ่ม Tool ให้ AI ฝั่ง Backend (`server/chat/tools.ts` + `server/chat/instructions.ts` + handler ใน `server/chat.ts`):**
+   - นิยาม Schema ด้วยเครื่องมือฟังก์ชันใน `buildTools(...)` (`server/chat/tools.ts`), ส่งคำแนะนำวิธีเรียกใช้ใน `CORE_INSTRUCTIONS` / `buildInstructionParts` (`server/chat/instructions.ts` แก้แล้วต้องผ่าน `npm run eval`), จัดการผลลัพธ์ใน Stream Reducer และอย่าให้รันคำสั่งที่เปลี่ยนแปลงข้อมูลผู้ใช้หรือระบบภายนอกโดยไม่ผ่านการยืนยัน (`FillCard` / `ProjectActionCard`)
    - ห้ามบันทึกข้อความดิบของผู้ใช้ ข้อมูลลับ หรือกุญแจ API ลงใน Log หรือ Telemetry (`redactGoalSummary` ใน `server/router/queueAndTelemetry.ts`)
 3. **การปรับแต่ง UI & Responsive Layout (`src/styles.css`):**
    - รองรับทั้งธีม **`holo`** (Obsidian Studio HUD) และ **`plain`** (Light/Minimal)
