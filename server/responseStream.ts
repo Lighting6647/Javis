@@ -13,6 +13,8 @@ export const READ_PAGE_TOOL = "read_web_page";
 export const INSPECT_PROJECTS_TOOL = "inspect_projects";
 /** เครื่องมือเสนอคำสั่งควบคุมโปรเจกต์ (build / test / lint / redeploy) ให้ผู้ใช้กดยืนยัน */
 export const PROPOSE_PROJECT_ACTION_TOOL = "propose_project_action";
+/** เครื่องมือค้นหาบันทึกและคำสรุปการประชุมย้อนหลังในเครื่องของผู้ใช้ */
+export const SEARCH_MEETING_HISTORY_TOOL = "search_meeting_history";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 /**
  * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
@@ -146,6 +148,10 @@ export interface ResponseReducer {
    * AI ขอตรวจสถานะโปรเจกต์ของทีม (null = ไม่ได้ขอ)
    */
   readonly projectInspectRequest: { project?: string; includeCloud?: boolean } | null;
+  /**
+   * AI ขอค้นหาคลังประวัติสรุปการประชุมย้อนหลัง (null = ไม่ได้ขอ)
+   */
+  readonly meetingHistoryQuery: string | null;
 }
 
 export interface ResponseReducerOptions {
@@ -179,6 +185,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let readRequest: string | null = null;
   let projectInspectRequest: { project?: string; includeCloud?: boolean } | null = null;
   let projectAction: ProjectActionProposal | null = null;
+  let meetingHistoryQuery: string | null = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
 
@@ -307,6 +314,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         ...(project ? { project } : {}),
         includeCloud: args.include_cloud === true
       };
+    } else if (item.type === "function_call" && item.name === SEARCH_MEETING_HISTORY_TOOL && meetingHistoryQuery === null) {
+      const args = parseArguments(item.arguments);
+      meetingHistoryQuery = typeof args.query === "string" ? cleanLine(args.query, MAX_SEARCH_QUERY_LENGTH) : "";
     } else if (item.type === "function_call" && item.name === PROPOSE_PROJECT_ACTION_TOOL && !projectAction) {
       const args = parseArguments(item.arguments);
       const project = typeof args.project === "string" ? cleanLine(args.project, 120) : "";
@@ -436,6 +446,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get projectInspectRequest() {
       return projectInspectRequest;
+    },
+    get meetingHistoryQuery() {
+      return meetingHistoryQuery;
     }
   };
 }

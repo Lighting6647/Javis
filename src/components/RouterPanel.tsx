@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { aiProviderStore, aiStatusStore } from "../services/aiStatusStore";
 import {
   classifyRouterGoal,
   decideReviewItem,
@@ -33,6 +34,7 @@ const CHOICE_LABEL: Record<string, string> = {
 };
 
 export function RouterPanel({ onClose }: RouterPanelProps) {
+  const aiProvider = useSyncExternalStore(aiProviderStore.subscribe, aiProviderStore.get);
   const [telemetry, setTelemetry] = useState<JevTelemetrySnapshot | null>(null);
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
 
   const loadSnapshot = useCallback(async () => {
     try {
+      void aiStatusStore.refresh();
       const data = await fetchRouterSnapshot();
       setTelemetry(data.telemetry);
       setItems(data.items);
@@ -58,6 +61,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
 
   useEffect(() => {
     let active = true;
+    void aiStatusStore.refresh();
     void fetchRouterSnapshot()
       .then((data) => {
         if (!active) return;
@@ -141,6 +145,23 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
           <button type="button" className="btn" onClick={() => void loadSnapshot()}>
             ลองใหม่
           </button>
+        </div>
+      )}
+
+      {aiProvider && (
+        <div className="router-provider-bar" aria-label="ผู้ให้บริการและโมเดลที่ตอบจริง">
+          <div className="router-provider-main">
+            <Cpu size={14} aria-hidden />
+            <span>ผู้ให้บริการจริง:</span>
+            <strong>{aiProvider.label}</strong>
+            <code>Fast: {aiProvider.chatModel}</code>
+            <code>Pro: {aiProvider.proModel}</code>
+          </div>
+          <span className="router-provider-fallback">
+            {aiProvider.fallbacks.length > 0
+              ? `Failover: ${aiProvider.fallbacks.map((fb) => `${fb.label} (${fb.chatModel})`).join(" → ")}`
+              : "Failover: ไม่มีคีย์สำรอง"}
+          </span>
         </div>
       )}
 

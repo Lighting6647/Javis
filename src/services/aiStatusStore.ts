@@ -263,12 +263,76 @@ export const retiringModelsStore = {
   }
 };
 
+export interface ActiveAiProviderInfo {
+  name: string;
+  label: string;
+  chatModel: string;
+  proModel: string;
+  fallbacks: Array<{ name: string; label: string; chatModel: string }>;
+}
+
+/** อ่านข้อมูลผู้ให้บริการ AI และโมเดลที่กำลังตอบจริงพร้อมคีย์สำรองจาก /api/status */
+export function parseAiProviderInfo(payload: unknown): ActiveAiProviderInfo | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const { provider } = payload as { provider?: unknown };
+  if (typeof provider !== "object" || provider === null) return null;
+  const p = provider as Partial<ActiveAiProviderInfo>;
+  if (typeof p.name !== "string" || typeof p.label !== "string" || typeof p.chatModel !== "string") return null;
+
+  const fallbacks = Array.isArray(p.fallbacks)
+    ? p.fallbacks.filter(
+        (fb): fb is { name: string; label: string; chatModel: string } =>
+          Boolean(fb) &&
+          typeof fb === "object" &&
+          typeof fb.name === "string" &&
+          typeof fb.label === "string" &&
+          typeof fb.chatModel === "string"
+      )
+    : [];
+
+  return {
+    name: p.name,
+    label: p.label,
+    chatModel: p.chatModel,
+    proModel: typeof p.proModel === "string" && p.proModel ? p.proModel : p.chatModel,
+    fallbacks
+  };
+}
+
+let activeProviderInfo: ActiveAiProviderInfo | null = null;
+const providerListeners = new Set<() => void>();
+
+function setActiveProviderInfo(next: ActiveAiProviderInfo | null): void {
+  if (!next) return;
+  const same =
+    activeProviderInfo?.name === next.name &&
+    activeProviderInfo?.chatModel === next.chatModel &&
+    activeProviderInfo?.proModel === next.proModel &&
+    activeProviderInfo?.fallbacks.length === next.fallbacks.length &&
+    activeProviderInfo.fallbacks.every((fb, idx) => fb.name === next.fallbacks[idx]?.name && fb.chatModel === next.fallbacks[idx]?.chatModel);
+  if (same) return;
+  activeProviderInfo = next;
+  providerListeners.forEach((listener) => listener());
+}
+
+/** ข้อมูลผู้ให้บริการ AI และโมเดลที่กำลังใช้งานจริงของเซิร์ฟเวอร์ */
+export const aiProviderStore = {
+  get: (): ActiveAiProviderInfo | null => activeProviderInfo,
+  subscribe: (listener: () => void): (() => void) => {
+    providerListeners.add(listener);
+    return () => {
+      providerListeners.delete(listener);
+    };
+  }
+};
+
 async function loadAiStatus(): Promise<AiStatus | null> {
   const response = await fetchWithTimeout("/api/status", { timeoutMs: STATUS_TIMEOUT_MS });
   if (!response.ok) return null;
   const payload: unknown = await response.json();
   setCloudVoiceAvailable(parseCloudVoiceAvailable(payload));
   setRetiringModels(parseRetiringModels(payload));
+  setActiveProviderInfo(parseAiProviderInfo(payload));
   return parseAiStatus(payload);
 }
 

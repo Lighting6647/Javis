@@ -2,8 +2,8 @@ import { AudioLines, Check, Download, Play, RotateCcw, Sparkles, Trash2, X } fro
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useCloudVoiceStatus } from "../hooks/useCloudVoiceStatus";
 import { describeDuration, formatMeetingDate } from "../meeting/export";
-import { meetingHistoryStore } from "../meeting/meetingHistory";
-import { aiStatusStore, retiringModelsStore } from "../services/aiStatusStore";
+import { meetingHistoryStore, searchMeetingHistory } from "../meeting/meetingHistory";
+import { aiProviderStore, aiStatusStore, retiringModelsStore } from "../services/aiStatusStore";
 import { customVoicesStore } from "../services/customVoicesStore";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
@@ -72,6 +72,7 @@ function VoiceSection({
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
   const customVoices = useSyncExternalStore(customVoicesStore.subscribe, customVoicesStore.get);
   const aiStatus = useSyncExternalStore(aiStatusStore.subscribe, aiStatusStore.get);
+  const aiProvider = useSyncExternalStore(aiProviderStore.subscribe, aiProviderStore.get);
   const retiringModels = useSyncExternalStore(retiringModelsStore.subscribe, retiringModelsStore.get);
   const cloudStatus = useCloudVoiceStatus(synthesizer);
   const rateId = useId();
@@ -139,6 +140,20 @@ function VoiceSection({
 
   return (
     <>
+      {aiProvider && (
+        <div className="ai-provider-card" aria-label="ผู้ให้บริการ AI ที่ใช้งานจริง">
+          <div className="ai-provider-row">
+            <span>ระบบ AI ที่กำลังตอบ:</span>
+            <strong>{aiProvider.label}</strong>
+            <code>{aiProvider.chatModel}</code>
+          </div>
+          <small>
+            {aiProvider.fallbacks.length > 0
+              ? `คีย์สำรอง Auto-Failover พร้อมใช้: ${aiProvider.fallbacks.map((fb) => `${fb.label} (${fb.chatModel})`).join(", ")}`
+              : "ยังไม่ได้ตั้งคีย์สำรอง (ตั้งค่าเพิ่มได้ใน Environment)"}
+          </small>
+        </div>
+      )}
       {(aiStatus?.chat === "quota" || retiringModels.length > 0) && (
         <div className="toast error" role="status">
           {aiStatus?.chat === "quota" && (
@@ -384,6 +399,8 @@ function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
 
 function MeetingHistorySection() {
   const history = useSyncExternalStore(meetingHistoryStore.subscribe, meetingHistoryStore.get);
+  const [searchQuery, setSearchQuery] = useState("");
+  const visibleHistory = searchQuery.trim() ? searchMeetingHistory(searchQuery, history) : history;
 
   return (
     <div className="settings-section">
@@ -395,11 +412,23 @@ function MeetingHistorySection() {
           </button>
         )}
       </div>
+      {history.length > 0 && (
+        <input
+          type="search"
+          className="meeting-history-search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="ค้นหาในประวัติการประชุม (ชื่อผู้พูด, งาน, หัวข้อ)..."
+          aria-label="ค้นหาในประวัติสรุปการประชุม"
+        />
+      )}
       {history.length === 0 ? (
         <p className="settings-note">ยังไม่มีประวัติสรุปการประชุมที่บันทึกไว้ในเครื่อง</p>
+      ) : visibleHistory.length === 0 ? (
+        <p className="settings-note">ไม่พบประวัติการประชุมที่ตรงกับ "{searchQuery.trim()}"</p>
       ) : (
         <div className="meeting-history-list">
-          {history.map((item) => (
+          {visibleHistory.map((item) => (
             <details key={item.id} className="meeting-history-item">
               <summary>
                 <span className="meeting-history-title">

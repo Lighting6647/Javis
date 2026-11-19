@@ -30,6 +30,7 @@ import {
   PROPOSE_PROJECT_ACTION_TOOL,
   READ_PAGE_TOOL,
   REMEMBER_TOOL,
+  SEARCH_MEETING_HISTORY_TOOL,
   SEARCH_RECENCIES,
   SEARCH_WEB_TOOL,
   type SearchRecency
@@ -209,6 +210,26 @@ const PROJECT_HUB_INSTRUCTIONS = [
   `เมื่อผู้ใช้ถามเรื่องสถานะโปรเจกต์ งาน Git, GitHub, Vercel หรือถามว่ามีโปรเจกต์อะไรบ้าง ให้เรียก ${INSPECT_PROJECTS_TOOL} ทันทีโดยไม่ต้องพูดนำ`,
   `เมื่อผู้ใช้สั่งให้ build, test, lint หรือ redeploy โปรเจกต์ใด ให้เรียก ${PROPOSE_PROJECT_ACTION_TOOL} เพื่อให้ผู้ใช้เห็นการ์ดยืนยันก่อนรันจริงเสมอ ห้ามแกล้งตอบว่ารันแล้วโดยไม่เรียกเครื่องมือ`
 ].join(" ");
+
+const MEETING_HISTORY_INSTRUCTIONS = `ผู้ใช้มีคลังประวัติสรุปการประชุมย้อนหลังเก็บอยู่ในเครื่อง เมื่อผู้ใช้ถามถึงการประชุมครั้งก่อน งานที่มอบหมาย หรือสิ่งที่คุยกันในการประชุมที่ผ่านมา ให้เรียกเครื่องมือ ${SEARCH_MEETING_HISTORY_TOOL} ทันทีโดยไม่ต้องพูดนำ`;
+
+const SEARCH_MEETING_HISTORY_TOOL_DEFINITION = {
+  type: "function",
+  name: SEARCH_MEETING_HISTORY_TOOL,
+  description: "ค้นหาบันทึกและคำสรุปการประชุมย้อนหลังในเครื่องของผู้ใช้ตามชื่อผู้พูด หัวข้อ หรือคำสำคัญ",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["query"],
+    properties: {
+      query: {
+        type: "string",
+        description: "คำค้น เช่น ชื่อผู้พูด (คุณเอ, ไลท์) หัวข้องาน หรือส่งข้อความว่าง \"\" เพื่อดูการประชุมครั้งล่าสุด"
+      }
+    }
+  }
+} as const;
 
 const PROJECT_TOOL_DEFINITIONS = [
   {
@@ -423,7 +444,7 @@ const PROVIDER_SEARCH_TOOL = { type: "web_search" } as const;
  */
 type SearchTool = "none" | "provider" | "request";
 
-function buildTools(search: SearchTool, withFormFill: boolean): unknown[] {
+function buildTools(search: SearchTool, withFormFill: boolean, withMeetingHistory = false): unknown[] {
   return [
     ...(search === "provider" ? [PROVIDER_SEARCH_TOOL] : []),
     ...(search === "request" ? [SEARCH_WEB_TOOL_DEFINITION] : []),
@@ -431,7 +452,8 @@ function buildTools(search: SearchTool, withFormFill: boolean): unknown[] {
     READ_PAGE_TOOL_DEFINITION,
     ...PROJECT_TOOL_DEFINITIONS,
     ...MEMORY_TOOL_DEFINITIONS,
-    ...(withFormFill ? [FILL_FORM_TOOL_DEFINITION] : [])
+    ...(withFormFill ? [FILL_FORM_TOOL_DEFINITION] : []),
+    ...(withMeetingHistory ? [SEARCH_MEETING_HISTORY_TOOL_DEFINITION] : [])
   ];
 }
 
@@ -494,6 +516,14 @@ const memorySchema = z.object({
   text: z.string().trim().min(1).max(MAX_MEMORY_LENGTH)
 });
 
+const meetingHistoryItemSchema = z.object({
+  id: z.string().max(64),
+  startedAt: z.number().finite(),
+  minutes: z.number().min(0).max(1440),
+  summary: z.string().max(2000),
+  transcript: z.string().max(4000)
+});
+
 export const chatRequestSchema = z.object({
   messages: z
     .array(
@@ -538,6 +568,8 @@ export const chatRequestSchema = z.object({
    * คำขอแบบนี้ไม่ใช้ประวัติบทสนทนา ไม่ค้นเว็บ และไม่ให้ AI เรียกเครื่องมือใด
    */
   meeting: meetingSchema.optional(),
+  /** คลังประวัติสรุปการประชุมย้อนหลังจากอุปกรณ์ของผู้ใช้ สำหรับเครื่องมือ search_meeting_history */
+  meetingHistory: z.array(meetingHistoryItemSchema).max(15).optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
   diagnose: z.string().max(200).optional(),
   /** โมเดลค้นเว็บที่ผู้ถือรหัสวินิจฉัยขอลองในคำขอนี้ คำขอที่ไม่มีรหัสจะถูกเมิน */
@@ -599,10 +631,18 @@ export function buildInstructionParts(
   memories: ChatRequest["memories"],
   webSearch: boolean | WebSearchAccess = true,
   today?: string,
-  screen?: string
+  screen?: string,
+  hasMeetingHistory = false
 ): InstructionParts {
   const access: WebSearchAccess = webSearch === true ? "builtin" : webSearch === false ? "none" : webSearch;
-  const system = [...CORE_INSTRUCTIONS, ...SEARCH_INSTRUCTIONS[access], ...OPEN_PAGE_INSTRUCTIONS, READ_PAGE_INSTRUCTIONS, PROJECT_HUB_INSTRUCTIONS];
+  const system = [
+    ...CORE_INSTRUCTIONS,
+    ...SEARCH_INSTRUCTIONS[access],
+    ...OPEN_PAGE_INSTRUCTIONS,
+    READ_PAGE_TOOL ? READ_PAGE_INSTRUCTIONS : "",
+    PROJECT_HUB_INSTRUCTIONS,
+    ...(hasMeetingHistory ? [MEETING_HISTORY_INSTRUCTIONS] : [])
+  ].filter(Boolean);
   const personal: string[] = [];
 
   if (today) personal.push(access === "none" ? `วันนี้คือ${today}` : `วันนี้คือ${today} ${STALE_KNOWLEDGE_NOTE}`);
@@ -634,9 +674,10 @@ export function buildInstructions(
   memories: ChatRequest["memories"],
   webSearch: boolean | WebSearchAccess = true,
   today?: string,
-  screen?: string
+  screen?: string,
+  hasMeetingHistory = false
 ): string {
-  const { fixed, personal } = buildInstructionParts(page, memories, webSearch, today, screen);
+  const { fixed, personal } = buildInstructionParts(page, memories, webSearch, today, screen, hasMeetingHistory);
   return `${fixed}\n\n${personal}`;
 }
 
@@ -756,6 +797,8 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   response.on("close", () => clientGone.abort());
 
   const { messages, page, screen, image, memories, diagnose, meeting } = parsed.data;
+  const meetingHistory = parsed.data.meetingHistory ?? [];
+  const hasMeetingHistory = meetingHistory.length > 0;
   const pageFields = page?.fields ?? [];
   const signal = AbortSignal.any([clientGone.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
@@ -886,7 +929,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   /** ขอคำตอบหนึ่งรอบจากผู้ให้บริการที่ตั้งค่าไว้ ผลลัพธ์มีรูปแบบเดียวกันทุกราย */
   const startReply = (input: unknown[], options: ReplyOptions): Promise<ReplyStart> => {
     const searchTool: SearchTool = !options.webSearch ? "none" : separateSearch ? "request" : "provider";
-    const tools = buildTools(searchTool, pageFields.length > 0);
+    const tools = buildTools(searchTool, pageFields.length > 0, hasMeetingHistory);
     const turns = input as Array<{ role: string; content: string }>;
     /** คำอธิบายคำขอนี้ในช่องวินิจฉัย */
     const target = `${ai.apiStyle} ${routedModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
@@ -895,7 +938,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       // คำสั่งที่ใช้แทนชุดปกติ (การสรุปการประชุม) ไม่มีส่วนเฉพาะตัวผู้ใช้ แต่ Claude ไม่รับส่วนที่ว่างเปล่า
       const { fixed, personal } = options.instructions
         ? { fixed: options.instructions, personal: "เขียนคำตอบเป็นภาษาไทย" }
-        : buildInstructionParts(page, memories, options.webSearch, describeToday(), screen);
+        : buildInstructionParts(page, memories, options.webSearch, describeToday(), screen, hasMeetingHistory);
       return tracked(target, () =>
         startClaudeReply({
           connection: { apiKey, baseUrl: ai.baseUrl },
@@ -921,7 +964,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     if (ai.name === "gemini" && searchTool === "provider") {
       return startGeminiInteraction({
         model: routedModel,
-        instructions: buildInstructions(page, memories, "grounded", describeToday(), screen),
+        instructions: buildInstructions(page, memories, "grounded", describeToday(), screen, hasMeetingHistory),
         turns,
         image: options.image,
         tools: options.tools ? tools : [],
@@ -932,8 +975,8 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     const instructions =
       options.instructions ??
       (searchTool === "request"
-        ? buildInstructions(page, memories, "request", describeToday(), screen)
-        : buildInstructions(page, memories, options.webSearch, undefined, screen));
+        ? buildInstructions(page, memories, "request", describeToday(), screen, hasMeetingHistory)
+        : buildInstructions(page, memories, options.webSearch, undefined, screen, hasMeetingHistory));
     if (ai.apiStyle === "chat") {
       const translator = createChatCompletionsTranslator();
       // ช่องวินิจฉัย: จดรูปร่างของสตรีมไว้ดูว่าการเรียกเครื่องมือมาถึงหรือไม่
@@ -1431,6 +1474,69 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     }
   };
 
+  /**
+   * ขั้นค้นหาคลังประวัติการประชุมจากอุปกรณ์ผู้ใช้เมื่อ AI เรียก search_meeting_history แล้วสรุปตอบเป็นภาษาพูด
+   */
+  const answerFromMeetingHistory = async (query: string, spokeBefore: boolean) => {
+    const cleaned = query.trim().toLowerCase();
+    const isLatestIntent = !cleaned || /^(?:ล่าสุด|ครั้งก่อน|ครั้งที่แล้ว|ทั้งหมด)$/.test(cleaned);
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    const matched = isLatestIntent
+      ? meetingHistory.slice(0, 3)
+      : meetingHistory
+          .map((record) => {
+            const haystack = `${record.summary}\n${record.transcript}`.toLowerCase();
+            const hits = tokens.reduce((count, token) => count + (haystack.includes(token) ? 1 : 0), 0);
+            return { record, hits };
+          })
+          .filter((item) => item.hits > 0)
+          .sort((a, b) => b.hits - a.hits || b.record.startedAt - a.record.startedAt)
+          .slice(0, 3)
+          .map((item) => item.record);
+
+    const selected = matched.length > 0 ? matched : meetingHistory.slice(0, 3);
+    if (selected.length === 0) {
+      forward(textDelta(`${spokeBefore ? " " : ""}ยังไม่มีประวัติการประชุมที่บันทึกไว้ในเครื่องค่ะ`));
+      return;
+    }
+
+    const formatted = selected.map((item) => ({
+      id: item.id,
+      date: new Intl.DateTimeFormat("th-TH", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(
+        new Date(item.startedAt)
+      ),
+      minutes: item.minutes,
+      summary: item.summary,
+      transcript: item.transcript
+    }));
+
+    const historyInstructions = [
+      ...CORE_INSTRUCTIONS,
+      ANSWER_ONLY_STEP,
+      `ประวัติสรุปการประชุมจากคลังในเครื่อง (คำค้น: "${query || "ล่าสุด"}"):\n\`\`\`json\n${JSON.stringify(formatted)}\n\`\`\``,
+      "ตอบคำถามผู้ใช้จากข้อมูลการประชุมด้านบนเป็นภาษาพูดสั้น ชัดเจน และเป็นธรรมชาติ หากไม่พบข้อมูลที่ถามให้แจ้งตรง ๆ จากบันทึกที่มี"
+    ].join("\n\n");
+
+    const answer = await startReply(messages, {
+      webSearch: false,
+      tools: false,
+      extras: optionalSettingsUsable,
+      instructions: historyInstructions
+    });
+
+    let answered = false;
+    if (answer.ok) {
+      await answer.events.read((event) => {
+        if (spokeBefore && !answered && hasAnswerText(event)) forward(textDelta(" "));
+        answered = forward(event) || answered;
+        return endsReply(event);
+      });
+    }
+    if (!answered) {
+      forward(textDelta(`${spokeBefore ? " " : ""}${selected[0]?.summary ?? "พบข้อมูลการประชุมในเครื่องแล้วค่ะ"}`));
+    }
+  };
+
   try {
     let spoke = false;
     await replyEvents.read((event) => {
@@ -1440,6 +1546,8 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
 
     if (reducer.projectInspectRequest !== null) {
       await answerFromProjectInspect(reducer.projectInspectRequest, spoke);
+    } else if (reducer.meetingHistoryQuery !== null) {
+      await answerFromMeetingHistory(reducer.meetingHistoryQuery, spoke);
     } else if (reducer.readRequest !== null) {
       await answerFromWebRead(reducer.readRequest, spoke);
     } else if (separateSearch && searching && reducer.searchRequest !== null) {

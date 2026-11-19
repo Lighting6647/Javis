@@ -99,7 +99,18 @@ export function createApp(options: AppOptions = {}): Express {
     response.set("Cache-Control", "no-store").json({
       ai: aiAccount.snapshot(),
       voice: { cloud: config.cloudVoice !== null },
-      retiring: aiAccount.getRetiring()
+      retiring: aiAccount.getRetiring(),
+      provider: {
+        name: config.ai.name,
+        label: config.ai.label,
+        chatModel: config.ai.chatModel,
+        proModel: config.ai.proModel ?? config.ai.chatModel,
+        fallbacks: config.fallbackAi.map((fb) => ({
+          name: fb.name,
+          label: fb.label,
+          chatModel: fb.chatModel
+        }))
+      }
     });
   });
   // ยอดใช้การค้นเว็บสำหรับแผงสถานะ: ยอดของเดือนนี้จาก Tavily และการใช้ผลค้นที่จำไว้ ไม่มีข้อความของผู้ใช้

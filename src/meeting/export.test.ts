@@ -48,8 +48,8 @@ describe("formatMeetingDate", () => {
 
 describe("meetingFileName", () => {
   it("ตั้งชื่อไฟล์จากวันและเวลาเริ่มประชุมตามเวลาของเครื่อง ใช้ตัวอักษรที่ทุกระบบรับได้", () => {
-    expect(meetingFileName(new Date(2026, 10, 13, 14, 5).getTime())).toBe("javis-meeting-20261113-1405.txt");
-    expect(meetingFileName(new Date(2027, 0, 2, 9, 0).getTime())).toBe("javis-meeting-20270102-0900.txt");
+    expect(meetingFileName(new Date(2026, 10, 13, 14, 5).getTime())).toBe("delluna-meeting-20261113-1405.txt");
+    expect(meetingFileName(new Date(2027, 0, 2, 9, 0).getTime())).toBe("delluna-meeting-20270102-0900.txt");
   });
 });
 
@@ -106,8 +106,8 @@ describe("speaker-grouped meeting Markdown & CSV export", () => {
 
   it("ตั้งชื่อไฟล์ .md และ .csv จากวันเวลาเริ่มประชุม", () => {
     const d = new Date(2026, 10, 13, 14, 5).getTime();
-    expect(meetingMarkdownFileName(d)).toBe("javis-meeting-20261113-1405.md");
-    expect(meetingCsvFileName(d)).toBe("javis-meeting-20261113-1405.csv");
+    expect(meetingMarkdownFileName(d)).toBe("delluna-meeting-20261113-1405.md");
+    expect(meetingCsvFileName(d)).toBe("delluna-meeting-20261113-1405.csv");
   });
 
   it("แยกชื่อผู้พูดและงานแยกตามผู้รับผิดชอบใน Markdown ได้ครบถ้วน", () => {

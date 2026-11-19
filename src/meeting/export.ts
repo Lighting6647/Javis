@@ -40,7 +40,7 @@ export function formatMeetingDate(startedAt: number, timeZone?: string): string 
 export function meetingFileName(startedAt: number): string {
   const date = new Date(startedAt);
   const day = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
-  return `javis-meeting-${day}-${pad(date.getHours())}${pad(date.getMinutes())}.txt`;
+  return `delluna-meeting-${day}-${pad(date.getHours())}${pad(date.getMinutes())}.txt`;
 }
 
 /**
@@ -82,11 +82,11 @@ function dateStamp(startedAt: number): string {
 }
 
 export function meetingMarkdownFileName(startedAt: number): string {
-  return `javis-meeting-${dateStamp(startedAt)}.md`;
+  return `delluna-meeting-${dateStamp(startedAt)}.md`;
 }
 
 export function meetingCsvFileName(startedAt: number): string {
-  return `javis-meeting-${dateStamp(startedAt)}.csv`;
+  return `delluna-meeting-${dateStamp(startedAt)}.csv`;
 }
 
 /**

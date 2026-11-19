@@ -78,7 +78,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   voiceId: null,
   rate: DEFAULT_SPEECH_RATE,
   cloud: true,
-  cloudVoice: null,
+  cloudVoice: "Leda",
   persona: "genz-girl"
 };
 

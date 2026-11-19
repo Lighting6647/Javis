@@ -1,4 +1,5 @@
 import { ChatError, type StreamChat } from "../conversation/types";
+import { meetingHistoryStore } from "../meeting/meetingHistory";
 import { aiStatusStore } from "./aiStatusStore";
 import { parseChatEventLine } from "./chatEvents";
 import { API_BASE } from "./http";
@@ -16,6 +17,19 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 /** ส่งประวัติบทสนทนาไปที่ backend และรับคำตอบแบบสตรีมทีละเหตุการณ์ */
 export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, screen, image, memories, frames, meeting }) => {
+  const savedMeetings = meeting
+    ? []
+    : meetingHistoryStore
+        .get()
+        .slice(0, 10)
+        .map((item) => ({
+          id: item.id,
+          startedAt: item.startedAt,
+          minutes: item.minutes,
+          summary: item.summary.slice(0, 1500),
+          transcript: item.transcript.slice(0, 2500)
+        }));
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/api/chat`, {
@@ -28,7 +42,8 @@ export const streamChatReply: StreamChat = async (messages, { signal, onEvent, p
         ...(image ? { image } : {}),
         ...(memories && memories.length > 0 ? { memories } : {}),
         ...(frames ? { frames: true } : {}),
-        ...(meeting ? { meeting } : {})
+        ...(meeting ? { meeting } : {}),
+        ...(savedMeetings.length > 0 ? { meetingHistory: savedMeetings } : {})
       }),
       signal
     });

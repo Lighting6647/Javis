@@ -1,13 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <radialGradient id="core">
-      <stop offset="0" stop-color="#e0faff"/>
-      <stop offset=".45" stop-color="#22d3ee"/>
-      <stop offset="1" stop-color="#086482"/>
+    <radialGradient id="dl-bg" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#0b2438"/>
+      <stop offset="100%" stop-color="#020b14"/>
     </radialGradient>
+    <linearGradient id="dl-ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+    <linearGradient id="dl-text" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ecfeff"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#020b14"/>
-  <circle cx="32" cy="32" r="26" fill="none" stroke="#22d3ee" stroke-opacity=".5" stroke-width=".8"/>
-  <circle cx="32" cy="32" r="21" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-dasharray="53 13" transform="rotate(-25 32 32)"/>
-  <circle cx="32" cy="32" r="12.5" fill="url(#core)"/>
+  <rect width="64" height="64" rx="14" fill="url(#dl-bg)"/>
+  <circle cx="32" cy="32" r="25" fill="none" stroke="#22d3ee" stroke-opacity="0.28" stroke-width="1"/>
+  <circle cx="32" cy="32" r="21.5" fill="none" stroke="url(#dl-ring)" stroke-width="2.4" stroke-dasharray="56 14" stroke-linecap="round" transform="rotate(-30 32 32)"/>
+  <circle cx="32" cy="32" r="17.5" fill="#06192a" fill-opacity="0.72"/>
+  <text x="32" y="39" text-anchor="middle" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif" font-size="20" font-weight="800" letter-spacing="-0.6" fill="url(#dl-text)">DL</text>
 </svg>

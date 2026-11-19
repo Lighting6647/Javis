@@ -92,3 +92,24 @@ export const meetingHistoryStore = {
     };
   }
 };
+
+/**
+ * ค้นหาบันทึกการประชุมในเครื่องตามคำสำคัญ ชื่อผู้พูด หรือหัวข้องาน
+ * คำถามทั่วไปเช่น "ครั้งก่อน" หรือข้อความว่างจะคืนรายการล่าสุดทั้งหมด
+ */
+export function searchMeetingHistory(query: string, records: readonly SavedMeetingRecord[] = history): SavedMeetingRecord[] {
+  const cleaned = query.trim().toLowerCase();
+  if (!cleaned || /^(?:ล่าสุด|ครั้งก่อน|ครั้งที่แล้ว|ทั้งหมด)$/.test(cleaned)) {
+    return [...records];
+  }
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  return records
+    .map((record) => {
+      const haystack = `${record.summary}\n${record.transcript}`.toLowerCase();
+      const hits = tokens.reduce((count, token) => count + (haystack.includes(token) ? 1 : 0), 0);
+      return { record, hits };
+    })
+    .filter((item) => item.hits > 0)
+    .sort((a, b) => b.hits - a.hits || b.record.startedAt - a.record.startedAt)
+    .map((item) => item.record);
+}

@@ -18,6 +18,7 @@ import {
   READ_PAGE_TOOL,
   REMEMBER_TOOL,
   safeHttpUrl,
+  SEARCH_MEETING_HISTORY_TOOL,
   SEARCH_WEB_TOOL
 } from "./responseStream.js";
 
@@ -710,5 +711,19 @@ describe("การควบคุมโปรเจกต์ (inspect_projects 
       }
     });
     expect(invalid.finish()).toEqual([]);
+  });
+
+  it("เก็บคำค้นคลังประวัติการประชุมจาก search_meeting_history ได้ถูกต้อง", () => {
+    const reducer = createResponseReducer();
+    reducer.push({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        name: SEARCH_MEETING_HISTORY_TOOL,
+        call_id: "call_m1",
+        arguments: JSON.stringify({ query: "คุณเอ สไลด์" })
+      }
+    });
+    expect(reducer.meetingHistoryQuery).toBe("คุณเอ สไลด์");
   });
 });

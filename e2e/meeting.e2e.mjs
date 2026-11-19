@@ -229,7 +229,7 @@ try {
     const [download] = await Promise.all([page.waitForEvent("download"), exportButton("ดาวน์โหลดเป็นไฟล์").click()]);
     const file = readFileSync(await download.path());
     const text = file.toString("utf8");
-    check("ดาวน์โหลด: ชื่อไฟล์บอกวันและเวลา", /^javis-meeting-\d{8}-\d{4}\.txt$/.test(download.suggestedFilename()), download.suggestedFilename());
+    check("ดาวน์โหลด: ชื่อไฟล์บอกวันและเวลา", /^(?:delluna|javis)-meeting-\d{8}-\d{4}\.txt$/.test(download.suggestedFilename()), download.suggestedFilename());
     check("ดาวน์โหลด: มีเครื่องหมาย UTF-8 คำสรุป และบันทึกคำพูด", file[0] === 0xef && file[1] === 0xbb && file[2] === 0xbf && text.includes("\r\nคำสรุป\r\n") && text.includes("- สมชายทำใบเสนอราคา กำหนดเสร็จวันศุกร์\r\n") && text.includes(`\r\n${sent[0]}\r\n`));
     await page.waitForFunction(() => !document.querySelector(".thread .meeting-export button.done"), null, { timeout: 5000 });
     check("ปุ่มคัดลอกกลับเป็นปกติเอง", (await exportButton("คัดลอกคำสรุป").count()) === 1);

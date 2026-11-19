@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type AiStatus, createAiStatusStore, describeAiProblem, hasAiProblem, parseAiStatus, parseRetiringModels } from "./aiStatusStore";
+import {
+  type AiStatus,
+  createAiStatusStore,
+  describeAiProblem,
+  hasAiProblem,
+  parseAiProviderInfo,
+  parseAiStatus,
+  parseRetiringModels
+} from "./aiStatusStore";
 
 const OK: AiStatus = { chat: "ok", transcribe: "ok" };
 const NO_CREDIT: AiStatus = { chat: "quota", transcribe: "quota" };
@@ -268,5 +276,26 @@ describe("parseRetiringModels", () => {
       })
     ).toEqual([{ service: "chat", model: "gpt-4.1-mini", date: "2027-01-14" }]);
     expect(parseRetiringModels(null)).toEqual([]);
+  });
+
+  it("อ่านข้อมูลผู้ให้บริการ AI และคีย์สำรองจาก /api/status ได้ครบถ้วน", () => {
+    expect(
+      parseAiProviderInfo({
+        provider: {
+          name: "gemini",
+          label: "Google Gemini",
+          chatModel: "gemini-3.5-flash-lite",
+          proModel: "gemini-3.8-pro",
+          fallbacks: [{ name: "openai", label: "OpenAI", chatModel: "gpt-6-luna" }]
+        }
+      })
+    ).toEqual({
+      name: "gemini",
+      label: "Google Gemini",
+      chatModel: "gemini-3.5-flash-lite",
+      proModel: "gemini-3.8-pro",
+      fallbacks: [{ name: "openai", label: "OpenAI", chatModel: "gpt-6-luna" }]
+    });
+    expect(parseAiProviderInfo({})).toBeNull();
   });
 });
