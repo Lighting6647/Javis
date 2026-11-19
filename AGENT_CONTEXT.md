@@ -25,6 +25,7 @@
 | **Voice Persona, Cloud TTS & Voice Replication** | `server/speech.ts`, `server/voiceReplication.ts`, `src/speech/cloudVoices.ts`, `src/speech/voiceRecorder.ts`, `src/components/VoiceRecorderDialog.tsx`, `src/components/VoiceSettingsDialog.tsx` | สังเคราะห์เสียงผ่าน `gemini-3.8-flash-tts` → `gemini-3.8-flash-lite-tts` → สำรอง OpenAI `gpt-4o-mini-tts` → เสียงในเครื่อง; รองรับบันทึก/อัปโหลด 24kHz mono WAV + `trimSilenceSamples` เพื่อสร้างเสียงจำลอง 2 ขั้นตอน |
 | **On-Device Speaker ID & Meeting Mode** | `src/meeting/speakerProfile.ts`, `src/meeting/liveSpeakerMonitor.ts`, `src/meeting/meetingRecorder.ts`, `src/meeting/export.ts`, `src/meeting/meetingHistory.ts`, `src/hooks/useMeeting.ts`, `src/components/MeetingPanel.tsx`, `src/components/MeetingExport.tsx` | สกัดเวกเตอร์ความถี่เสียงพูด 10 มิติบนเครื่อง (8 ย่าน `85–4,000 Hz` + ZCR + Spectral Centroid), รองรับผู้พูดหลายคน (สูงสุด 12 คน), Threshold Slider `0.72–0.95`, Live Calibration, JSON Export/Import, แก้ชื่อผู้พูดรายบรรทัด/ทั้งกลุ่ม, กรองตามผู้พูด, Export `.txt`/`.md`/`.csv`, เก็บประวัติย้อนหลัง 15 การประชุม, และค้นประวัติด้วย Tool `search_meeting_history` |
 | **Server Storage, Memory Sync & Feedback** | `server/memoryRelevance.ts`, `server/db.ts`, `server/userStore.ts`, `server/userRoutes.ts`, `src/memory/memorySync.ts`, `src/meeting/meetingSync.ts`, `src/services/serverSync.ts`, `src/services/userDataApi.ts`, `src/components/FeedbackButtons.tsx` | เก็บความจำ/คำติชมบน Postgres (`@neondatabase/serverless`) เมื่อมี `DATABASE_URL` ไม่อย่างนั้นเก็บในหน่วยความจำ แยกตามชื่อผู้ใช้ที่ล็อกอิน (`_` เมื่อไม่บังคับล็อกอิน); หน้าแอปรวมความจำสองฝั่งและบันทึกกลับทุกครั้งที่จำ/ลืม; ปุ่ม 👍/👎 ใต้ทุกคำตอบ; ความจำเกิน 20 เรื่องส่งให้ AI เฉพาะเรื่องที่เกี่ยวกับคำถาม (≤15 เรื่อง ตัดคำไทยในเครื่อง) |
+| **Answer Quality Evals** | `evals/cases.json`, `evals/rules.ts`, `evals/simulatedModel.ts`, `evals/graders.ts`, `evals/runEvals.ts`, `evals/cli.ts`, `evals/baseline.json` | `npm run eval` ใช้ prompt จริง + AI จำลองที่ทำตามเฉพาะกฎที่ prompt สั่ง ให้คะแนนรายเกณฑ์ และล้มเมื่อต่ำกว่า baseline |
 | **Web, Browser Bridge & Projects Control** | `src/App.tsx`, `src/components/BrowserView.tsx`, `src/components/FrameView.tsx`, `src/components/FillCard.tsx`, `src/components/ProjectsPanel.tsx`, `src/services/screenCapture.ts` | เบราว์เซอร์ในตัว Electron / Iframe, กรอกฟอร์มแบบต้องยืนยันทุกครั้ง (ห้ามแตะรหัสผ่าน/บัตร/OTP), วิเคราะห์ภาพหน้าจอ, และจัดการสถานะ GitHub/Vercel ของโปรเจกต์ |
 
 ---
@@ -89,7 +90,10 @@ npm.cmd run lint
 # 3. ตรวจ Unit & Integration Tests (Vitest)
 npm.cmd test
 
-# 4. ตรวจ End-to-End ในเบราว์เซอร์จริง (Chromium, 375/768/1280px, holo & plain, 0 console errors)
+# 4. ตรวจคุณภาพคำตอบกับ AI จำลอง (30 คำถามภาษาไทย ต้องไม่ต่ำกว่า evals/baseline.json)
+npm.cmd run eval
+
+# 5. ตรวจ End-to-End ในเบราว์เซอร์จริง (Chromium, 375/768/1280px, holo & plain, 0 console errors)
 node e2e/meeting.e2e.mjs
 ```
 

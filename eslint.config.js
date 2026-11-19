@@ -44,5 +44,14 @@ export default tseslint.config(
     // เซิร์ฟเวอร์ต้องพิมพ์บรรทัดเริ่มทำงานและผลตรวจบัญชี AI ให้ผู้ดูแลเห็น
     files: ["server/index.ts", "server/accountMonitor.ts"],
     rules: { "no-console": "off" }
+  },
+  {
+    // คำสั่งบรรทัดคำสั่งของ eval และวงจรเรียนรู้ พิมพ์รายงานให้คนอ่าน
+    files: ["evals/**/*.ts", "scripts/**/*.ts"],
+    languageOptions: { globals: globals.node }
+  },
+  {
+    files: ["evals/cli.ts", "scripts/learn.ts"],
+    rules: { "no-console": "off" }
   }
 );
