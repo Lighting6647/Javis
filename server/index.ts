@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAiAccount } from "./accountMonitor.js";
 import { aiAccount } from "./aiAccount.js";
+import { geminiKeyHint } from "./aiProvider.js";
 import { createApp } from "./app.js";
 import { authStatus } from "./authRoutes.js";
 import { config } from "./config.js";
@@ -20,6 +21,9 @@ function reportAiCheckError(error: unknown): void {
 
 const onListening = () => {
   console.log(`Javis server listening on http://localhost:${config.port}`);
+  console.log(`ผู้ให้บริการ AI: ${config.ai.label} (${config.ai.chatModel})`);
+  const keyHint = geminiKeyHint(process.env);
+  if (keyHint) console.warn(keyHint);
   if (authStatus.misconfigured) {
     console.error(authStatus.misconfiguredLog);
   } else if (!authStatus.required) {

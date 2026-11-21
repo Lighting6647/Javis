@@ -97,9 +97,11 @@ describe("resolveAiProvider", () => {
       });
     });
 
-    it("มีกุญแจหลายราย: ใช้ Claude เพราะการตั้งกุญแจของ Anthropic คือเจตนาเปลี่ยนมาใช้", () => {
+    it("มีกุญแจหลายราย: ใช้ Google Gemini ก่อน (ผู้ให้บริการหลัก) ไม่มีกุญแจ Google จึงใช้ Claude", () => {
       const all = { OPENAI_API_KEY: OPENAI_KEY, GEMINI_API_KEY: GEMINI_KEY, ANTHROPIC_API_KEY: CLAUDE_KEY };
-      expect(resolveAiProvider(all, quiet)).toMatchObject({ name: "claude", apiKey: CLAUDE_KEY });
+      expect(resolveAiProvider(all, quiet)).toMatchObject({ name: "gemini", apiKey: GEMINI_KEY });
+      expect(resolveAiProvider({ OPENAI_API_KEY: OPENAI_KEY, ANTHROPIC_API_KEY: CLAUDE_KEY }, quiet)).toMatchObject({ name: "claude", apiKey: CLAUDE_KEY });
+      expect(resolveAiProvider({ ...all, AI_PROVIDER: "claude" }, quiet)).toMatchObject({ name: "claude", apiKey: CLAUDE_KEY });
       // ยังบังคับกลับไปใช้รายอื่นได้โดยไม่ต้องลบกุญแจ
       expect(resolveAiProvider({ ...all, AI_PROVIDER: "gemini" }, quiet)).toMatchObject({ name: "gemini", apiKey: GEMINI_KEY });
       expect(resolveAiProvider({ ...all, AI_PROVIDER: "openai" }, quiet)).toMatchObject({ name: "openai", apiKey: OPENAI_KEY });

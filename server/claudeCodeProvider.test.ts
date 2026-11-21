@@ -31,8 +31,13 @@ describe("claudeCodeAvailability", () => {
 });
 
 describe("resolveAiProvider: claude-code", () => {
-  it("เปิดไว้บนเครื่องโดยไม่ได้ระบุ AI_PROVIDER: ใช้ Claude Code เป็นหลัก แม้มีกุญแจของรายอื่น", () => {
-    const provider = resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1", GEMINI_API_KEY: GEMINI_KEY }, quiet, LOCAL);
+  it("เปิดไว้อย่างเดียวโดยไม่ได้ระบุ AI_PROVIDER: ไม่เป็นหลัก มีกุญแจ Google จึงใช้ Gemini", () => {
+    expect(resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1", GEMINI_API_KEY: GEMINI_KEY }, quiet, LOCAL).name).toBe("gemini");
+    expect(resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1" }, quiet, LOCAL).name).toBe("openai");
+  });
+
+  it("เปิดไว้และระบุ AI_PROVIDER=claude-code: ใช้ Claude Code เป็นหลัก แม้มีกุญแจ Google", () => {
+    const provider = resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1", AI_PROVIDER: "claude-code", GEMINI_API_KEY: GEMINI_KEY }, quiet, LOCAL);
     expect(provider).toMatchObject({ name: "claude-code", apiStyle: "claude-code", apiKey: undefined, chatModel: "default", transcribeModel: null });
   });
 
@@ -60,8 +65,9 @@ describe("resolveAiProvider: claude-code", () => {
   });
 
   it("CLAUDE_CODE_MODEL กำหนดโมเดล ค่าที่ดูเหมือนกุญแจไม่ถูกใช้", () => {
-    expect(resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1", CLAUDE_CODE_MODEL: "claude-sonnet-5-5" }, quiet, LOCAL).chatModel).toBe("claude-sonnet-5-5");
-    expect(resolveAiProvider({ CLAUDE_CODE_PROVIDER: "1", CLAUDE_CODE_MODEL: "sk-not-a-model" }, quiet, LOCAL).chatModel).toBe("default");
+    const base = { CLAUDE_CODE_PROVIDER: "1", AI_PROVIDER: "claude-code" };
+    expect(resolveAiProvider({ ...base, CLAUDE_CODE_MODEL: "claude-sonnet-5-5" }, quiet, LOCAL).chatModel).toBe("claude-sonnet-5-5");
+    expect(resolveAiProvider({ ...base, CLAUDE_CODE_MODEL: "sk-not-a-model" }, quiet, LOCAL).chatModel).toBe("default");
   });
 });
 

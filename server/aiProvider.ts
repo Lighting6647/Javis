@@ -69,6 +69,25 @@ const CLAUDE_EFFORT: ClaudeEffort = "low";
 const CLAUDE_CODE_MODEL = "default";
 
 const read = (env: Env, name: string) => env[name]?.trim() || undefined;
+/** กุญแจของ Google Gemini: รับทั้ง GEMINI_API_KEY และ GOOGLE_API_KEY (ชื่อที่ Google AI Studio ใช้) โดย GEMINI_API_KEY มาก่อน */
+const geminiKey = (env: Env) => read(env, "GEMINI_API_KEY") ?? read(env, "GOOGLE_API_KEY");
+
+/** ตั้งกุญแจของ Google Gemini ไว้แล้วหรือยัง */
+export const hasGeminiKey = (env: Env): boolean => Boolean(geminiKey(env));
+
+/**
+ * ข้อความแนะนำตอนเริ่มเซิร์ฟเวอร์เมื่อยังไม่ได้ตั้งกุญแจของ Google Gemini ซึ่งเป็นผู้ให้บริการหลักของ Javis
+ * คืน null เมื่อตั้งไว้แล้ว หรือผู้ดูแลเลือกผู้ให้บริการรายอื่นไว้ชัดเจนด้วย AI_PROVIDER ข้อความไม่มีค่ากุญแจใด
+ */
+export function geminiKeyHint(env: Env): string | null {
+  if (hasGeminiKey(env)) return null;
+  const requested = read(env, "AI_PROVIDER")?.toLowerCase();
+  if (requested && requested !== "gemini") return null;
+  return (
+    "ยังไม่ได้ตั้งกุญแจ Google Gemini: สร้างกุญแจฟรีที่ https://aistudio.google.com/apikey " +
+    "แล้วใส่ใน .env.local เป็นบรรทัด GEMINI_API_KEY=<กุญแจ> จากนั้นเริ่มเซิร์ฟเวอร์ใหม่ (กุญแจอยู่ฝั่งเซิร์ฟเวอร์เท่านั้น ห้ามใส่ในหน้าเว็บ)"
+  );
+}
 const isOff = (env: Env, name: string) => read(env, name)?.toLowerCase() === "false";
 const isOn = (env: Env, name: string) => read(env, name)?.toLowerCase() === "true";
 
@@ -161,13 +180,12 @@ function chooseProvider(env: Env, warn: (message: string) => void, runtime: Prov
     warn(`ค่า AI_PROVIDER ไม่รู้จัก (ใช้ได้: openai, gemini, claude, claude-code) จึงเลือกจากกุญแจที่ตั้งไว้แทน`);
   }
 
-  // เปิด Claude Code ไว้บนเครื่องนี้โดยไม่ได้ระบุรายอื่น คือเจตนาใช้เป็นหลัก รายที่มีกุญแจเป็นตัวสำรอง
-  if (claudeCode.allowed && !requested) return "claude-code";
-
-  // ตั้งกุญแจของรายใดไว้คือเจตนาใช้รายนั้น แม้จะยังมีกุญแจของรายอื่นค้างอยู่
-  // เรียงจากรายที่เพิ่มเข้ามาล่าสุด ถ้าต้องการรายอื่นให้ระบุด้วย AI_PROVIDER
+  // Google Gemini เป็นผู้ให้บริการหลัก: มีกุญแจของ Google เมื่อไรใช้ Gemini ก่อนเสมอ แม้มีกุญแจของรายอื่นค้างอยู่
+  // ถัดมาคือ Claude แล้วจึง OpenAI ถ้าต้องการรายอื่นให้ระบุด้วย AI_PROVIDER
+  // Claude Code บนเครื่องเป็นหลักได้เฉพาะเมื่อระบุ AI_PROVIDER=claude-code ไม่เช่นนั้นเป็นตัวสำรองท้ายสุด
+  if (geminiKey(env)) return "gemini";
   if (read(env, "ANTHROPIC_API_KEY")) return "claude";
-  return read(env, "GEMINI_API_KEY") ? "gemini" : "openai";
+  return "openai";
 }
 
 /** อ่านระดับการคิดของ Claude ค่าที่ไม่รู้จักจะใช้ค่าเริ่มต้นแทน และ default คือปล่อยให้โมเดลเลือกเอง */
@@ -183,7 +201,8 @@ function readClaudeEffort(env: Env, warn: (message: string) => void): ClaudeEffo
 
 /**
  * เลือกผู้ให้บริการ AI และค่าที่เกี่ยวข้องจากตัวแปรสภาพแวดล้อม
- * ตั้งกุญแจของรายใดไว้อย่างเดียวก็ใช้รายนั้นได้เลย (ANTHROPIC_API_KEY, GEMINI_API_KEY หรือ OPENAI_API_KEY)
+ * ตั้งกุญแจของรายใดไว้อย่างเดียวก็ใช้รายนั้นได้เลย (GEMINI_API_KEY หรือ GOOGLE_API_KEY, ANTHROPIC_API_KEY หรือ OPENAI_API_KEY)
+ * มีหลายรายเรียง Gemini ก่อน แล้ว Claude แล้ว OpenAI
  * หรือบังคับด้วย AI_PROVIDER
  */
 export function resolveAiProvider(
@@ -232,7 +251,7 @@ export function resolveAiProvider(
       name: "gemini",
       label: "Google Gemini",
       apiStyle: "chat",
-      apiKey: read(env, "GEMINI_API_KEY"),
+      apiKey: geminiKey(env),
       keyVariable: "GEMINI_API_KEY",
       baseUrl: readBaseUrl(env, "GEMINI_BASE_URL", GEMINI_BASE_URL, warn),
       chatModel,
@@ -298,7 +317,7 @@ export function resolveFallbackAiProviders(
 ): AiProvider[] {
   const primary = primaryName ?? chooseProvider(env, warn, runtime);
   const candidates: ReadonlyArray<{ name: AiProviderName; usable: boolean }> = [
-    { name: "gemini", usable: Boolean(read(env, "GEMINI_API_KEY")) },
+    { name: "gemini", usable: hasGeminiKey(env) },
     { name: "claude", usable: Boolean(read(env, "ANTHROPIC_API_KEY")) },
     { name: "openai", usable: Boolean(read(env, "OPENAI_API_KEY")) },
     { name: "claude-code", usable: claudeCodeAvailability(env, runtime).allowed }

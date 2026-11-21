@@ -137,10 +137,11 @@ Javis ฟังเงียบ ๆ จดคำพูดทั้งหมดข
 
 ## เริ่มใช้งานบนเว็บ
 
-1. สร้าง `.env.local` จาก `.env.example` และตั้งกุญแจของผู้ให้บริการ AI หนึ่งราย: `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` หรือ `OPENAI_API_KEY` (ดูหัวข้อ "ผู้ให้บริการ AI")
-2. ติดตั้ง dependencies: `npm install`
-3. รันทั้ง backend และเว็บ: `npm run dev`
-4. เปิด `http://localhost:5173` และอนุญาตใช้ไมโครโฟน
+1. สร้างกุญแจ Google Gemini (ฟรี) ที่ https://aistudio.google.com/apikey
+2. คัดลอก `.env.example` เป็น `.env.local` แล้ววางกุญแจที่บรรทัดแรก `GEMINI_API_KEY=` (ใช้ชื่อ `GOOGLE_API_KEY` แทนได้) Gemini เป็นผู้ให้บริการหลัก ถ้าจะใช้รายอื่นให้ตั้ง `ANTHROPIC_API_KEY` หรือ `OPENAI_API_KEY` แทน (ดูหัวข้อ "ผู้ให้บริการ AI") ถ้ายังไม่ได้ตั้งกุญแจของ Google เซิร์ฟเวอร์จะบอกวิธีตั้งตอนเริ่ม
+3. ติดตั้ง dependencies: `npm install`
+4. รันทั้ง backend และเว็บ: `npm run dev`
+5. เปิด `http://localhost:5173` และอนุญาตใช้ไมโครโฟน
 
 API key อยู่เฉพาะ backend เบราว์เซอร์และแอปมือถือไม่เคยได้รับ key
 
@@ -282,11 +283,11 @@ Javis ใช้ผู้ให้บริการได้สามราย �
 
 | ตั้งค่า | ผลลัพธ์ |
 | --- | --- |
-| `OPENAI_API_KEY` อย่างเดียว | ใช้ OpenAI (ค่าเริ่มต้น) |
-| `GEMINI_API_KEY` | ใช้ Google Gemini แม้จะยังมีกุญแจของ OpenAI ค้างอยู่ |
-| `ANTHROPIC_API_KEY` | ใช้ Claude ของ Anthropic แม้จะยังมีกุญแจของรายอื่นค้างอยู่ |
-| `AI_PROVIDER=claude`, `gemini` หรือ `openai` | บังคับเลือก ไม่ว่าจะตั้งกุญแจใดไว้ |
-| `CLAUDE_CODE_PROVIDER=1` | ใช้ Claude Code ที่ล็อกอินไว้บนเครื่องนี้ ไม่ต้องมีกุญแจ (เฉพาะเซิร์ฟเวอร์บนเครื่องของผู้ใช้ ดู "Claude Code บนเครื่องนี้") |
+| `GEMINI_API_KEY` หรือ `GOOGLE_API_KEY` | ใช้ Google Gemini (ผู้ให้บริการหลัก) แม้จะยังมีกุญแจของรายอื่นค้างอยู่ |
+| `ANTHROPIC_API_KEY` (ไม่มีกุญแจ Google) | ใช้ Claude ของ Anthropic |
+| `OPENAI_API_KEY` อย่างเดียว | ใช้ OpenAI |
+| `AI_PROVIDER=gemini`, `claude` หรือ `openai` | บังคับเลือก ไม่ว่าจะตั้งกุญแจใดไว้ |
+| `CLAUDE_CODE_PROVIDER=1` | เพิ่ม Claude Code ที่ล็อกอินไว้บนเครื่องนี้เป็นตัวสำรองท้ายสุด ใช้เป็นหลักเมื่อตั้ง `AI_PROVIDER=claude-code` ด้วย (เฉพาะเซิร์ฟเวอร์บนเครื่องของผู้ใช้ ดู "Claude Code บนเครื่องนี้") |
 
 สิ่งที่ต่างกันระหว่างสามราย
 
@@ -334,8 +335,8 @@ Javis ใช้ผู้ให้บริการได้สามราย �
 
 | ตัวแปร | ความหมาย |
 | --- | --- |
-| `CLAUDE_CODE_PROVIDER=1` | เปิดผู้ให้บริการนี้ ถ้าไม่ได้ตั้ง `AI_PROVIDER` จะใช้เป็นหลัก และรายที่มีกุญแจเป็นตัวสำรอง |
-| `AI_PROVIDER=claude-code` | บังคับใช้เป็นหลัก (ต้องตั้ง `CLAUDE_CODE_PROVIDER=1` ด้วย) ถ้า `AI_PROVIDER` เป็นรายอื่น Claude Code จะเป็นตัวสำรองท้ายสุด |
+| `CLAUDE_CODE_PROVIDER=1` | เปิดผู้ให้บริการนี้เป็นตัวสำรองท้ายสุด (Gemini ยังเป็นหลักเมื่อมีกุญแจของ Google) |
+| `AI_PROVIDER=claude-code` | ใช้ Claude Code เป็นหลัก (ต้องตั้ง `CLAUDE_CODE_PROVIDER=1` ด้วย) รายที่มีกุญแจเป็นตัวสำรอง |
 | `CLAUDE_CODE_MODEL` | โมเดล เช่น `claude-sonnet-5-5` ไม่ตั้ง = ให้ Claude Code เลือกตามบัญชี |
 | `ANTHROPIC_EFFORT` | ระดับการคิด ใช้ค่าเดียวกับ Claude (ค่าเริ่มต้น `low` เพื่อให้ตอบเร็ว) |
 | `WEB_SEARCH_ENABLED=false` | ปิดการค้นเว็บ (Claude Code จะไม่มีเครื่องมือใดเลย) |
@@ -344,7 +345,7 @@ Javis ใช้ผู้ให้บริการได้สามราย �
 
 1. ติดตั้งและล็อกอิน Claude Code: `npm install -g @anthropic-ai/claude-code` แล้วรัน `claude` หนึ่งครั้งเพื่อล็อกอิน
 2. ติดตั้ง SDK ในโปรเจกต์นี้: `npm install @anthropic-ai/claude-agent-sdk` (แพ็กเกจนี้ตั้งใจไม่ใส่ไว้ใน dependencies เพื่อไม่ให้ build ของ Vercel และ Docker ต้องมี)
-3. ตั้ง `CLAUDE_CODE_PROVIDER=1` แล้วเริ่มเซิร์ฟเวอร์ด้วย `npm run dev` ตอนเริ่มจะตรวจว่าติดตั้ง SDK แล้ว (ไม่ส่งคำถามจริง)
+3. ตั้ง `CLAUDE_CODE_PROVIDER=1` (และ `AI_PROVIDER=claude-code` ถ้าจะใช้เป็นหลัก) แล้วเริ่มเซิร์ฟเวอร์ด้วย `npm run dev` ตอนเริ่มจะตรวจว่าติดตั้ง SDK แล้ว (ไม่ส่งคำถามจริง)
 
 เปิดได้เฉพาะเซิร์ฟเวอร์ที่รันบนเครื่องของผู้ใช้เอง: บน Vercel, ใน Docker หรือเมื่อ `NODE_ENV=production` ระบบไม่เปิดแม้ตั้งค่าไว้ และเขียนคำเตือนลง log เพราะ Claude Code ใช้บัญชีที่ล็อกอินไว้บนเครื่องนั้น
 
