@@ -8,6 +8,8 @@ import { customVoicesStore } from "../services/customVoicesStore";
 import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
+import { wakeGateAllowed, wakeGateStore, wakePhrases } from "../services/wakeGateStore";
+import { handsFreeAvailable } from "../speech";
 import type { CloudVoiceStatus } from "../speech/cloudVoice";
 import { GEMINI_TTS_VOICES, getVoicePersona, isGeminiTtsVoice, VOICE_PERSONAS, type VoicePersonaOption } from "../speech/cloudVoices";
 import { micLevelsAvailable } from "../speech/sessionMeter";
@@ -372,6 +374,28 @@ function ThemeSection() {
   );
 }
 
+/** สวิตช์คำเรียกชื่อ: มีเฉพาะที่ที่ฟังตลอดเวลาได้ และเมื่อผู้ดูแลไม่ได้ปิดไว้ทั้งระบบ */
+function WakeGateSection() {
+  const enabled = useSyncExternalStore(wakeGateStore.subscribe, wakeGateStore.get);
+  const [capable] = useState(handsFreeAvailable);
+  if (!capable || !wakeGateAllowed) return null;
+
+  return (
+    <fieldset>
+      <legend>คำเรียกชื่อ</legend>
+      <label className="voice-option">
+        <input type="checkbox" checked={enabled} onChange={(event) => wakeGateStore.set(event.target.checked)} />
+        <span>
+          ต้องเรียกชื่อก่อนสั่ง ({wakePhrases.map((phrase) => `"${phrase}"`).join(", ")})
+          <small>
+            เช่น "จาร์วิส เปิดเว็บข่าว" คำพูดที่ไม่ได้เรียกชื่อจะไม่ถูกส่งไปถาม AI ปิดไว้ = ทุกประโยคที่ได้ยินเป็นคำสั่งและใช้โควตา
+          </small>
+        </span>
+      </label>
+    </fieldset>
+  );
+}
+
 function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
   const { canInstall, installed, install } = installPrompt;
 
@@ -503,6 +527,7 @@ export function VoiceSettingsDialog({
         </header>
 
         <ThemeSection />
+        <WakeGateSection />
         {open && <VoiceSection synthesizer={synthesizer} settings={settings} onOpenRecorder={onOpenRecorder} />}
         <MemorySection />
         <MeetingHistorySection />

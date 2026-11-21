@@ -7,6 +7,7 @@ import {
   LISTEN_RETRY_LIMIT,
   type MemoryPort,
   QUICK_LISTEN_LIMIT,
+  type WakeOptions,
   QUICK_LISTEN_PAUSE_MS
 } from "./controller";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
@@ -158,6 +159,8 @@ interface SetupOptions {
   canFrame?: boolean;
   /** คำสั่งที่แอปทำเองโดยไม่ถาม AI: คืน true เมื่อรับคำสั่งนั้นไปทำแล้ว */
   onCommand?: (text: string) => boolean;
+  /** คำเรียกชื่อ */
+  wake?: WakeOptions;
   /** รันคำสั่งควบคุมโปรเจกต์จำลอง */
   runProjectAction?: (
     projectId: string,
@@ -181,6 +184,7 @@ function setup(options: SetupOptions = {}) {
     now: () => clock.time,
     handsFree: options.handsFree,
     onCommand: options.onCommand,
+    wake: options.wake,
     runProjectAction: options.runProjectAction,
     wait: (ms) => {
       const done = deferred<void>();
@@ -462,6 +466,7 @@ describe("ConversationController", () => {
     expect(pending.options.signal.aborted).toBe(true);
     expect(controller.getState()).toEqual({
       phase: "idle",
+      wake: "off",
       active: false,
       messages: [],
       partial: "",
@@ -1794,5 +1799,160 @@ describe("ConversationController", () => {
       expect(controller.getState().pendingProjectAction).toBeNull();
       expect(synthesizer.spoken).toContain("รัน build ของโปรเจกต์ Tamsang ผ่านเรียบร้อยครับ");
     });
+  });
+});
+
+describe("ConversationController: คำเรียกชื่อ", () => {
+  const PHRASES = ["hey jarvis", "จาร์วิส", "จาวิส", "jarvis"] as const;
+  /** ระบบฟังของเบราว์เซอร์รอเสียงพูดราวนี้ก่อนจบเองเมื่อเงียบ */
+  const SILENT_LISTEN_MS = 8000;
+
+  async function startWithWake(extra: Partial<WakeOptions> = {}) {
+    const flag = { enabled: true };
+    const context = setup({
+      handsFree: true,
+      wake: { enabled: () => flag.enabled, phrases: () => PHRASES, windowMs: 8000, ...extra }
+    });
+    void context.controller.start();
+    await settle();
+    return { ...context, flag };
+  }
+
+  it("ระหว่างรอคำเรียกชื่อ: คำพูดที่ไม่ได้เรียกชื่อถูกทิ้ง ไม่ส่งไปถาม AI และฟังต่อ", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
+
+    clock.time += 3000;
+    recognizer.current.result.resolve("ข่าวภาคค่ำวันนี้มีเรื่องอะไรบ้าง");
+    await settle();
+
+    expect(chat.calls).toHaveLength(0);
+    expect(recognizer.listens).toHaveLength(2);
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting", active: true });
+  });
+
+  it("เรียกชื่อพร้อมคำสั่งในประโยคเดียว: ส่งเฉพาะคำสั่งที่ตามหลังคำเรียกชื่อ", async () => {
+    const { recognizer, chat, controller } = await startWithWake();
+
+    recognizer.current.result.resolve("จาร์วิส ตอนนี้กี่โมงแล้ว");
+    await settle();
+
+    expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+    expect(controller.getState().phase).toBe("thinking");
+  });
+
+  it("เรียกชื่ออย่างเดียว: คำพูดถัดไปภายในเวลาที่กำหนดเป็นคำสั่ง แล้วกลับไปรอคำเรียกชื่อหลังตอบ", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake();
+
+    clock.time += 1000;
+    recognizer.current.result.resolve("Hey Jarvis");
+    await settle();
+    expect(chat.calls).toHaveLength(0);
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "awake" });
+
+    clock.time += 3000;
+    recognizer.current.result.resolve("เปิดเว็บกรมอุตุ");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "เปิดเว็บกรมอุตุ" }]);
+
+    chat.reply("เปิดให้แล้วครับ");
+    await settle();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
+  });
+
+  it("เรียกชื่ออย่างเดียวแล้วเลยเวลา: คำพูดถัดไปไม่ถูกส่ง", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake();
+
+    recognizer.current.result.resolve("จาวิส");
+    await settle();
+    clock.time += SILENT_LISTEN_MS + 1000;
+    recognizer.current.result.resolve("");
+    await settle();
+    expect(controller.getState().wake).toBe("waiting");
+
+    clock.time += 2000;
+    recognizer.current.result.resolve("เปิดเพลงหน่อย");
+    await settle();
+    expect(chat.calls).toHaveLength(0);
+  });
+
+  it("ปิดคำเรียกชื่อระหว่างฟัง: รอบฟังถัดไปทุกประโยคเป็นคำสั่งแบบเดิม", async () => {
+    const { recognizer, chat, clock, flag, controller } = await startWithWake();
+
+    flag.enabled = false;
+    clock.time += SILENT_LISTEN_MS;
+    recognizer.current.result.resolve("");
+    await settle();
+    expect(controller.getState().wake).toBe("off");
+
+    recognizer.current.result.resolve("ตอนนี้กี่โมงแล้ว");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+  });
+
+  it("ข้อความที่พิมพ์ไม่ต้องเรียกชื่อ", async () => {
+    const { chat, controller } = await startWithWake();
+
+    controller.sendText("สรุปข่าววันนี้");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "สรุปข่าววันนี้" }]);
+  });
+
+  it("ไม่ได้ฟังตลอดเวลา (ปุ่มไมโครโฟน): ไม่ต้องเรียกชื่อ", async () => {
+    const { recognizer, chat, controller } = setup({
+      wake: { enabled: () => true, phrases: () => PHRASES }
+    });
+    void controller.start();
+    await settle();
+
+    expect(controller.getState().wake).toBe("off");
+    recognizer.current.result.resolve("ตอนนี้กี่โมงแล้ว");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+  });
+
+  it("ตัวตรวจเสียง: ไม่เปิดระบบฟังจนได้ยินคำเรียกชื่อ แล้วฟังคำสั่ง", async () => {
+    const heard = deferred<void>();
+    const detector = { waitForWake: vi.fn(() => heard.promise) };
+    const { recognizer, chat, controller } = await startWithWake({ detector });
+
+    expect(detector.waitForWake).toHaveBeenCalledTimes(1);
+    expect(recognizer.listens).toHaveLength(0);
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
+
+    heard.resolve();
+    await settle();
+    expect(recognizer.listens).toHaveLength(1);
+    expect(controller.getState().wake).toBe("awake");
+
+    recognizer.current.result.resolve("ตอนนี้กี่โมงแล้ว");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+  });
+
+  it("ตัวตรวจเสียงใช้ไม่ได้: กลับไปตรวจคำเรียกชื่อจากข้อความที่ได้ยิน", async () => {
+    const detector = { waitForWake: vi.fn(() => Promise.reject(new Error("no key"))) };
+    const { recognizer, chat } = await startWithWake({ detector });
+
+    expect(recognizer.listens).toHaveLength(1);
+    recognizer.current.result.resolve("จาร์วิส เปิดเพลง");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "เปิดเพลง" }]);
+  });
+
+  it("หยุดสนทนาระหว่างรอตัวตรวจเสียง: ยกเลิกการรอคำเรียกชื่อ", async () => {
+    const signals: AbortSignal[] = [];
+    const detector = {
+      waitForWake: vi.fn((signal: AbortSignal) => {
+        signals.push(signal);
+        return new Promise<void>(() => undefined);
+      })
+    };
+    const { controller } = await startWithWake({ detector });
+
+    controller.stop();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(true);
+    expect(controller.getState()).toMatchObject({ phase: "idle", active: false });
   });
 });

@@ -10,6 +10,7 @@ import { launchAllowedApp } from "../services/appLauncher";
 import { clearConversationSnapshot, restoredConversation, saveConversationSnapshot } from "../services/conversationSnapshot";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
+import { wakeGateEnabled, wakePhrases } from "../services/wakeGateStore";
 import { createSpeechServices, handsFreeAvailable } from "../speech";
 import { CloudVoiceSynthesizer, resolveAssistantIdentity } from "../speech/cloudVoice";
 
@@ -52,6 +53,8 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
       handsFree: handsFreeAvailable(),
       // คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" (ลงทะเบียนที่ src/hooks/useMeeting.ts)
       onCommand: appCommands.handle,
+      // คำเรียกชื่อ: ระหว่างฟังตลอดเวลา ส่งไปถาม AI เฉพาะคำพูดที่เรียก "จาร์วิส" ก่อน (ปิดได้ในหน้าตั้งค่า)
+      wake: { enabled: wakeGateEnabled, phrases: () => wakePhrases },
       // เปิดหน้าเว็บภายใน Javis เสมอ (แอปเดสก์ท็อปใช้เบราว์เซอร์ในตัว บนเว็บเปิดใน FrameView ไม่เด้งออกไปข้างนอก)
       openPage: (url) => (isDesktopApp() ? browserStore.open(url) : browserStore.showFramed(url, "หน้าเว็บ")),
       showPage: runsInBrowserTab() ? browserStore.showFramed : undefined,

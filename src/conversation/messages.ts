@@ -1,6 +1,9 @@
 import type { SpeechErrorCode } from "../speech/types";
 import type { Phase } from "./types";
 
+/** ป้ายสถานะระหว่างฟังเพื่อรอคำเรียกชื่อ: คำพูดที่ไม่ได้เรียกชื่อยังไม่ถูกส่งไปถาม AI */
+export const WAITING_FOR_WAKE_LABEL = "รอคำเรียก \"จาร์วิส\"";
+
 export const PHASE_LABEL: Record<Phase, string> = {
   idle: "พร้อมใช้งาน",
   starting: "กำลังเตรียมไมโครโฟน",

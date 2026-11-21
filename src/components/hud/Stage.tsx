@@ -24,6 +24,8 @@ interface StageProps {
   platformLabel?: string;
   /** โหมดคิดลึก: ใช้ reasoning ระดับสูงในการวิเคราะห์ */
   thinkHard?: boolean;
+  /** กำลังฟังเพื่อรอคำเรียกชื่อ (ยังไม่ส่งคำพูดไปถาม AI) */
+  waitingForWake?: boolean;
 }
 
 /**
@@ -39,7 +41,8 @@ export function Stage({
   offline,
   metricsHidden: _metricsHidden = false,
   platformLabel,
-  thinkHard = false
+  thinkHard = false,
+  waitingForWake = false
 }: StageProps) {
   void _readouts;
   void _metricsHidden;
@@ -51,6 +54,7 @@ export function Stage({
     <aside
       className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}${thinkHard ? " think-hard" : ""}`}
       data-phase={phase}
+      data-wake={waitingForWake ? "waiting" : undefined}
       aria-label="แผงสถานะของจาร์วิส"
     >
       <div className="stage-identity" aria-hidden>
@@ -66,7 +70,7 @@ export function Stage({
         <span className="core-heart" />
       </div>
 
-      <VoiceWaveform phase={phase} offline={offline} thinkHard={thinkHard} />
+      <VoiceWaveform phase={phase} offline={offline} thinkHard={thinkHard} waitingForWake={waitingForWake} />
 
       {/* แผงสถานะมินิมอลขอบซ้ายและแถบระดับเสียงขอบขวา (แสดงเฉพาะโหมดเต็มจอแบบเดียวกับ localhost:5173) */}
       {!compact && (

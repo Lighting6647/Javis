@@ -373,6 +373,12 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
   opacity: 0.95;
 }
 
+/* รอคำเรียกชื่อ: ยังฟังอยู่แต่ยังไม่รับคำสั่ง จึงหรี่ลงให้ต่างจากตอนฟังคำสั่งจริง */
+.voice-waveform.listening.wake-waiting .voice-waveform-bar {
+  background: var(--accent);
+  opacity: 0.45;
+}
+
 .voice-waveform.thinking .voice-waveform-bar {
   background: #fbbf24;
   animation: waveform-pulse 1.1s ease-in-out infinite alternate;

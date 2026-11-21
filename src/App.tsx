@@ -30,7 +30,7 @@ import {
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
 import { pickThaiFiller } from "./conversation/fillers";
-import { PHASE_LABEL } from "./conversation/messages";
+import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useCalendarReminder } from "./hooks/useCalendarReminder";
@@ -91,7 +91,7 @@ export default function App() {
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
+  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -165,7 +165,9 @@ export default function App() {
         ? "AI ใช้งานไม่ได้"
         : micOff
           ? "ไมโครโฟนปิดอยู่"
-          : PHASE_LABEL[phase];
+          : phase === "listening" && wake === "waiting"
+            ? WAITING_FOR_WAKE_LABEL
+            : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const cloudVoiceStatus = useCloudVoiceStatus(synthesizer);
   const assistantIdentity = resolveAssistantIdentity(cloudVoiceStatus);
@@ -925,6 +927,7 @@ export default function App() {
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
           thinkHard={thinkHard}
+          waitingForWake={!meetingStatus && phase === "listening" && wake === "waiting"}
         />
       )}
 
