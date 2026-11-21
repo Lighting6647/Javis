@@ -219,8 +219,8 @@ export default function App() {
     cloudVoiceName: voiceSettings.cloudVoice,
     searchUsage
   });
-  // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป ส่วนบนเว็บ หน้าที่เปิดแสดงในพื้นที่หลักข้างแผงสถานะ
-  const stageShown = ready && !(showingWeb && desktop);
+  // ซ่อนแผง HUD เก่าด้านซ้ายเมื่อเปิดหน้าเว็บ/งาน/โปรเจกต์/Router เพื่อให้แสดงผลเต็มพื้นที่
+  const stageShown = ready && !showingWeb && !showingProjects && !showingWorkspace && !showingRouter;
   const latestMeetingMessage = [...messages].reverse().find((message) => Boolean(message.meeting && message.text));
   const shownMeeting =
     latestMeetingMessage && latestMeetingMessage.id !== dismissedMeetingId ? latestMeetingMessage : null;

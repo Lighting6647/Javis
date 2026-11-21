@@ -7,7 +7,6 @@ import { ArcCore } from "./ArcCore";
 import { HudClock } from "./HudClock";
 import { NeuralSphere } from "./NeuralSphere";
 import { OrbitalEnergyCore } from "./OrbitalEnergyCore";
-import { Telemetry } from "./Telemetry";
 import { VoiceWaveform } from "./VoiceWaveform";
 
 interface StageProps {
@@ -35,13 +34,15 @@ interface StageProps {
 export function Stage({
   phase,
   statusLabel,
-  readouts,
+  readouts: _readouts,
   compact,
   offline,
-  metricsHidden = false,
+  metricsHidden: _metricsHidden = false,
   platformLabel,
   thinkHard = false
 }: StageProps) {
+  void _readouts;
+  void _metricsHidden;
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
   const drawing = phase === "listening" && theme === "holo" && micLevels;
@@ -103,8 +104,6 @@ export function Stage({
         <span />
         <span />
       </div>
-
-      <Telemetry readouts={readouts} masked={metricsHidden} />
     </aside>
   );
 }
