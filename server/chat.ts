@@ -246,7 +246,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     return;
   }
   const routedModel = resolveRoutedModel(ai, jevRoute);
-  const assistantIdentity = parsed.data.identity ?? "javis";
+  const assistantIdentity = parsed.data.identity ?? "delluna";
 
   const diagnosing = isDiagnosticToken(diagnose);
   const requestStarted = Date.now();

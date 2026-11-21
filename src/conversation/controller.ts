@@ -780,9 +780,25 @@ export class ConversationController {
               this.update({ pendingProjectAction: event.proposal });
               break;
 
-            case "open_app":
-              this.update({ pendingAppLaunch: event.proposal });
+            case "open_app": {
+              const webAppUrls: Record<string, string> = {
+                chrome: "https://www.google.com",
+                line: "https://line.me",
+                spotify: "https://open.spotify.com",
+                gmail: "https://mail.google.com",
+                calendar: "https://calendar.google.com",
+                maps: "https://maps.google.com",
+                youtube: "https://www.youtube.com"
+              };
+              const webUrl = webAppUrls[event.proposal.appId.trim().toLowerCase()];
+              if (webUrl) {
+                const openedInFrame = this.deps.showPage?.(webUrl, event.proposal.appName) ?? false;
+                if (!openedInFrame) this.deps.openPage(webUrl);
+              } else {
+                this.update({ pendingAppLaunch: event.proposal });
+              }
               break;
+            }
 
             case "memory": {
               // บันทึกลงอุปกรณ์ทันที และแนบป้ายไว้กับคำตอบให้ผู้ใช้เห็นและยกเลิกได้

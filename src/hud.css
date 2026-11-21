@@ -428,3 +428,174 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
 @media (prefers-reduced-motion: reduce) {
   .voice-waveform-bar { animation: none !important; transition: none !important; }
 }
+
+/* ---------- 3D Holographic Reactor & Dynamic Accent ---------- */
+.core.hero .reactor-3d-wrap {
+  position: absolute;
+  inset: -14%;
+  width: 128%;
+  height: 128%;
+  pointer-events: none;
+  z-index: 1;
+}
+.stage.compact .reactor-3d-wrap { display: none; }
+
+.app[data-hud-accent="red"] { --accent: #f87171; --accent-hover: #ef4444; --accent-soft: rgba(248, 113, 113, 0.16); }
+.app[data-hud-accent="gold"] { --accent: #fbbf24; --accent-hover: #f59e0b; --accent-soft: rgba(251, 191, 36, 0.16); }
+.app[data-hud-accent="emerald"] { --accent: #34d399; --accent-hover: #10b981; --accent-soft: rgba(52, 211, 153, 0.16); }
+.app[data-hud-accent="purple"] { --accent: #a78bfa; --accent-hover: #8b5cf6; --accent-soft: rgba(167, 139, 250, 0.16); }
+
+/* ---------- Screen Effects (สั่งด้วยเสียง) ---------- */
+.app.hud-effect-pulse { animation: hud-pulse-fx 0.7s ease-in-out 2; }
+.app.hud-effect-shake { animation: hud-shake-fx 0.45s linear 2; }
+.app.hud-effect-glitch { animation: hud-glitch-fx 0.35s steps(3) 3; }
+.app.hud-effect-flash::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.42), transparent 72%);
+  pointer-events: none;
+  z-index: 90;
+  animation: hud-flash-fx 0.9s ease-out forwards;
+}
+.app.hud-effect-scan::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 24px var(--accent);
+  pointer-events: none;
+  z-index: 90;
+  animation: hud-scan-fx 1.2s ease-in-out forwards;
+}
+
+@keyframes hud-pulse-fx {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+@keyframes hud-shake-fx {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+@keyframes hud-glitch-fx {
+  0% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(60deg) contrast(1.25); }
+  100% { filter: hue-rotate(0deg); }
+}
+@keyframes hud-flash-fx {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes hud-scan-fx {
+  from { top: 0%; opacity: 0.95; }
+  to { top: 100%; opacity: 0.15; }
+}
+
+/* ---------- Boot 4 จังหวะ & Ignition ---------- */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(2, 8, 16, 0.92);
+  backdrop-filter: blur(12px);
+}
+.ignition-card,
+.boot-card {
+  width: min(440px, 100%);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(8, 17, 30, 0.92);
+  box-shadow: 0 0 40px rgba(34, 211, 238, 0.14);
+}
+.ignition-ring,
+.boot-reticle {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.35), inset 0 0 18px rgba(34, 211, 238, 0.22);
+}
+.ignition-code { font-size: 11px; letter-spacing: 0.2em; color: var(--accent); font-weight: 700; }
+.ignition-card h2 { margin: 0; font-size: 20px; color: var(--text); }
+.ignition-card p, .boot-log { margin: 0; font-size: 13px; color: var(--text-muted); }
+.ignition-actions { display: flex; gap: 10px; margin-top: 4px; }
+.boot-core-title { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; color: var(--accent); }
+.boot-progress-meta { width: 100%; display: flex; justify-content: space-between; font-size: 13px; color: var(--text); }
+.boot-progress-track { width: 100%; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.boot-progress-fill { height: 100%; background: var(--accent); transition: width 450ms ease; }
+.boot-skip { margin-top: 4px; }
+
+/* ---------- ตัวชี้โฮโลแกรม (Hand Pointer) ---------- */
+.hand-pointer {
+  position: fixed;
+  top: -16px;
+  left: -16px;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  transition: transform 45ms linear;
+}
+.hand-pointer-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 14px var(--accent);
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+.hand-pointer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.hand-pointer.pinching .hand-pointer-ring {
+  transform: scale(0.65);
+  border-color: #34d399;
+}
+.hand-pointer.open .hand-pointer-ring {
+  transform: scale(1.25);
+}
+
+/* ---------- Responsive Header & Summary Card (Zero horizontal overflow) ---------- */
+.meeting-summary-card {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.meeting-summary-card .meeting-export {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 100%;
+  }
+  .header-actions .voice-enroll-entry span,
+  .header-actions .meeting-entry span {
+    display: none;
+  }
+}

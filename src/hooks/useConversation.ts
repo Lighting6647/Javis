@@ -8,7 +8,6 @@ import { streamChatReply } from "../services/chatApi";
 import { runProjectActionRequest } from "../services/projectsApi";
 import { launchAllowedApp } from "../services/appLauncher";
 import { clearConversationSnapshot, restoredConversation, saveConversationSnapshot } from "../services/conversationSnapshot";
-import { leaveToPage, openExternalPage } from "../services/openPage";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import { createSpeechServices, handsFreeAvailable } from "../speech";
@@ -53,19 +52,9 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
       handsFree: handsFreeAvailable(),
       // คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" (ลงทะเบียนที่ src/hooks/useMeeting.ts)
       onCommand: appCommands.handle,
-      // แอปเดสก์ท็อปเปิดหน้าเว็บในเบราว์เซอร์ในตัว ที่อื่นเปิดแท็บใหม่หรือเบราว์เซอร์ของระบบ
-      openPage: (url) => (isDesktopApp() ? browserStore.open(url) : openExternalPage(url)),
-      // เว็บในเบราว์เซอร์: หน้าที่เจ้าของเว็บยอมให้แสดงในกรอบ แสดงในพื้นที่หลักของ Javis เลย ไม่ต้องเปิดแท็บใหม่
+      // เปิดหน้าเว็บภายใน Javis เสมอ (แอปเดสก์ท็อปใช้เบราว์เซอร์ในตัว บนเว็บเปิดใน FrameView ไม่เด้งออกไปข้างนอก)
+      openPage: (url) => (isDesktopApp() ? browserStore.open(url) : browserStore.showFramed(url, "หน้าเว็บ")),
       showPage: runsInBrowserTab() ? browserStore.showFramed : undefined,
-      // เบราว์เซอร์ไม่ยอมเปิดแท็บใหม่: พาแท็บนี้ไปแทน โดยเก็บบทสนทนาไว้คืนให้ตอนผู้ใช้กลับมา
-      leaveToPage: runsInBrowserTab()
-        ? (url) => {
-            saveConversationSnapshot({ owner: conversationOwner(), messages: controller.getState().messages });
-            if (leaveToPage(url)) return true;
-            clearConversationSnapshot();
-            return false;
-          }
-        : undefined,
       getPageContext: async () => {
         const current = browserStore.get();
         if (!current.requestedUrl) return null;

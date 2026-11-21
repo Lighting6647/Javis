@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { AudioLines, Brain, Briefcase, FolderKanban, GitBranch, Globe, LogOut, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, Brain, Briefcase, FolderKanban, GitBranch, Globe, Hand, LogOut, Mic, MicOff, NotebookPen, Settings2, Sparkles, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
@@ -10,6 +10,8 @@ import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { VoiceDock } from "./components/VoiceDock";
+import { BootSequence } from "./components/hud/BootSequence";
+import { HandPointer } from "./components/hud/HandPointer";
 import { HudFrame } from "./components/hud/HudFrame";
 import { LazyBoundary } from "./components/lazy/LazyBoundary";
 import {
@@ -26,6 +28,7 @@ import {
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
+import { pickThaiFiller } from "./conversation/fillers";
 import { PHASE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
@@ -47,11 +50,14 @@ import { launchAllowedApp } from "./services/appLauncher";
 import { contactsStore } from "./services/contactsStore";
 import { customAppsStore } from "./services/customAppsStore";
 import { customVoicesStore } from "./services/customVoicesStore";
-import { openExternalPage } from "./services/openPage";
 import { startWorkspacePreferencesSync } from "./services/preferencesSync";
+import { type HandPointerState, startHandControl } from "./services/handControl";
+import { hudEffectsStore } from "./services/hudEffectsStore";
+import { sfx } from "./services/sfx";
 import { themeStore } from "./services/themeStore";
 import { thinkHardStore } from "./services/thinkHardStore";
 import { voiceSettingsStore } from "./services/voiceSettingsStore";
+import { startClapDetector } from "./speech/clapDetector";
 import { resolveAssistantIdentity } from "./speech/cloudVoice";
 import { memoryStore } from "./memory/memoryStore";
 import {
@@ -104,6 +110,24 @@ export default function App() {
   const captureHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const memories = useSyncExternalStore(memoryStore.subscribe, memoryStore.get);
   const thinkHard = useSyncExternalStore(thinkHardStore.subscribe, thinkHardStore.get);
+  const hudVisual = useSyncExternalStore(hudEffectsStore.subscribe, hudEffectsStore.get);
+  const [bootDone, setBootDone] = useState(() => {
+    if (typeof navigator !== "undefined" && navigator.webdriver) return true;
+    try {
+      return sessionStorage.getItem("javis.booted") === "1";
+    } catch {
+      return true;
+    }
+  });
+  const [clapEnabled, setClapEnabled] = useState(false);
+  const [handControlEnabled, setHandControlEnabled] = useState(false);
+  const [handPointer, setHandPointer] = useState<HandPointerState>({
+    active: false,
+    x: 0,
+    y: 0,
+    pinching: false,
+    openPalm: false
+  });
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
   const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
@@ -510,16 +534,47 @@ export default function App() {
 
           case "think-hard":
             thinkHardStore.set(command.enabled);
+            sfx.click();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "hud-accent":
+            hudEffectsStore.setAccent(command.accent);
+            sfx.effect();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "hud-style":
+            hudEffectsStore.setStyle(command.style);
+            sfx.effect();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "hud-effect":
+            hudEffectsStore.triggerEffect(command.effect);
+            sfx.effect();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "hand-control":
+            setHandControlEnabled(command.enabled);
+            sfx.click();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "clap-wake":
+            setClapEnabled(command.enabled);
+            sfx.click();
             speakInstant(command.reply);
             return "keep-listening";
 
           case "open-url":
             if (command.url.startsWith("tel:") || command.url.startsWith("mailto:")) {
               window.location.href = command.url;
-            } else if (desktop && command.url.startsWith("https://")) {
+            } else if (desktop) {
               browserStore.open(command.url);
             } else {
-              openExternalPage(command.url);
+              browserStore.showFramed(command.url, "หน้าเว็บ");
             }
             speakInstant(command.reply);
             return "keep-listening";
@@ -535,8 +590,73 @@ export default function App() {
     });
   }, [ready, inMeeting, controller, synthesizer, desktop, reset, pushDesktopNotification]);
 
+  // ตบมือ 2 ครั้งปลุก Javis
+  useEffect(() => {
+    if (!ready || !clapEnabled || inMeeting || active) return;
+    let cancelled = false;
+    let stopClap: (() => void) | undefined;
+    void startClapDetector(() => {
+      if (cancelled) return;
+      sfx.wake();
+      if (handsFree.capable) handsFree.enable();
+      else void start();
+    })
+      .then((handle) => {
+        if (cancelled) handle.stop();
+        else stopClap = handle.stop;
+      })
+      .catch(() => setClapEnabled(false));
+    return () => {
+      cancelled = true;
+      stopClap?.();
+    };
+  }, [ready, clapEnabled, inMeeting, active, handsFree, start]);
+
+  // ควบคุมด้วยท่ามือผ่านกล้อง (MediaPipe)
+  useEffect(() => {
+    if (!ready || !handControlEnabled || inMeeting) return;
+    let cancelled = false;
+    let stopHands: (() => void) | undefined;
+    void startHandControl(
+      (next) => {
+        if (!cancelled) setHandPointer(next);
+      },
+      (x, y) => {
+        if (cancelled) return;
+        const target = document.elementFromPoint(x, y);
+        const btn = target instanceof HTMLElement ? target.closest("button, a, [role='button']") : null;
+        if (btn instanceof HTMLElement) {
+          sfx.click();
+          btn.click();
+        }
+      },
+      () => {
+        if (!cancelled) setHandControlEnabled(false);
+      }
+    ).then((handle) => {
+      if (cancelled) handle.stop();
+      else stopHands = handle.stop;
+    });
+    return () => {
+      cancelled = true;
+      stopHands?.();
+    };
+  }, [ready, handControlEnabled, inMeeting]);
+
+  // เสียงตอบรับสั้นๆ ระหว่างรอ AI คิดคำตอบ (Filler)
+  useEffect(() => {
+    if (!ready || inMeeting || phase !== "thinking" || !active) return;
+    const timer = window.setTimeout(() => {
+      void synthesizer.speak(pickThaiFiller()).catch(() => undefined);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [ready, inMeeting, phase, active, synthesizer]);
+
   return (
-    <div className={`app${stageShown ? " has-stage" : ""}${showMainContent ? " show-main" : ""}`}>
+    <div
+      className={`app${stageShown ? " has-stage" : ""}${showMainContent ? " show-main" : ""}${hudVisual.effect !== "none" ? ` hud-effect-${hudVisual.effect}` : ""}`}
+      data-hud-accent={hudVisual.accent}
+    >
       <HudFrame />
       <header className="app-header">
         <div className="brand">
@@ -649,13 +769,48 @@ export default function App() {
             <button
               type="button"
               className={`voice-enroll-entry${thinkHard ? " active" : ""}`}
-              onClick={() => thinkHardStore.set(!thinkHard)}
+              onClick={() => {
+                sfx.click();
+                thinkHardStore.set(!thinkHard);
+              }}
               aria-pressed={thinkHard}
               aria-label="โหมดคิดลึก"
               title={thinkHard ? "กำลังเปิดโหมดคิดลึก (วิเคราะห์เชิงลึก) แตะเพื่อสลับกลับโหมดปกติ" : "เปิดโหมดคิดลึกสำหรับการวิเคราะห์ปัญหาซับซ้อน"}
             >
               <Brain size={16} aria-hidden />
               <span>คิดลึก</span>
+            </button>
+          )}
+          {ready && !inMeeting && (
+            <button
+              type="button"
+              className={`voice-enroll-entry${handControlEnabled ? " active" : ""}`}
+              onClick={() => {
+                sfx.click();
+                setHandControlEnabled((prev) => !prev);
+              }}
+              aria-pressed={handControlEnabled}
+              aria-label="ควบคุมด้วยท่ามือ"
+              title={handControlEnabled ? "กำลังเปิดกล้องจับท่ามือ แตะเพื่อปิด" : "เปิดกล้องควบคุมหน้าจอด้วยท่ามือ (จีบนิ้วเพื่อคลิก)"}
+            >
+              <Hand size={16} aria-hidden />
+              <span>ท่ามือ</span>
+            </button>
+          )}
+          {ready && !inMeeting && (
+            <button
+              type="button"
+              className={`voice-enroll-entry${clapEnabled ? " active" : ""}`}
+              onClick={() => {
+                sfx.click();
+                setClapEnabled((prev) => !prev);
+              }}
+              aria-pressed={clapEnabled}
+              aria-label="ตบมือปลุก"
+              title={clapEnabled ? "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสอยู่ แตะเพื่อปิด" : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิส"}
+            >
+              <Sparkles size={16} aria-hidden />
+              <span>ตบมือ</span>
             </button>
           )}
           {ready && !inMeeting && (
@@ -937,6 +1092,19 @@ export default function App() {
           />
         </LazyBoundary>
       )}
+      {ready && !bootDone && (
+        <BootSequence
+          onComplete={() => {
+            try {
+              sessionStorage.setItem("javis.booted", "1");
+            } catch {
+              // ignore storage restrictions
+            }
+            setBootDone(true);
+          }}
+        />
+      )}
+      {handControlEnabled && <HandPointer pointer={handPointer} />}
     </div>
   );
 }

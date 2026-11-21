@@ -63,11 +63,11 @@ export type CloudVoiceStatus =
   | { mode: "paused"; reason: CloudVoiceFailure; until: number };
 
 /**
- * ตัวตนผู้ช่วยหลักของระบบ: ใช้ Javis (เสียงผู้ชาย) เป็นหลักเสมอ
+ * ตัวตนผู้ช่วยหลักของระบบ: ใช้เสียงผู้หญิงเป็นหลักเหมือนเดิม
  */
 export function resolveAssistantIdentity(_status: CloudVoiceStatus | null): "delluna" | "javis" {
   void _status;
-  return "javis";
+  return "delluna";
 }
 
 /** เวลาที่พักเสียงของ Gemini หลังล้มเหลวแต่ละแบบ (มิลลิวินาที) ระหว่างพัก Javis ใช้เสียงในอุปกรณ์ */
