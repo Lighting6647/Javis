@@ -77,6 +77,30 @@ export function Stage({
 
       <VoiceWaveform phase={phase} offline={offline} thinkHard={thinkHard} />
 
+      {/* แผงสถานะมินิมอลขอบซ้ายและแถบระดับเสียงขอบขวา (แสดงเฉพาะโหมดเต็มจอแบบเดียวกับ localhost:5173) */}
+      {!compact && (
+        <>
+          <div className="hud-side-systems" aria-hidden>
+            <span className="hud-side-title">ระบบ</span>
+            <ul>
+              <li className={offline ? "warn" : "on"}><i /> จาวิส</li>
+              <li className={phase === "speaking" || phase === "listening" ? "on" : ""}><i /> เสียงพูด</li>
+              <li className={thinkHard ? "on" : ""}><i /> คิดลึก</li>
+              <li className="on"><i /> เว็บในแอป</li>
+            </ul>
+          </div>
+          <div className="hud-side-voice" aria-hidden>
+            <span className="hud-side-title">ระดับเสียง</span>
+            <div className={`hud-voice-meter ${phase}`}>
+              <i />
+            </div>
+            <span className="hud-voice-pct">
+              {phase === "speaking" ? "72%" : phase === "listening" ? "58%" : phase === "thinking" ? "34%" : "0%"}
+            </span>
+          </div>
+        </>
+      )}
+
       {/* สถานะเดียวกับป้ายบนแถบบนซึ่งโปรแกรมอ่านหน้าจออ่านอยู่แล้ว ตรงนี้จึงเป็นภาพอย่างเดียว */}
       <div className="stage-status" aria-hidden>
         <span className="stage-kicker">จาวิส · ศูนย์สั่งการด้วยเสียง</span>
