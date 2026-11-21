@@ -7,6 +7,7 @@ import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
 import { runProjectActionRequest } from "../services/projectsApi";
 import { launchAllowedApp } from "../services/appLauncher";
+import { applyCalendarChange, sendEmailDraft } from "../services/workspaceActions";
 import { clearConversationSnapshot, restoredConversation } from "../services/conversationSnapshot";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
@@ -76,6 +77,8 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
         },
       runProjectAction: (projectId, action) => runProjectActionRequest(projectId, action),
       launchApp: (appId, appName) => launchAllowedApp(appId, appName),
+      sendEmail: sendEmailDraft,
+      changeCalendar: applyCalendarChange,
       memory: { list: memoryStore.get, add: memoryStore.add, remove: memoryStore.remove }
     });
     return { controller, synthesizer: services.synthesizer };
@@ -126,6 +129,11 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
     confirmProjectAction: controller.confirmProjectAction,
     cancelProjectAction: controller.cancelProjectAction,
     confirmAppLaunch: controller.confirmAppLaunch,
+    sendEmailDraft: controller.sendEmailDraft,
+    cancelEmailDraft: controller.cancelEmailDraft,
+    confirmCalendarChange: controller.confirmCalendarChange,
+    cancelCalendarChange: controller.cancelCalendarChange,
+    announce: controller.announce,
     cancelAppLaunch: controller.cancelAppLaunch,
     undoMemory: controller.undoMemory,
     markLinkOpened: controller.markLinkOpened

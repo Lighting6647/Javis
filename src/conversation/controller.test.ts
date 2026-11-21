@@ -476,6 +476,8 @@ describe("ConversationController", () => {
       pendingFillId: null,
       pendingProjectAction: null,
       pendingAppLaunch: null,
+      pendingEmailDraft: null,
+      pendingCalendarChange: null,
       lastReplyMs: null
     });
   });

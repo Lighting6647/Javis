@@ -1,6 +1,6 @@
 import { FIELD_ID_PATTERN, MAX_FILL_VALUE_LENGTH, MAX_FORM_FIELDS, type FillValue } from "../browser/types";
 import { safeHttpUrl } from "../conversation/richText";
-import type { ChatEvent, WebSource } from "../conversation/types";
+import type { CalendarChangeProposal, ChatEvent, EmailDraft, WebSource } from "../conversation/types";
 import { cleanMemoryText, MEMORY_ID_PATTERN } from "../memory/memoryStore";
 
 const MAX_SOURCES = 6;
@@ -101,6 +101,16 @@ export function parseChatEventLine(line: string): ChatEvent | null {
       return html.length > 0 ? { type: "suggestions", html } : null;
     }
 
+    case "email_draft": {
+      const draft = readEmailDraft(value.draft);
+      return draft ? { type: "email_draft", draft } : null;
+    }
+
+    case "calendar_change": {
+      const change = readCalendarChange(value.change);
+      return change ? { type: "calendar_change", change } : null;
+    }
+
     case "project_action": {
       if (!isObject(value.proposal)) return null;
       const { id, projectId, projectName, action, reason } = value.proposal;
@@ -144,4 +154,53 @@ export function parseChatEventLine(line: string): ChatEvent | null {
     default:
       return null;
   }
+}
+
+const EMAIL_ADDRESS = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+const str = (value: unknown, max: number): string | null => (typeof value === "string" && value.length <= max ? value : null);
+
+/** ตรวจร่างอีเมลจากเซิร์ฟเวอร์ ผิดรูปแบบส่วนใดก็ทิ้งทั้งร่าง (ไม่แสดงการ์ดที่ข้อมูลไม่ครบ) */
+export function readEmailDraft(value: unknown): EmailDraft | null {
+  if (!isObject(value)) return null;
+  const id = str(value.id, 100);
+  const subject = str(value.subject, 300);
+  const body = str(value.body, 6000);
+  const mode = value.mode === "reply" || value.mode === "new" ? value.mode : null;
+  const to = Array.isArray(value.to) ? value.to.filter((each): each is string => typeof each === "string" && EMAIL_ADDRESS.test(each)) : [];
+  if (!id || subject === null || !body || !mode || to.length === 0 || to.length !== (value.to as unknown[]).length || to.length > 5) return null;
+  const original =
+    isObject(value.original) && typeof value.original.from === "string" && typeof value.original.subject === "string"
+      ? { from: value.original.from.slice(0, 300), subject: value.original.subject.slice(0, 300) }
+      : undefined;
+  const optional = (key: "threadId" | "inReplyTo" | "references", max: number) => {
+    const text = str(value[key], max);
+    return text ? { [key]: text } : {};
+  };
+  return {
+    id,
+    mode,
+    to,
+    subject,
+    body,
+    ...(original ? { original } : {}),
+    ...optional("threadId", 64),
+    ...optional("inReplyTo", 300),
+    ...optional("references", 2000)
+  };
+}
+
+/** ตรวจข้อเสนอแก้หรือยกเลิกนัดจากเซิร์ฟเวอร์ */
+export function readCalendarChange(value: unknown): CalendarChangeProposal | null {
+  if (!isObject(value)) return null;
+  const slot = (raw: unknown) =>
+    isObject(raw) && typeof raw.title === "string" && typeof raw.start === "string" && typeof raw.end === "string"
+      ? { title: raw.title.slice(0, 200), start: raw.start.slice(0, 60), end: raw.end.slice(0, 60) }
+      : null;
+  const id = str(value.id, 100);
+  const eventId = str(value.eventId, 1024);
+  const action = value.action === "update" || value.action === "delete" ? value.action : null;
+  const before = slot(value.before);
+  const after = value.after === undefined ? undefined : slot(value.after);
+  if (!id || !eventId || !action || !before || after === null || (action === "update" && !after)) return null;
+  return { id, action, eventId, before, ...(after ? { after } : {}) };
 }

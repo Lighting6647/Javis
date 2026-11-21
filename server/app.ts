@@ -236,12 +236,19 @@ export function createApp(options: AppOptions = {}): Express {
   });
 
   // Google Workspace (Gmail + Calendar + Tasks สำหรับ Lighting6647@gmail.com) & DelLuna Notes & Preferences Sync
-  const workspaceRoutes = createWorkspaceRoutes(getNotesStore, getPreferencesStore);
+  // ส่งอีเมลและแก้ปฏิทินแทนผู้ใช้ได้เมื่อบังคับเข้าสู่ระบบ หรือเมื่อเซิร์ฟเวอร์รันบนเครื่องของผู้ใช้เอง (ไม่ใช่เว็บจริงที่เปิดให้ทุกคน)
+  const workspaceRoutes = createWorkspaceRoutes(
+    getNotesStore,
+    getPreferencesStore,
+    () => config.accessUsers.length > 0 || (!config.isProduction && !config.isServerless)
+  );
   app.get("/api/workspace/status", requireAuth, workspaceRoutes.status);
   app.get("/api/workspace/briefing", requireAuth, workspaceRoutes.briefing);
   app.get("/api/workspace/emails", requireAuth, workspaceRoutes.listEmails);
   app.get("/api/workspace/calendar", requireAuth, workspaceRoutes.listCalendar);
   app.post("/api/workspace/calendar", requireAuth, workspaceRoutes.createCalendar);
+  app.post("/api/workspace/calendar/change", requireAuth, express.json({ limit: "16kb" }), workspaceRoutes.changeCalendar);
+  app.post("/api/workspace/email/send", requireAuth, express.json({ limit: "64kb" }), workspaceRoutes.sendEmail);
   app.get("/api/workspace/notes", requireAuth, workspaceRoutes.listNotes);
   app.post("/api/workspace/notes", requireAuth, workspaceRoutes.createNote);
   app.patch("/api/workspace/notes/:id", requireAuth, workspaceRoutes.updateNote);

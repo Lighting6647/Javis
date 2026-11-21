@@ -3,6 +3,8 @@
  * สำหรับบัญชี Lighting6647@gmail.com ผ่าน Google OAuth 2.0 Refresh Token ฝั่ง Backend เท่านั้น
  * ไม่เก็บหรือส่งต่อ Token ใด ๆ ออกไปฝั่งหน้าเว็บ
  */
+import { CALENDAR_SCOPE_MISSING, isScopeError, SEND_SCOPE_MISSING } from "./emailDraft.js";
+
 export const DEFAULT_GOOGLE_ACCOUNT_EMAIL = "Lighting6647@gmail.com";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -436,5 +438,176 @@ export async function createGoogleTask(
       accountEmail,
       error: error instanceof Error ? `เชื่อมต่อ Google Tasks ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Google Tasks ไม่สำเร็จ"
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// การกระทำที่ต้องให้ผู้ใช้ยืนยันก่อน (ส่งอีเมล แก้ไขหรือลบนัด) ฟังก์ชันเหล่านี้ถูกเรียกเฉพาะจาก
+// endpoint ที่ผู้ใช้กดยืนยันในการ์ดแล้วเท่านั้น (ดู server/workspaceRoutes.ts) AI เรียกตรงไม่ได้
+// ---------------------------------------------------------------------------
+
+export type WorkspaceFailure = { ok: false; configured: boolean; accountEmail: string; error: string; code?: "scope" | "not-found" };
+
+function notConfigured(env: NodeJS.ProcessEnv, service: string): WorkspaceFailure {
+  const accountEmail = env.GOOGLE_ACCOUNT_EMAIL?.trim() || DEFAULT_GOOGLE_ACCOUNT_EMAIL;
+  return { ok: false, configured: false, accountEmail, error: `ยังไม่ได้เชื่อมต่อ ${service} สำหรับ ${accountEmail} กรุณาตั้งค่า Google OAuth ใน .env.local` };
+}
+
+/** อีเมลที่จะตอบกลับ: ข้อมูลหัวอีเมลที่ต้องใช้ตอบในเธรดเดิม */
+export interface ReplyTarget {
+  id: string;
+  threadId: string;
+  from: string;
+  subject: string;
+  messageId: string;
+  references: string;
+}
+
+/**
+ * หาอีเมลที่ผู้ใช้ต้องการตอบด้วยคำค้นแบบ Gmail (เช่น from:somchai หรือคำในหัวเรื่อง) คืนฉบับล่าสุดที่ตรง
+ * การ์ดยืนยันแสดงผู้ส่งและหัวเรื่องของฉบับนี้ ผู้ใช้จึงตรวจได้ว่าตอบถูกฉบับก่อนกดส่ง
+ */
+export async function findEmailToReply(
+  query: string,
+  options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<{ ok: true; accountEmail: string; target: ReplyTarget } | WorkspaceFailure> {
+  const env = options.env ?? process.env;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const cfg = resolveGoogleWorkspaceConfig(env);
+  if (!cfg) return notConfigured(env, "Gmail");
+  const { accountEmail } = cfg;
+
+  try {
+    const token = await getAccessToken(cfg, fetchImpl);
+    const q = `${query.trim()} -in:sent -in:drafts`.trim();
+    const listRes = await fetchWithTimeout(`${GMAIL_API_BASE}/messages?maxResults=1&q=${encodeURIComponent(q)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, fetchImpl);
+    if (!listRes.ok) return { ok: false, configured: true, accountEmail, error: `ไม่สามารถค้นอีเมลได้ (HTTP ${listRes.status})` };
+    const id = ((await listRes.json()) as { messages?: Array<{ id?: string }> }).messages?.[0]?.id;
+    if (!id) {
+      return { ok: false, configured: true, accountEmail, error: "ไม่พบอีเมลที่ตรงกับที่บอกค่ะ ลองบอกชื่อผู้ส่งหรือหัวเรื่องให้ชัดขึ้นนะคะ", code: "not-found" };
+    }
+
+    const headers = ["From", "Subject", "Message-ID", "References"].map((name) => `metadataHeaders=${name}`).join("&");
+    const msgRes = await fetchWithTimeout(`${GMAIL_API_BASE}/messages/${encodeURIComponent(id)}?format=metadata&${headers}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, fetchImpl);
+    if (!msgRes.ok) return { ok: false, configured: true, accountEmail, error: `ไม่สามารถอ่านอีเมลได้ (HTTP ${msgRes.status})` };
+    const msg = (await msgRes.json()) as { id?: string; threadId?: string; payload?: { headers?: Array<{ name?: string; value?: string }> } };
+    return {
+      ok: true,
+      accountEmail,
+      target: {
+        id: msg.id ?? id,
+        threadId: msg.threadId ?? "",
+        from: readHeader(msg.payload?.headers, "From"),
+        subject: readHeader(msg.payload?.headers, "Subject"),
+        messageId: readHeader(msg.payload?.headers, "Message-ID"),
+        references: readHeader(msg.payload?.headers, "References")
+      }
+    };
+  } catch (error) {
+    return { ok: false, configured: true, accountEmail, error: error instanceof Error ? `เชื่อมต่อ Gmail ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Gmail ไม่สำเร็จ" };
+  }
+}
+
+/** ส่งอีเมลที่สร้างแล้ว (raw base64url) ผ่าน Gmail เรียกหลังผู้ใช้กดส่งในการ์ดเท่านั้น */
+export async function sendGmailMessage(
+  raw: string,
+  threadId: string | undefined,
+  options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<{ ok: true; accountEmail: string; id: string } | WorkspaceFailure> {
+  const env = options.env ?? process.env;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const cfg = resolveGoogleWorkspaceConfig(env);
+  if (!cfg) return notConfigured(env, "Gmail");
+  const { accountEmail } = cfg;
+
+  try {
+    const token = await getAccessToken(cfg, fetchImpl);
+    const res = await fetchWithTimeout(`${GMAIL_API_BASE}/messages/send`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ raw, ...(threadId ? { threadId } : {}) })
+    }, fetchImpl);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      if (isScopeError(res.status, text)) return { ok: false, configured: true, accountEmail, error: SEND_SCOPE_MISSING, code: "scope" };
+      return { ok: false, configured: true, accountEmail, error: `ส่งอีเมลไม่สำเร็จ (HTTP ${res.status})` };
+    }
+    const data = (await res.json()) as { id?: string };
+    return { ok: true, accountEmail, id: data.id ?? "" };
+  } catch (error) {
+    return { ok: false, configured: true, accountEmail, error: error instanceof Error ? `เชื่อมต่อ Gmail ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Gmail ไม่สำเร็จ" };
+  }
+}
+
+/** แก้ไขนัด (ชื่อ เวลาเริ่ม เวลาจบ) เรียกหลังผู้ใช้กดยืนยันในการ์ดเท่านั้น */
+export async function updateCalendarEvent(
+  eventId: string,
+  patch: { title?: string; startIso?: string; endIso?: string },
+  options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<{ ok: true; accountEmail: string; event: CalendarEventSummary } | WorkspaceFailure> {
+  return changeCalendarEvent(eventId, "PATCH", patch, options);
+}
+
+/** ลบนัด เรียกหลังผู้ใช้กดยืนยันในการ์ดเท่านั้น */
+export async function deleteCalendarEvent(
+  eventId: string,
+  options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<{ ok: true; accountEmail: string; event: CalendarEventSummary } | WorkspaceFailure> {
+  return changeCalendarEvent(eventId, "DELETE", {}, options);
+}
+
+async function changeCalendarEvent(
+  eventId: string,
+  method: "PATCH" | "DELETE",
+  patch: { title?: string; startIso?: string; endIso?: string },
+  options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch }
+): Promise<{ ok: true; accountEmail: string; event: CalendarEventSummary } | WorkspaceFailure> {
+  const env = options.env ?? process.env;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const cfg = resolveGoogleWorkspaceConfig(env);
+  if (!cfg) return notConfigured(env, "Google Calendar");
+  const { accountEmail } = cfg;
+
+  try {
+    const token = await getAccessToken(cfg, fetchImpl);
+    const body =
+      method === "PATCH"
+        ? JSON.stringify({
+            ...(patch.title ? { summary: patch.title } : {}),
+            ...(patch.startIso ? { start: { dateTime: patch.startIso, timeZone: BANGKOK_TIMEZONE } } : {}),
+            ...(patch.endIso ? { end: { dateTime: patch.endIso, timeZone: BANGKOK_TIMEZONE } } : {})
+          })
+        : undefined;
+    const res = await fetchWithTimeout(`${CALENDAR_API_BASE}/events/${encodeURIComponent(eventId)}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body } : {})
+    }, fetchImpl);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      if (isScopeError(res.status, text)) return { ok: false, configured: true, accountEmail, error: CALENDAR_SCOPE_MISSING, code: "scope" };
+      if (res.status === 404 || res.status === 410) {
+        return { ok: false, configured: true, accountEmail, error: "ไม่พบนัดนี้ในปฏิทินแล้วค่ะ อาจถูกลบหรือย้ายไปก่อนหน้านี้", code: "not-found" };
+      }
+      return { ok: false, configured: true, accountEmail, error: `แก้ไขปฏิทินไม่สำเร็จ (HTTP ${res.status})` };
+    }
+    if (method === "DELETE") return { ok: true, accountEmail, event: { id: eventId, title: "", start: "", end: "" } };
+    const item = (await res.json()) as { id?: string; summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } };
+    return {
+      ok: true,
+      accountEmail,
+      event: {
+        id: item.id ?? eventId,
+        title: item.summary?.trim() || "(ไม่มีชื่อนัดหมาย)",
+        start: item.start?.dateTime ?? item.start?.date ?? "",
+        end: item.end?.dateTime ?? item.end?.date ?? ""
+      }
+    };
+  } catch (error) {
+    return { ok: false, configured: true, accountEmail, error: error instanceof Error ? `เชื่อมต่อ Google Calendar ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Google Calendar ไม่สำเร็จ" };
   }
 }

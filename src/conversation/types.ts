@@ -139,6 +139,10 @@ export interface ConversationState {
   pendingProjectAction: ProjectActionProposal | null;
   /** คำสั่งเปิดโปรแกรมในคอมพิวเตอร์หรือแอปบนมือถือที่รอผู้ใช้ยืนยันก่อนเปิดจริง */
   pendingAppLaunch: AppLaunchProposal | null;
+  /** ร่างอีเมลที่รอผู้ใช้ตรวจและกดส่งเอง */
+  pendingEmailDraft: EmailDraft | null;
+  /** ข้อเสนอเลื่อน เปลี่ยนชื่อ หรือยกเลิกนัดที่รอผู้ใช้ยืนยัน */
+  pendingCalendarChange: CalendarChangeProposal | null;
   /** เวลาที่รอคำตอบครั้งล่าสุด นับจากส่งคำถามจนข้อความแรกมาถึง (มิลลิวินาที) หรือ null ถ้ายังไม่เคยได้คำตอบ */
   lastReplyMs: number | null;
 }
@@ -165,8 +169,34 @@ export type ChatEvent =
   | { type: "project_action"; proposal: ProjectActionProposal }
   /** AI เสนอเปิดโปรแกรมในคอมพิวเตอร์หรือแอปในมือถือ (ต้องให้ผู้ใช้กดยืนยันก่อนเปิดจริง) */
   | { type: "open_app"; proposal: AppLaunchProposal }
+  /** ร่างอีเมลที่ต้องให้ผู้ใช้ตรวจและกดส่งเองเสมอ */
+  | { type: "email_draft"; draft: EmailDraft }
+  /** ข้อเสนอแก้หรือยกเลิกนัด (ต้องให้ผู้ใช้กดยืนยันก่อน) */
+  | { type: "calendar_change"; change: CalendarChangeProposal }
   /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
   | { type: "suggestions"; html: string[] };
+
+/** ร่างอีเมล (ต้องตรงกับ server/emailDraft.ts) */
+export interface EmailDraft {
+  id: string;
+  mode: "reply" | "new";
+  to: string[];
+  subject: string;
+  body: string;
+  original?: { from: string; subject: string };
+  threadId?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
+/** ข้อเสนอแก้หรือยกเลิกนัด (ต้องตรงกับ server/chatProtocol.ts) */
+export interface CalendarChangeProposal {
+  id: string;
+  action: "update" | "delete";
+  eventId: string;
+  before: { title: string; start: string; end: string };
+  after?: { title: string; start: string; end: string };
+}
 
 export interface AppLaunchProposal {
   id: string;

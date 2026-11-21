@@ -6,8 +6,10 @@ import { type FillDecision, interpretFillDecision } from "./fillDecision";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import { createSentenceChunker } from "./sentenceChunker";
 import {
+  type CalendarChangeProposal,
   type CapturedImage,
   ChatError,
+  type EmailDraft,
   type ChatTurn,
   type ConversationMessage,
   type ConversationState,
@@ -67,6 +69,10 @@ export interface ConversationDeps {
   launchApp?: (appId: string, appName: string) => Promise<{ ok: boolean; message: string }>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
+  /** ส่งอีเมลที่ผู้ใช้กดส่งในการ์ดแล้วเท่านั้น */
+  sendEmail?: (draft: EmailDraft) => Promise<{ ok: boolean; message: string }>;
+  /** แก้หรือยกเลิกนัดที่ผู้ใช้กดยืนยันในการ์ดแล้วเท่านั้น */
+  changeCalendar?: (change: CalendarChangeProposal) => Promise<{ ok: boolean; message: string }>;
   /** นาฬิกาของตัวควบคุม (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
   now?: () => number;
   /**
@@ -120,6 +126,8 @@ const INITIAL_STATE: ConversationState = {
   pendingFillId: null,
   pendingProjectAction: null,
   pendingAppLaunch: null,
+  pendingEmailDraft: null,
+  pendingCalendarChange: null,
   lastReplyMs: null
 };
 
@@ -319,6 +327,78 @@ export class ConversationController {
     void this.decideAppLaunch("cancel").then((notice) => {
       if (notice) this.update({ notice });
     });
+  };
+
+  /**
+   * ผู้ใช้กดส่งร่างอีเมลในการ์ด (หัวเรื่องและเนื้อหาอาจถูกแก้ในการ์ดแล้ว ผู้รับแก้ไม่ได้)
+   * เป็นทางเดียวที่อีเมลถูกส่ง: ไม่มีคำสั่งเสียงหรือคำตอบของ AI ใดที่ส่งอีเมลได้เอง
+   */
+  sendEmailDraft = async (edited?: { subject: string; body: string }): Promise<void> => {
+    const draft = this.state.pendingEmailDraft;
+    if (!draft || this.filling) return;
+    if (!this.deps.sendEmail) {
+      this.update({ pendingEmailDraft: null, notice: { tone: "error", text: "ระบบยังไม่พร้อมส่งอีเมลค่ะ" } });
+      return;
+    }
+    const subject = edited?.subject.trim() || draft.subject;
+    const body = edited?.body.trim() || draft.body;
+    this.filling = true;
+    this.update({ notice: { tone: "info", text: "กำลังส่งอีเมล…" } });
+    try {
+      const result = await this.deps.sendEmail({ ...draft, subject, body });
+      // ส่งไม่สำเร็จเพราะสิทธิ์หรือเครือข่าย: คงการ์ดไว้ให้ลองใหม่ได้ ไม่ต้องพูดสั่งใหม่
+      this.update({ ...(result.ok ? { pendingEmailDraft: null } : {}), notice: { tone: result.ok ? "info" : "error", text: result.message } });
+      if (result.ok) this.announce(result.message);
+    } catch {
+      this.update({ notice: { tone: "error", text: "ส่งอีเมลไม่สำเร็จค่ะ ลองกดส่งใหม่อีกครั้งนะคะ" } });
+    } finally {
+      this.filling = false;
+    }
+  };
+
+  /** ผู้ใช้กดยกเลิกร่างอีเมล */
+  cancelEmailDraft = (): void => {
+    if (!this.state.pendingEmailDraft) return;
+    this.update({ pendingEmailDraft: null, notice: { tone: "info", text: "ยกเลิกร่างอีเมลแล้วค่ะ ยังไม่ได้ส่งอะไรออกไป" } });
+  };
+
+  /** ผู้ใช้กดยืนยันการแก้หรือยกเลิกนัดในการ์ด */
+  confirmCalendarChange = async (): Promise<void> => {
+    const change = this.state.pendingCalendarChange;
+    if (!change || this.filling) return;
+    if (!this.deps.changeCalendar) {
+      this.update({ pendingCalendarChange: null, notice: { tone: "error", text: "ระบบยังไม่พร้อมแก้ไขปฏิทินค่ะ" } });
+      return;
+    }
+    this.filling = true;
+    this.update({ notice: { tone: "info", text: change.action === "delete" ? "กำลังยกเลิกนัด…" : "กำลังเปลี่ยนนัด…" } });
+    try {
+      const result = await this.deps.changeCalendar(change);
+      this.update({ ...(result.ok ? { pendingCalendarChange: null } : {}), notice: { tone: result.ok ? "info" : "error", text: result.message } });
+      if (result.ok) this.announce(result.message);
+    } catch {
+      this.update({ notice: { tone: "error", text: "แก้ไขปฏิทินไม่สำเร็จค่ะ ลองกดยืนยันใหม่อีกครั้งนะคะ" } });
+    } finally {
+      this.filling = false;
+    }
+  };
+
+  /** ผู้ใช้กดยกเลิกการแก้หรือยกเลิกนัด */
+  cancelCalendarChange = (): void => {
+    if (!this.state.pendingCalendarChange) return;
+    this.update({ pendingCalendarChange: null, notice: { tone: "info", text: "ไม่เปลี่ยนนัดแล้วค่ะ ปฏิทินยังเหมือนเดิม" } });
+  };
+
+  /**
+   * ลูน่าพูดข้อความที่แอปสร้างเอง (ไม่ผ่าน AI) และเพิ่มลงบทสนทนา เช่นผลการส่งอีเมลหรือสรุปเช้า
+   * ไม่แทรกระหว่างที่กำลังตอบหรือกำลังพูดอยู่
+   */
+  announce = (text: string): void => {
+    const clean = text.trim();
+    if (!clean) return;
+    this.update({ messages: [...this.state.messages, { id: this.nextId(), role: "assistant", text: clean }] });
+    if (this.state.phase === "thinking" || this.state.phase === "speaking") return;
+    void this.deps.synthesizer.speak(clean).catch(() => undefined);
   };
 
   /** ผู้ใช้กดยกเลิกสิ่งที่ Javis เพิ่งจำไว้ในข้อความนั้น */
@@ -862,6 +942,15 @@ export class ConversationController {
 
             case "project_action":
               this.update({ pendingProjectAction: event.proposal });
+              break;
+
+            case "email_draft":
+              // เก็บไว้รอผู้ใช้ตรวจและกดส่งเองเท่านั้น ไม่ส่งอัตโนมัติ และไม่รับคำยืนยันด้วยเสียง
+              this.update({ pendingEmailDraft: event.draft });
+              break;
+
+            case "calendar_change":
+              this.update({ pendingCalendarChange: event.change });
               break;
 
             case "open_app": {

@@ -16,6 +16,8 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), quiet: true });
 const REDIRECT_URI = "http://localhost:8787/oauth2callback";
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
+  // ส่งอีเมลที่ผู้ใช้กดยืนยันในการ์ดแล้ว (ส่งได้อย่างเดียว ไม่ลบหรือแก้อีเมลเดิม)
+  "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks"
 ];

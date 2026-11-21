@@ -42,10 +42,30 @@ export type ChatEvent =
    */
   | { type: "open_app"; proposal: AppLaunchProposal }
   /**
+   * ร่างอีเมลที่รอผู้ใช้ตรวจและกดส่งเอง หน้าเว็บต้องแสดงการ์ดเสมอ ไม่มีการส่งอัตโนมัติ
+   */
+  | { type: "email_draft"; draft: EmailDraft }
+  /**
+   * ข้อเสนอเลื่อน เปลี่ยนชื่อ หรือยกเลิกนัดในปฏิทิน หน้าเว็บต้องแสดงการ์ดให้ผู้ใช้กดยืนยันก่อนเสมอ
+   */
+  | { type: "calendar_change"; change: CalendarChangeProposal }
+  /**
    * แถบคำค้นที่เกี่ยวข้องของ Google (HTML สำเร็จรูปจาก Google) สำหรับคำตอบที่ได้จากการค้นด้วย Google
    * เงื่อนไขการใช้ของ Google กำหนดให้แสดงคู่กับคำตอบโดยไม่ดัดแปลง หน้าเว็บต้องแสดงแบบที่ HTML นี้รันสคริปต์ไม่ได้
    */
   | { type: "suggestions"; html: string[] };
+
+export type { EmailDraft } from "./emailDraft.js";
+import type { EmailDraft } from "./emailDraft.js";
+
+/** ข้อเสนอแก้หรือยกเลิกนัด (ต้องตรงกับ CalendarChangeProposal ใน src/conversation/types.ts) */
+export interface CalendarChangeProposal {
+  id: string;
+  action: "update" | "delete";
+  eventId: string;
+  before: { title: string; start: string; end: string };
+  after?: { title: string; start: string; end: string };
+}
 
 export interface AppLaunchProposal {
   id: string;

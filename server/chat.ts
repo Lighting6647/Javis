@@ -29,10 +29,14 @@ import { fetchProjectCloudStatus } from "./cloudControl.js";
 import {
   createCalendarEvent,
   createGoogleTask,
+  findEmailToReply,
   getGoogleWorkspaceStatus,
   listCalendarEvents,
   listImportantEmails
 } from "./googleWorkspace.js";
+import { randomUUID } from "node:crypto";
+import { checkNewEmailRecipients, extractAddress, replySubject, type EmailDraft } from "./emailDraft.js";
+import { pickCalendarEvent, describeEventTime } from "./calendarChange.js";
 import { getNotesStore } from "./notesStore.js";
 import { findProject, listProjects } from "./projects.js";
 import { ANONYMOUS_USER } from "./userStore.js";
@@ -1043,6 +1047,10 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     req: NonNullable<ReturnType<typeof createResponseReducer>["calendarRequest"]>,
     spokeBefore: boolean
   ): Promise<void> => {
+    if (req.action === "update" || req.action === "delete") {
+      await proposeCalendarChange(req, spokeBefore);
+      return;
+    }
     if (req.action === "create") {
       if (!req.title || !req.startIso) {
         forward(textDelta(`${spokeBefore ? " " : ""}รบกวนแจ้งชื่อนัดหมายและวันเวลาที่ต้องการบันทึกลงปฏิทินให้ชัดเจนอีกครั้งนะคะ`));
@@ -1078,6 +1086,128 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
         ? `มีนัดหมายที่จะมาถึง ${listed.events.length} รายการค่ะ รายการถัดไปคือ ${listed.events[0]?.title}`
         : `ช่วง ${req.days ?? 7} วันข้างหน้ายังไม่มีนัดหมายใน Google Calendar ค่ะ`;
     await answerFromWorkspaceData(`ตารางนัดหมาย Google Calendar (${listed.accountEmail})`, listed.events, fallback, spokeBefore);
+  };
+
+  /** เสนอเลื่อน เปลี่ยนชื่อ หรือยกเลิกนัด: หานัดที่ตรงก่อน แล้วส่งการ์ดให้ผู้ใช้ยืนยัน ไม่แก้ปฏิทินเอง */
+  const proposeCalendarChange = async (
+    req: NonNullable<ReturnType<typeof createResponseReducer>["calendarRequest"]>,
+    spokeBefore: boolean
+  ): Promise<void> => {
+    const say = (text: string) => forward(textDelta(`${spokeBefore ? " " : ""}${text}`));
+    if (!req.eventQuery) {
+      say("อยากให้ลูน่า" + (req.action === "delete" ? "ยกเลิก" : "เลื่อน") + "นัดไหนคะ บอกชื่อนัดให้หน่อยนะคะ");
+      return;
+    }
+    const listed = await listCalendarEvents({ days: 30, maxResults: 20 });
+    if (!listed.ok) {
+      say(listed.error);
+      return;
+    }
+    const picked = pickCalendarEvent(listed.events, req.eventQuery, req.eventDate);
+    if (picked.kind === "none") {
+      say(`ไม่พบนัดที่ชื่อมีคำว่า "${req.eventQuery}" ในช่วง 30 วันข้างหน้าค่ะ`);
+      return;
+    }
+    if (picked.kind === "many") {
+      const options = picked.events.slice(0, 3).map((event) => `${event.title} ${describeEventTime(event.start)}`).join(" หรือ ");
+      say(`มีนัดที่ตรงหลายอันค่ะ ${options} หมายถึงอันไหนคะ`);
+      return;
+    }
+    const event = picked.event;
+    if (req.action === "update" && !req.title && !req.startIso) {
+      say(`จะเปลี่ยนนัด ${event.title} เป็นเวลาไหนหรือชื่ออะไรคะ`);
+      return;
+    }
+    const after =
+      req.action === "update"
+        ? {
+            title: req.title || event.title,
+            start: req.startIso || event.start,
+            end: req.endIso || (req.startIso ? shiftEnd(event, req.startIso) : event.end)
+          }
+        : undefined;
+    say(
+      req.action === "delete"
+        ? `เตรียมยกเลิกนัด ${event.title} ${describeEventTime(event.start)} ให้แล้วค่ะ กดยืนยันในการ์ดถ้าต้องการยกเลิกจริงนะคะ`
+        : `เตรียมเปลี่ยนนัด ${event.title} ให้แล้วค่ะ ตรวจรายละเอียดแล้วกดยืนยันในการ์ดได้เลยนะคะ`
+    );
+    send({
+      type: "calendar_change",
+      change: {
+        id: randomUUID(),
+        action: req.action === "delete" ? "delete" : "update",
+        eventId: event.id,
+        before: { title: event.title, start: event.start, end: event.end },
+        ...(after ? { after } : {})
+      }
+    });
+  };
+
+  /** เวลาจบใหม่: คงความยาวนัดเดิมเมื่อเลื่อนแค่เวลาเริ่ม */
+  const shiftEnd = (event: { start: string; end: string }, newStart: string): string => {
+    const oldStart = Date.parse(event.start);
+    const oldEnd = Date.parse(event.end);
+    const start = Date.parse(newStart);
+    if (!Number.isFinite(oldStart) || !Number.isFinite(oldEnd) || !Number.isFinite(start)) return "";
+    const end = new Date(start + Math.max(oldEnd - oldStart, 15 * 60_000));
+    // คงโซนเวลาไทยในรูป ISO เพื่อให้แสดงผลตรงกับที่ผู้ใช้พูด
+    const local = new Date(end.getTime() + 7 * 60 * 60_000).toISOString().slice(0, 19);
+    return `${local}+07:00`;
+  };
+
+  /** ร่างอีเมลแล้วส่งการ์ดให้ผู้ใช้ตรวจและกดส่งเอง ไม่ส่งอีเมลเอง */
+  const proposeEmailDraft = async (
+    req: NonNullable<ReturnType<typeof createResponseReducer>["emailDraftRequest"]>,
+    spokeBefore: boolean
+  ): Promise<void> => {
+    const say = (text: string) => forward(textDelta(`${spokeBefore ? " " : ""}${text}`));
+    if (!req.body) {
+      say("อยากให้ลูน่าเขียนอีเมลว่าอะไรดีคะ");
+      return;
+    }
+    let draft: EmailDraft;
+    if (req.mode === "reply") {
+      if (!req.replyQuery) {
+        say("จะให้ลูน่าตอบอีเมลฉบับไหนคะ บอกชื่อผู้ส่งหรือหัวเรื่องให้หน่อยนะคะ");
+        return;
+      }
+      const found = await findEmailToReply(req.replyQuery);
+      if (!found.ok) {
+        say(found.error);
+        return;
+      }
+      // ผู้รับของการตอบกลับคือผู้ส่งของอีเมลต้นฉบับเสมอ ไม่ใช้ที่อยู่อื่นที่ AI เสนอ
+      const to = extractAddress(found.target.from);
+      if (!to) {
+        say("อ่านที่อยู่ผู้ส่งของอีเมลฉบับนั้นไม่ได้ค่ะ จึงยังตอบกลับให้ไม่ได้");
+        return;
+      }
+      draft = {
+        id: randomUUID(),
+        mode: "reply",
+        to: [to],
+        subject: replySubject(found.target.subject),
+        body: req.body,
+        original: { from: found.target.from, subject: found.target.subject },
+        ...(found.target.threadId ? { threadId: found.target.threadId } : {}),
+        ...(found.target.messageId ? { inReplyTo: found.target.messageId } : {}),
+        ...(found.target.references ? { references: found.target.references } : {})
+      };
+    } else {
+      const lastUser = [...messages].reverse().find((turn) => turn.role === "user")?.content ?? "";
+      const checked = checkNewEmailRecipients(req.to, lastUser);
+      if (!checked.ok) {
+        say(
+          checked.reason === "too-many"
+            ? "ส่งได้ไม่เกินครั้งละ 5 คนค่ะ"
+            : "บอกที่อยู่อีเมลของผู้รับให้ลูน่าหน่อยนะคะ ลูน่าจะส่งถึงเฉพาะที่อยู่ที่คุณบอกเองเท่านั้น"
+        );
+        return;
+      }
+      draft = { id: randomUUID(), mode: "new", to: checked.to, subject: req.subject || "(ไม่มีหัวเรื่อง)", body: req.body };
+    }
+    say("ร่างอีเมลให้แล้วค่ะ ตรวจผู้รับกับเนื้อหาในการ์ด แล้วกดส่งเองได้เลยนะคะ");
+    send({ type: "email_draft", draft });
   };
 
   const answerFromNotes = async (
@@ -1152,6 +1282,8 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       await answerFromEmails(reducer.emailCheckRequest, spoke);
     } else if (reducer.calendarRequest !== null) {
       await answerFromCalendar(reducer.calendarRequest, spoke);
+    } else if (reducer.emailDraftRequest !== null) {
+      await proposeEmailDraft(reducer.emailDraftRequest, spoke);
     } else if (reducer.noteRequest !== null) {
       await answerFromNotes(reducer.noteRequest, spoke);
     } else if (reducer.meetingHistoryQuery !== null) {

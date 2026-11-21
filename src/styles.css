@@ -652,6 +652,15 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .welcome > .core.large {
 .fill-card dd { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .fill-card > p { color: var(--text-faint); font-size: 12px; line-height: 1.55; }
 .fill-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* การ์ดร่างอีเมลและการ์ดเปลี่ยนนัด: ช่องข้อมูลแบบสองคอลัมน์ เนื้อหาเลื่อนอ่านได้ */
+.email-draft-card { overflow-y: auto; }
+.email-draft-fields { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--space-3); margin: 0; font-size: 13px; }
+.email-draft-fields dt { color: var(--text-muted); }
+.email-draft-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.email-draft-fields input, .email-draft-card textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--accent-ring); border-radius: var(--radius-md, 8px); background: var(--surface-raised); color: inherit; font: inherit; }
+.email-draft-card textarea { resize: vertical; min-height: 120px; }
+.email-draft-body { margin: 0; padding: var(--space-3); border-radius: var(--radius-md, 8px); background: var(--surface-raised); white-space: pre-wrap; font-size: 13px; max-height: 180px; overflow-y: auto; }
+.email-draft-original { margin: 0; color: var(--text-muted); font-size: 12px; }
 .fill-status { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 3px 10px; border-radius: var(--radius-full); color: var(--text-muted); background: var(--surface-raised); font-size: 12px; font-weight: 500; }
 .fill-status.pending, .fill-status.filled { color: var(--accent); background: var(--accent-soft); }
 .fill-status.failed { color: var(--danger); background: var(--danger-soft); }
