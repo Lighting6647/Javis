@@ -71,7 +71,7 @@ describe("resolveCloudVoice", () => {
       url: "https://generativelanguage.googleapis.com/v1beta/interactions",
       model: "gemini-3.8-flash-tts",
       fallbackModels: ["gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"],
-      voice: "Leda",
+      voice: "Fenrir",
       style: expect.stringMatching(/Thai/)
     });
   });
@@ -126,7 +126,7 @@ describe("buildSpeechRequest", () => {
         }
       ],
       response_format: { type: "audio" },
-      generation_config: { speech_config: [{ voice: "Leda" }] },
+      generation_config: { speech_config: [{ voice: "Fenrir" }] },
       store: false
     });
   });

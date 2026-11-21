@@ -34,7 +34,7 @@ export function formatThaiClock(now: Date = new Date()): string {
     hour12: false,
     timeZone: "Asia/Bangkok"
   }).format(now);
-  return `ตอนนี้เวลา ${formatted} นาฬิกาค่ะ`;
+  return `ตอนนี้เวลา ${formatted} นาฬิกาครับ`;
 }
 
 export function formatThaiDate(now: Date = new Date()): string {
@@ -45,7 +45,7 @@ export function formatThaiDate(now: Date = new Date()): string {
     year: "numeric",
     timeZone: "Asia/Bangkok"
   }).format(now);
-  return `วันนี้เป็น${formatted}ค่ะ`;
+  return `วันนี้เป็น${formatted}ครับ`;
 }
 
 /**
@@ -72,7 +72,7 @@ export function matchAssistantVoiceCommand(
 
   // 2. ตัวจับเวลา (Timer)
   if (/^(?:ยกเลิก|ปิด|หยุด)(?:ตัว)?(?:จับเวลา|ตั้งเวลา|นาฬิกาจับเวลา)$/i.test(text)) {
-    return { kind: "timer-cancel", reply: "ยกเลิกตัวจับเวลาที่ตั้งไว้เรียบร้อยแล้วค่ะ" };
+    return { kind: "timer-cancel", reply: "ยกเลิกตัวจับเวลาที่ตั้งไว้เรียบร้อยแล้วครับ" };
   }
   const timerMatch = text.match(/^(?:ตั้งเวลา|จับเวลา|ตั้งนาฬิกา|เตือนอีก)\s*(\d{1,3})\s*(วินาที|วิ|นาที|ชั่วโมง|ชม\.?)$/i);
   if (timerMatch) {
@@ -87,7 +87,7 @@ export function matchAssistantVoiceCommand(
         kind: "timer-set",
         durationMs,
         label,
-        reply: `ตั้งเวลาจับถอยหลัง ${label} ให้แล้วค่ะ ครบเวลาแล้วจะแจ้งเตือนทันทีนะคะ`
+        reply: `ตั้งเวลาจับถอยหลัง ${label} ให้แล้วครับ ครบเวลาแล้วจะแจ้งเตือนทันทีนะครับ`
       };
     }
   }
@@ -97,7 +97,7 @@ export function matchAssistantVoiceCommand(
     return {
       kind: "open-url",
       url: "https://maps.google.com/maps?output=embed&q=Thailand",
-      reply: "เปิดแผนที่ Google Maps ให้แล้วค่ะ"
+      reply: "เปิดแผนที่ Google Maps ให้แล้วครับ"
     };
   }
   const mapMatch = text.match(/^(?:นำทาง|ขอเส้นทาง|พา|เปิดแผนที่|เปิด\s*google\s*maps?|เปิด\s*กูเกิล\s*แมพ)\s*(?:ไป|ไปยัง)?\s*(.+)$/i);
@@ -106,7 +106,7 @@ export function matchAssistantVoiceCommand(
     return {
       kind: "open-url",
       url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`,
-      reply: `เปิดเส้นทางไป ${dest} บน Google Maps ให้แล้วค่ะ`
+      reply: `เปิดเส้นทางไป ${dest} บน Google Maps ให้แล้วครับ`
     };
   }
 
@@ -117,7 +117,7 @@ export function matchAssistantVoiceCommand(
     return {
       kind: "open-url",
       url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
-      reply: `เปิดค้นหา ${query} บน YouTube ให้แล้วค่ะ`
+      reply: `เปิดค้นหา ${query} บน YouTube ให้แล้วครับ`
     };
   }
 
@@ -151,43 +151,43 @@ export function matchAssistantVoiceCommand(
       return {
         kind: "open-url",
         url: `mailto:${contact.email}`,
-        reply: `เปิดหน้าเขียนอีเมลถึง${contact.name} (${contact.email}) ให้แล้วค่ะ`
+        reply: `เปิดหน้าเขียนอีเมลถึง${contact.name} (${contact.email}) ให้แล้วครับ`
       };
     }
   }
 
   // 6. นำทางหน้าจอในแอป
   if (/^(?:เปิด|ไป|ดู)?(?:หน้า)?(?:งาน|workspace|เวิร์กสเปซ)$/i.test(text)) {
-    return { kind: "navigate", target: "workspace", reply: "เปิดแผง Workspace Hub ให้แล้วค่ะ" };
+    return { kind: "navigate", target: "workspace", reply: "เปิดแผง Workspace Hub ให้แล้วครับ" };
   }
   if (/^(?:เปิด|ไป|ดู)?(?:หน้า)?(?:โปรเจกต์|projects?)$/i.test(text)) {
-    return { kind: "navigate", target: "projects", reply: "เปิดแผงควบคุมโปรเจกต์ให้แล้วค่ะ" };
+    return { kind: "navigate", target: "projects", reply: "เปิดแผงควบคุมโปรเจกต์ให้แล้วครับ" };
   }
   if (/^(?:เปิด|ไป)?(?:หน้า)?ตั้งค่า(?:เสียง)?$/i.test(text)) {
-    return { kind: "navigate", target: "settings", reply: "เปิดหน้าตั้งค่าเสียงให้แล้วค่ะ" };
+    return { kind: "navigate", target: "settings", reply: "เปิดหน้าตั้งค่าเสียงให้แล้วครับ" };
   }
   if (/^(?:กลับ|ไป)(?:หน้า)?(?:หลัก|สนทนา|แชท)$/i.test(text)) {
-    return { kind: "navigate", target: "chat", reply: "กลับมาหน้าสนทนาหลักแล้วค่ะ" };
+    return { kind: "navigate", target: "chat", reply: "กลับมาหน้าสนทนาหลักแล้วครับ" };
   }
 
   // 7. ปรับความเร็วเสียงพูด & ธีม & ล้างแชท
   if (/^(?:พูด|อ่าน)?เร็ว(?:ขึ้น|กว่านี้)$/i.test(text)) {
-    return { kind: "speech-rate", delta: "faster", reply: "ปรับความเร็วเสียงพูดให้เร็วขึ้นแล้วค่ะ" };
+    return { kind: "speech-rate", delta: "faster", reply: "ปรับความเร็วเสียงพูดให้เร็วขึ้นแล้วครับ" };
   }
   if (/^(?:พูด|อ่าน)?ช้า(?:ลง|กว่านี้)$/i.test(text)) {
-    return { kind: "speech-rate", delta: "slower", reply: "ปรับความเร็วเสียงพูดให้ช้าลงแล้วค่ะ" };
+    return { kind: "speech-rate", delta: "slower", reply: "ปรับความเร็วเสียงพูดให้ช้าลงแล้วครับ" };
   }
   if (/^(?:พูด|อ่าน)?(?:ความเร็ว)?(?:ปกติ|เท่าเดิม)$/i.test(text)) {
-    return { kind: "speech-rate", delta: "normal", reply: "ปรับความเร็วเสียงพูดกลับเป็นระดับปกติแล้วค่ะ" };
+    return { kind: "speech-rate", delta: "normal", reply: "ปรับความเร็วเสียงพูดกลับเป็นระดับปกติแล้วครับ" };
   }
   if (/^(?:เปลี่ยน|สลับ)?(?:เป็น)?ธีม(?:โฮโล|มืด|เข้ม|holo|dark)$/i.test(text)) {
-    return { kind: "theme", theme: "holo", reply: "เปลี่ยนเป็นธีมโฮโลให้แล้วค่ะ" };
+    return { kind: "theme", theme: "holo", reply: "เปลี่ยนเป็นธีมโฮโลให้แล้วครับ" };
   }
   if (/^(?:เปลี่ยน|สลับ)?(?:เป็น)?ธีม(?:สว่าง|ขาว|เรียบ|plain|light)$/i.test(text)) {
-    return { kind: "theme", theme: "plain", reply: "เปลี่ยนเป็นธีมสว่างให้แล้วค่ะ" };
+    return { kind: "theme", theme: "plain", reply: "เปลี่ยนเป็นธีมสว่างให้แล้วครับ" };
   }
   if (/^(?:ล้างแชท|ลบแชท|เริ่มคุยใหม่|เริ่มสนทนาใหม่)$/i.test(text)) {
-    return { kind: "clear-chat", reply: "ล้างบทสนทนาและเริ่มใหม่ให้เรียบร้อยแล้วค่ะ" };
+    return { kind: "clear-chat", reply: "ล้างบทสนทนาและเริ่มใหม่ให้เรียบร้อยแล้วครับ" };
   }
   if (/^(?:เปิด|ใช้|เข้า)?(?:โหมด)?(?:คิดลึก|วิเคราะห์ละเอียด|think\s*hard)$/i.test(text)) {
     return { kind: "think-hard", enabled: true, reply: "เปิดโหมดคิดลึกให้แล้วครับคุณไลท์" };
@@ -265,7 +265,7 @@ export function matchAssistantVoiceCommand(
       return {
         kind: "launch-custom-app",
         app: matchedApp,
-        reply: `กำลังเปิดโปรแกรม ${matchedApp.name} ให้ค่ะ`
+        reply: `กำลังเปิดโปรแกรม ${matchedApp.name} ให้ครับ`
       };
     }
   }

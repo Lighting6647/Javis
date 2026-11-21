@@ -67,7 +67,7 @@ function loadThaiVoices(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoic
 export class WebSpeechSynthesizer implements SpeechSynthesizer {
   private voices: SpeechSynthesisVoice[] = [];
   private settings: VoiceSettings = DEFAULT_VOICE_SETTINGS;
-  private preferredGender: "female" | "male" = "female";
+  private preferredGender: "female" | "male" = "male";
   /** เก็บอ้างอิงไว้ ไม่เช่นนั้นบางเบราว์เซอร์จะเก็บกวาดก่อนพูดจบ */
   private readonly pending = new Set<SpeechSynthesisUtterance>();
   /** ตัวปิดงานของประโยคที่กำลังรอพูด เพื่อปลด Promise ทันทีเมื่อ cancel() ถูกเรียก */

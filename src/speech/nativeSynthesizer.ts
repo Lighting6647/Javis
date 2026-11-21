@@ -14,8 +14,8 @@ interface NativeVoice extends VoiceOption {
 }
 
 function scoreNativeVoice(name: string): number {
-  if (/kanya|premwadee|achara|narisa|female/i.test(name)) return 4;
-  if (/niwat|pattara|narong|\bmale\b/i.test(name)) return -2;
+  if (/niwat|pattara|narong|\bmale\b/i.test(name)) return 4;
+  if (/kanya|premwadee|achara|narisa|female/i.test(name)) return -2;
   return 0;
 }
 

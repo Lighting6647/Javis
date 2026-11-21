@@ -20,20 +20,20 @@ export interface VoicePersonaOption {
  */
 export const VOICE_PERSONAS: readonly VoicePersonaOption[] = [
   {
+    id: "assistant",
+    label: "Jarvis (ผู้ช่วยชาย · เสียงหลัก)",
+    hint: "เสียงผู้ชาย Fenrir นุ่มลึก คมชัด สุภาพ เป็นธรรมชาติ",
+    recommendedCloudVoice: "Fenrir",
+    devicePitch: 0.96,
+    sampleText: "สวัสดีครับคุณไลท์ ผมคือจาร์วิส ผู้ช่วยส่วนตัวของคุณครับ วันนี้ให้ผมช่วยดูแลเรื่องอะไรดีครับ"
+  },
+  {
     id: "genz-girl",
-    label: "สาวน้อย Gen Z สดใส (เสียงหลัก)",
+    label: "สาวน้อย Gen Z สดใส",
     hint: "เสียงเด็กสาว Leda + ลีลาสดใส ร่าเริง เป็นกันเอง",
     recommendedCloudVoice: "Leda",
     devicePitch: 1.24,
     sampleText: "ฮายยย~ หวัดดีค่า! วันนี้มีอะไรให้เค้าช่วยเช็กหรือสรุปให้ บอกมาได้เลยน้า!"
-  },
-  {
-    id: "assistant",
-    label: "ผู้ช่วยหญิงสุภาพ (Kore)",
-    hint: "เสียงผู้หญิง Kore คมชัด สุภาพ เป็นธรรมชาติ",
-    recommendedCloudVoice: "Kore",
-    devicePitch: 1.12,
-    sampleText: "สวัสดีค่ะคุณไลท์ พร้อมช่วยเหลือคุณแล้วค่ะ วันนี้ให้ช่วยดูแลเรื่องอะไรดีคะ"
   },
   {
     id: "upbeat-buddy",
@@ -68,14 +68,14 @@ export function isVoicePersonaId(value: string): value is VoicePersonaId {
  * จัดกลุ่มเสียงยอดนิยมพร้อมคำอธิบายภาษาไทยไว้ด้านบน เพื่อให้ผู้ใช้เลือกทดลองฟังได้ง่าย
  */
 export const GEMINI_TTS_VOICES: readonly GeminiVoiceOption[] = [
-  { id: "Leda", label: "Leda (หญิง · วัยรุ่นสดใส · เสียงหลัก)", hint: "เสียงเด็กสาว Gen Z ร่าเริง เป็นกันเอง (เสียงหลักของระบบ)" },
-  { id: "Kore", label: "Kore (หญิง · คมชัด สุภาพ)", hint: "เสียงผู้หญิงคมชัด ชัดถ้อยชัดคำ อ่านภาษาไทยเป็นธรรมชาติ" },
-  { id: "Aoede", label: "Aoede (หญิง · นุ่มนวล อบอุ่น)", hint: "เสียงผู้หญิงละมุน ฟังสบาย อ่อนโยน" },
-  { id: "Zephyr", label: "Zephyr (หญิง · สดใส กระฉับกระเฉง)", hint: "เสียงผู้หญิงสว่าง กระตือรือร้น คล่องตัว" },
-  { id: "Fenrir", label: "Fenrir (ชาย · ทุ้มนุ่ม สุภาพ)", hint: "เสียงผู้ชายโทนทุ้มชัด สุภาพ เป็นธรรมชาติ" },
+  { id: "Fenrir", label: "Fenrir (ชาย · ทุ้มนุ่ม สุภาพ · เสียงหลัก Jarvis)", hint: "เสียงผู้ชายโทนทุ้มชัด สุภาพ เป็นธรรมชาติ (เสียงหลักของระบบ)" },
   { id: "Charon", label: "Charon (ชาย · สุขุม น่าเชื่อถือ)", hint: "เสียงผู้ชายสุขุม นุ่มลึก เหมาะกับการรายงานข่าวและสรุปงาน" },
   { id: "Orus", label: "Orus (ชาย · คมชัด กระฉับกระเฉง)", hint: "เสียงผู้ชายชัดเจน กระชับ ฟังง่าย" },
   { id: "Puck", label: "Puck (ชาย · สดใส เป็นกันเอง)", hint: "เสียงผู้ชายเป็นกันเอง คล่องตัว" },
+  { id: "Leda", label: "Leda (หญิง · วัยรุ่นสดใส)", hint: "เสียงเด็กสาว Gen Z ร่าเริง เป็นกันเอง" },
+  { id: "Kore", label: "Kore (หญิง · คมชัด สุภาพ)", hint: "เสียงผู้หญิงคมชัด ชัดถ้อยชัดคำ อ่านภาษาไทยเป็นธรรมชาติ" },
+  { id: "Aoede", label: "Aoede (หญิง · นุ่มนวล อบอุ่น)", hint: "เสียงผู้หญิงละมุน ฟังสบาย อ่อนโยน" },
+  { id: "Zephyr", label: "Zephyr (หญิง · สดใส กระฉับกระเฉง)", hint: "เสียงผู้หญิงสว่าง กระตือรือร้น คล่องตัว" },
   { id: "Sulafat", label: "Sulafat (หญิง · อบอุ่น)", hint: "เสียงผู้หญิงโทนอบอุ่น น่าฟัง" },
   { id: "Achernar", label: "Achernar (หญิง · นุ่มละมุน)", hint: "เสียงผู้หญิงนุ่มนวล เบาสบาย" },
   { id: "Despina", label: "Despina (หญิง · ราบรื่น)", hint: "เสียงผู้หญิงลื่นไหล ชวนฟัง" },

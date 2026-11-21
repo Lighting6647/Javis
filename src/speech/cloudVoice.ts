@@ -177,7 +177,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   }
 
   private speakWithFallback(text: string): Promise<void> {
-    this.deps.fallback.setFallbackGender?.("female");
+    this.deps.fallback.setFallbackGender?.("male");
     return this.deps.fallback.speak(text);
   }
 
