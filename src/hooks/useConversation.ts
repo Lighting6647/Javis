@@ -7,7 +7,7 @@ import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
 import { runProjectActionRequest } from "../services/projectsApi";
 import { launchAllowedApp } from "../services/appLauncher";
-import { clearConversationSnapshot, restoredConversation, saveConversationSnapshot } from "../services/conversationSnapshot";
+import { clearConversationSnapshot, restoredConversation } from "../services/conversationSnapshot";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import { wakeGateEnabled, wakePhrases } from "../services/wakeGateStore";
