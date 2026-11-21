@@ -1,11 +1,16 @@
 /**
  * นิยามเครื่องมือ (function tools) ที่ส่งให้ AI ในแต่ละคำขอ (แยกจาก server/chat.ts โดยพฤติกรรมไม่เปลี่ยน)
  */
+import { ALLOWED_APP_IDS } from "../appLauncher.js";
 import {
+  CHECK_EMAILS_TOOL,
   FILL_FORM_TOOL,
   FORGET_TOOL,
   INSPECT_PROJECTS_TOOL,
+  MANAGE_CALENDAR_TOOL,
+  MANAGE_NOTES_TOOL,
   MAX_MEMORY_LENGTH,
+  OPEN_APP_TOOL,
   OPEN_PAGE_TOOL,
   PROPOSE_PROJECT_ACTION_TOOL,
   READ_PAGE_TOOL,
@@ -214,13 +219,110 @@ export const PROVIDER_SEARCH_TOOL = { type: "web_search" } as const;
  */
 export type SearchTool = "none" | "provider" | "request";
 
+export const OPEN_APP_TOOL_DEFINITION = {
+  type: "function",
+  name: OPEN_APP_TOOL,
+  description:
+    "เสนอเปิดโปรแกรมบนคอมพิวเตอร์หรือแอปบนอุปกรณ์เคลื่อนที่จากรายการที่อนุญาต (Allowlist) ผู้ใช้จะเห็นการ์ดยืนยันก่อนเปิดจริงเสมอ",
+  strict: true,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    required: ["app_id", "reason"],
+    properties: {
+      app_id: {
+        type: "string",
+        enum: [...ALLOWED_APP_IDS],
+        description: "รหัสโปรแกรม/แอปที่อนุญาต เช่น chrome, vscode, notepad, calculator, excel, word, line, spotify, gmail, calendar, maps, youtube, terminal, explorer, settings"
+      },
+      reason: {
+        type: "string",
+        description: "คำอธิบายสั้น ๆ ภาษาไทยว่ากำลังจะเปิดโปรแกรมอะไรให้ผู้ใช้"
+      }
+    }
+  }
+} as const;
+
+export const WORKSPACE_TOOL_DEFINITIONS = [
+  {
+    type: "function",
+    name: CHECK_EMAILS_TOOL,
+    description:
+      "เช็คและอ่านรายการอีเมลสำคัญหรืออีเมลยังไม่อ่านจาก Gmail ของบัญชี Lighting6647@gmail.com ใช้เมื่อผู้ใช้ขอเช็คเมล อ่านเมลสำคัญ หรือดูว่ามีเมลเข้าไหม",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["query", "limit"],
+      properties: {
+        query: {
+          type: "string",
+          description: "คำค้นหาเพิ่มเติมใน Gmail (ส่ง \"\" เพื่อดึงอีเมลสำคัญและยังไม่อ่านล่าสุด)"
+        },
+        limit: {
+          type: "number",
+          description: "จำนวนอีเมลสูงสุดที่ต้องการดึง (1 ถึง 10 แนะนำ 5)"
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    name: MANAGE_CALENDAR_TOOL,
+    description:
+      "ดูตารางนัดหมายที่จะมาถึง หรือบันทึกนัดหมายใหม่ลง Google Calendar ของบัญชี Lighting6647@gmail.com",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["action", "days", "title", "start_iso", "end_iso", "description", "location"],
+      properties: {
+        action: { type: "string", enum: ["list", "create"], description: "list เพื่อดูนัดหมาย, create เพื่อบันทึกนัดหมายใหม่" },
+        days: { type: "number", description: "จำนวนวันล่วงหน้าสำหรับ action=list (1-30 แนะนำ 7)" },
+        title: { type: "string", description: "ชื่อนัดหมาย (ใช้เมื่อ action=create ไม่งั้นส่ง \"\")" },
+        start_iso: {
+          type: "string",
+          description: "วันเวลาเริ่มต้นรูปแบบ ISO 8601 พร้อมโซนเวลา +07:00 เช่น 2026-11-22T14:00:00+07:00 (ส่ง \"\" เมื่อ action=list)"
+        },
+        end_iso: {
+          type: "string",
+          description: "วันเวลาสิ้นสุดรูปแบบ ISO 8601 พร้อม +07:00 (ส่ง \"\" เพื่อใช้ค่าเริ่มต้น 1 ชั่วโมงหลังเริ่ม)"
+        },
+        description: { type: "string", description: "รายละเอียดเพิ่มเติมของนัดหมาย (หรือ \"\")" },
+        location: { type: "string", description: "สถานที่หรือลิงก์ประชุม (หรือ \"\")" }
+      }
+    }
+  },
+  {
+    type: "function",
+    name: MANAGE_NOTES_TOOL,
+    description:
+      "จดบันทึกใหม่ ดูรายการบันทึก หรือค้นหา Note ของผู้ใช้ (เก็บในระบบ DelLuna Notes และซิงก์เข้า Google Tasks ของ Lighting6647@gmail.com อัตโนมัติเมื่อเชื่อมต่อ)",
+    strict: true,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["action", "title", "content", "query", "sync_google_tasks"],
+      properties: {
+        action: { type: "string", enum: ["list", "create", "search"], description: "create=จดบันทึกใหม่, list=ดูบันทึกล่าสุด, search=ค้นบันทึก" },
+        title: { type: "string", description: "หัวข้อบันทึก (ใช้เมื่อ action=create ไม่งั้นส่ง \"\")" },
+        content: { type: "string", description: "เนื้อหาที่ต้องการจดบันทึก (ใช้เมื่อ action=create ไม่งั้นส่ง \"\")" },
+        query: { type: "string", description: "คำค้นหา (ใช้เมื่อ action=search ไม่งั้นส่ง \"\")" },
+        sync_google_tasks: { type: "boolean", description: "true เพื่อซิงก์เข้า Google Tasks ด้วยเมื่อ action=create" }
+      }
+    }
+  }
+] as const;
+
 export function buildTools(search: SearchTool, withFormFill: boolean, withMeetingHistory = false): unknown[] {
   return [
     ...(search === "provider" ? [PROVIDER_SEARCH_TOOL] : []),
     ...(search === "request" ? [SEARCH_WEB_TOOL_DEFINITION] : []),
     OPEN_PAGE_TOOL_DEFINITION,
+    OPEN_APP_TOOL_DEFINITION,
     READ_PAGE_TOOL_DEFINITION,
     ...PROJECT_TOOL_DEFINITIONS,
+    ...WORKSPACE_TOOL_DEFINITIONS,
     ...MEMORY_TOOL_DEFINITIONS,
     ...(withFormFill ? [FILL_FORM_TOOL_DEFINITION] : []),
     ...(withMeetingHistory ? [SEARCH_MEETING_HISTORY_TOOL_DEFINITION] : [])

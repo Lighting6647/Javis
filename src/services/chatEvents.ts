@@ -124,6 +124,23 @@ export function parseChatEventLine(line: string): ChatEvent | null {
       };
     }
 
+    case "open_app": {
+      if (!isObject(value.proposal)) return null;
+      const { id, appId, appName, reason } = value.proposal;
+      if (typeof id !== "string" || typeof appId !== "string" || typeof appName !== "string") {
+        return null;
+      }
+      return {
+        type: "open_app",
+        proposal: {
+          id,
+          appId,
+          appName,
+          reason: typeof reason === "string" ? reason : ""
+        }
+      };
+    }
+
     default:
       return null;
   }

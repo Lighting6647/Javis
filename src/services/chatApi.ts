@@ -16,7 +16,7 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 /** ส่งประวัติบทสนทนาไปที่ backend และรับคำตอบแบบสตรีมทีละเหตุการณ์ */
-export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, screen, image, memories, frames, meeting }) => {
+export const streamChatReply: StreamChat = async (messages, { signal, onEvent, page, screen, image, memories, frames, meeting, identity }) => {
   const savedMeetings = meeting
     ? []
     : meetingHistoryStore
@@ -43,6 +43,7 @@ export const streamChatReply: StreamChat = async (messages, { signal, onEvent, p
         ...(memories && memories.length > 0 ? { memories } : {}),
         ...(frames ? { frames: true } : {}),
         ...(meeting ? { meeting } : {}),
+        ...(identity ? { identity } : {}),
         ...(savedMeetings.length > 0 ? { meetingHistory: savedMeetings } : {})
       }),
       signal

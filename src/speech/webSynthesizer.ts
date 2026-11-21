@@ -17,25 +17,31 @@ function isThai(voice: SpeechSynthesisVoice): boolean {
   return voice.lang.toLowerCase().replace("_", "-").startsWith("th");
 }
 
-function scoreVoice(voice: SpeechSynthesisVoice): number {
+function scoreVoice(voice: SpeechSynthesisVoice, preferredGender: "female" | "male" = "female"): number {
   let score = 0;
-  // ให้ความสำคัญเสียงผู้หญิงภาษาไทยเป็นค่าเริ่มต้นเมื่อระบบมีเสียงให้เลือกหลายเสียง
-  if (/premwadee|achara|kanya|narisa|google\s*ภาษาไทย|google\s*thai|female|woman|girl/i.test(voice.name)) {
-    score += 4;
-  } else if (/niwat|pattara|\bmale\b/i.test(voice.name)) {
-    score -= 2;
+  const isFemale = /premwadee|achara|kanya|narisa|google\s*ภาษาไทย|google\s*thai|female|woman|girl/i.test(voice.name);
+  const isMale = /niwat|pattara|narong|\bmale\b|\bman\b|\bboy\b/i.test(voice.name);
+
+  if (preferredGender === "male") {
+    // โหมด Javis (เสียงสำรองเมื่อเสียงลูน่าขัดข้อง): เลือกเสียงผู้ชายภาษาไทยเป็นอันดับแรกถ้ามีในเครื่อง
+    if (isMale) score += 5;
+    else if (isFemale) score -= 2;
+  } else {
+    // โหมดเดลลูน่า: ให้ความสำคัญเสียงผู้หญิงภาษาไทยเป็นค่าเริ่มต้น
+    if (isFemale) score += 4;
+    else if (isMale) score -= 2;
   }
   if (/natural|premium|enhanced|siri/i.test(voice.name)) score += 2;
   if (voice.default) score += 1;
   return score;
 }
 
-/** เสียงภาษาไทยเรียงจากคุณภาพดีที่สุด */
-function thaiVoices(synthesis: SpeechSynthesis): SpeechSynthesisVoice[] {
+/** เสียงภาษาไทยเรียงจากคุณภาพดีที่สุดตามเพศเสียงที่ต้องการ */
+function thaiVoices(synthesis: SpeechSynthesis, preferredGender: "female" | "male" = "female"): SpeechSynthesisVoice[] {
   return synthesis
     .getVoices()
     .filter(isThai)
-    .sort((a, b) => scoreVoice(b) - scoreVoice(a));
+    .sort((a, b) => scoreVoice(b, preferredGender) - scoreVoice(a, preferredGender));
 }
 
 function loadThaiVoices(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
@@ -61,8 +67,11 @@ function loadThaiVoices(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoic
 export class WebSpeechSynthesizer implements SpeechSynthesizer {
   private voices: SpeechSynthesisVoice[] = [];
   private settings: VoiceSettings = DEFAULT_VOICE_SETTINGS;
+  private preferredGender: "female" | "male" = "female";
   /** เก็บอ้างอิงไว้ ไม่เช่นนั้นบางเบราว์เซอร์จะเก็บกวาดก่อนพูดจบ */
   private readonly pending = new Set<SpeechSynthesisUtterance>();
+  /** ตัวปิดงานของประโยคที่กำลังรอพูด เพื่อปลด Promise ทันทีเมื่อ cancel() ถูกเรียก */
+  private readonly activeFinishes = new Set<() => void>();
   /** เบราว์เซอร์ยอมให้หน้านี้พูดหรือยัง รู้จากผลของการสั่งพูดแต่ละครั้ง */
   private readonly block = createSpeechBlock();
 
@@ -74,10 +83,16 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
     return typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
   }
 
-  /** เสียงที่ผู้ใช้เลือก หรือเสียงที่ดีที่สุดถ้ายังไม่ได้เลือกหรือเสียงนั้นหายไปแล้ว */
+  /** เสียงที่ผู้ใช้เลือก หรือเสียงที่ดีที่สุดตามโหมดเพศเสียง (เดลลูน่า/จาวิส) */
   private get voice(): SpeechSynthesisVoice | null {
     const chosen = this.voices.find((voice) => voice.voiceURI === this.settings.voiceId);
-    return chosen ?? this.voices[0] ?? null;
+    if (chosen) return chosen;
+    const ranked = [...this.voices].sort((a, b) => scoreVoice(b, this.preferredGender) - scoreVoice(a, this.preferredGender));
+    return ranked[0] ?? null;
+  }
+
+  setFallbackGender(gender: "female" | "male"): void {
+    this.preferredGender = gender;
   }
 
   async listVoices(): Promise<VoiceOption[]> {
@@ -125,11 +140,15 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
       if (voice) utterance.voice = voice;
       utterance.lang = voice?.lang || SPEECH_LANGUAGE;
       utterance.rate = this.settings.rate;
-      utterance.pitch = getVoicePersona(this.settings.persona).devicePitch;
+      utterance.pitch = this.preferredGender === "male" ? 0.96 : getVoicePersona(this.settings.persona).devicePitch;
 
+      let settled = false;
       const finish = () => {
+        if (settled) return;
+        settled = true;
         window.clearTimeout(watchdog);
         this.pending.delete(utterance);
+        this.activeFinishes.delete(finish);
         resolve();
       };
       // พูดช้าลงก็ต้องรอนานขึ้นตามสัดส่วน
@@ -145,6 +164,7 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
         finish();
       };
       this.pending.add(utterance);
+      this.activeFinishes.add(finish);
       // กันสถานะ speechSynthesis ค้าง pause ใน Chrome/Edge
       if (synthesis.paused) synthesis.resume();
       synthesis.speak(utterance);
@@ -153,5 +173,9 @@ export class WebSpeechSynthesizer implements SpeechSynthesizer {
 
   cancel(): void {
     this.synthesis?.cancel();
+    // Chrome/Safari บางรุ่นไม่ยิง onend/onerror เมื่อ cancel() จึงปลด Promise ที่ค้างอยู่ทันที
+    for (const finish of [...this.activeFinishes]) {
+      finish();
+    }
   }
 }

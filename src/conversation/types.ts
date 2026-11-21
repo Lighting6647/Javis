@@ -129,6 +129,8 @@ export interface ConversationState {
   pendingFillId: string | null;
   /** คำสั่งควบคุมโปรเจกต์ที่รอผู้ใช้ยืนยันก่อนรันจริง */
   pendingProjectAction: ProjectActionProposal | null;
+  /** คำสั่งเปิดโปรแกรมในคอมพิวเตอร์หรือแอปบนมือถือที่รอผู้ใช้ยืนยันก่อนเปิดจริง */
+  pendingAppLaunch: AppLaunchProposal | null;
   /** เวลาที่รอคำตอบครั้งล่าสุด นับจากส่งคำถามจนข้อความแรกมาถึง (มิลลิวินาที) หรือ null ถ้ายังไม่เคยได้คำตอบ */
   lastReplyMs: number | null;
 }
@@ -153,13 +155,24 @@ export type ChatEvent =
   | { type: "memory"; added: string[]; removed: string[] }
   /** AI เสนอคำสั่งควบคุมโปรเจกต์ (ต้องให้ผู้ใช้กดยืนยันก่อนรันจริง) */
   | { type: "project_action"; proposal: ProjectActionProposal }
+  /** AI เสนอเปิดโปรแกรมในคอมพิวเตอร์หรือแอปในมือถือ (ต้องให้ผู้ใช้กดยืนยันก่อนเปิดจริง) */
+  | { type: "open_app"; proposal: AppLaunchProposal }
   /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
   | { type: "suggestions"; html: string[] };
+
+export interface AppLaunchProposal {
+  id: string;
+  appId: string;
+  appName: string;
+  reason: string;
+}
 
 export interface CapturedImage {
   mimeType: "image/jpeg" | "image/png" | "image/webp";
   data: string;
 }
+
+export type AssistantIdentity = "delluna" | "javis";
 
 export interface ChatStreamOptions {
   signal: AbortSignal;
@@ -176,6 +189,8 @@ export interface ChatStreamOptions {
   frames?: boolean;
   /** ขอให้สรุปบันทึกการประชุมนี้ แทนการตอบบทสนทนา (โหมดสรุปการประชุม) */
   meeting?: MeetingTranscript;
+  /** ตัวตนผู้ช่วยในเทิร์นนี้: delluna (หลักเมื่อเสียงลูน่าปกติ) หรือ javis (สลับอัตโนมัติเมื่อเสียงลูน่าขัดข้อง) */
+  identity?: AssistantIdentity;
 }
 
 export interface SendTextOptions {

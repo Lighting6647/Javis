@@ -60,6 +60,8 @@ export interface ConversationDeps {
     projectId: string,
     action: "build" | "test" | "lint" | "redeploy"
   ) => Promise<{ ok: boolean; summary: string; output?: string }>;
+  /** เปิดโปรแกรมบนคอมพิวเตอร์หรือแอปบนมือถือหลังผู้ใช้กดยืนยันแล้วเท่านั้น */
+  launchApp?: (appId: string, appName: string) => Promise<{ ok: boolean; message: string }>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
   /** นาฬิกาของตัวควบคุม (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
@@ -97,6 +99,7 @@ const INITIAL_STATE: ConversationState = {
   searching: false,
   pendingFillId: null,
   pendingProjectAction: null,
+  pendingAppLaunch: null,
   lastReplyMs: null
 };
 
@@ -274,6 +277,20 @@ export class ConversationController {
   /** ผู้ใช้กดยกเลิกคำสั่งควบคุมโปรเจกต์ที่รออยู่ */
   cancelProjectAction = (): void => {
     void this.decideProjectAction("cancel").then((notice) => {
+      if (notice) this.update({ notice });
+    });
+  };
+
+  /** ผู้ใช้กดยืนยันการเปิดโปรแกรมที่รออยู่ */
+  confirmAppLaunch = (): void => {
+    void this.decideAppLaunch("confirm").then((notice) => {
+      if (notice) this.update({ notice });
+    });
+  };
+
+  /** ผู้ใช้กดยกเลิกการเปิดโปรแกรมที่รออยู่ */
+  cancelAppLaunch = (): void => {
+    void this.decideAppLaunch("cancel").then((notice) => {
       if (notice) this.update({ notice });
     });
   };
@@ -495,16 +512,21 @@ export class ConversationController {
       return;
     }
 
-    const decision = this.state.pendingFillId || this.state.pendingProjectAction ? interpretFillDecision(userText) : null;
+    const decision =
+      this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch
+        ? interpretFillDecision(userText)
+        : null;
     if (!decision) {
       await this.respond(userText, epoch, options);
       return;
     }
 
     this.update({ partial: "" });
-    const notice = this.state.pendingProjectAction
-      ? await this.decideProjectAction(decision)
-      : await this.decideFill(decision);
+    const notice = this.state.pendingAppLaunch
+      ? await this.decideAppLaunch(decision)
+      : this.state.pendingProjectAction
+        ? await this.decideProjectAction(decision)
+        : await this.decideFill(decision);
     if (epoch !== this.epoch) return;
 
     if (!this.state.active) {
@@ -557,6 +579,39 @@ export class ConversationController {
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
       return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
+    } finally {
+      this.filling = false;
+    }
+  }
+
+  private async decideAppLaunch(decision: FillDecision): Promise<Notice | null> {
+    const proposal = this.state.pendingAppLaunch;
+    if (!proposal || this.filling) return null;
+
+    if (decision === "cancel") {
+      this.update({ pendingAppLaunch: null });
+      return { tone: "info", text: `ยกเลิกการเปิดโปรแกรม ${proposal.appName} แล้วค่ะ` };
+    }
+
+    if (!this.deps.launchApp) {
+      this.update({ pendingAppLaunch: null });
+      return { tone: "error", text: "ระบบยังไม่พร้อมเปิดโปรแกรมในเครื่องค่ะ" };
+    }
+
+    this.filling = true;
+    this.update({
+      pendingAppLaunch: null,
+      notice: { tone: "info", text: `กำลังเปิดโปรแกรม ${proposal.appName}…` }
+    });
+    try {
+      const result = await this.deps.launchApp(proposal.appId, proposal.appName);
+      this.update({
+        messages: [...this.state.messages, { id: this.nextId(), role: "assistant", text: result.message }]
+      });
+      void this.deps.synthesizer.speak(result.message).catch(() => undefined);
+      return { tone: result.ok ? "info" : "error", text: result.message };
+    } catch {
+      return { tone: "error", text: `เปิดโปรแกรม ${proposal.appName} ไม่สำเร็จค่ะ` };
     } finally {
       this.filling = false;
     }
@@ -615,6 +670,9 @@ export class ConversationController {
     }
     if (this.state.pendingProjectAction) {
       this.update({ pendingProjectAction: null });
+    }
+    if (this.state.pendingAppLaunch) {
+      this.update({ pendingAppLaunch: null });
     }
 
     const history: ConversationMessage[] = [
@@ -718,6 +776,10 @@ export class ConversationController {
 
             case "project_action":
               this.update({ pendingProjectAction: event.proposal });
+              break;
+
+            case "open_app":
+              this.update({ pendingAppLaunch: event.proposal });
               break;
 
             case "memory": {

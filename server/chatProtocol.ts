@@ -37,10 +37,22 @@ export type ChatEvent =
    */
   | { type: "project_action"; proposal: ProjectActionProposal }
   /**
+   * AI เสนอเปิดโปรแกรมบนคอมพิวเตอร์หรือแอปบนอุปกรณ์เคลื่อนที่ (Allowlist เท่านั้น)
+   * หน้าเว็บต้องแสดงการ์ดให้ผู้ใช้กดยืนยันก่อนเปิดจริงเสมอ
+   */
+  | { type: "open_app"; proposal: AppLaunchProposal }
+  /**
    * แถบคำค้นที่เกี่ยวข้องของ Google (HTML สำเร็จรูปจาก Google) สำหรับคำตอบที่ได้จากการค้นด้วย Google
    * เงื่อนไขการใช้ของ Google กำหนดให้แสดงคู่กับคำตอบโดยไม่ดัดแปลง หน้าเว็บต้องแสดงแบบที่ HTML นี้รันสคริปต์ไม่ได้
    */
   | { type: "suggestions"; html: string[] };
+
+export interface AppLaunchProposal {
+  id: string;
+  appId: string;
+  appName: string;
+  reason: string;
+}
 
 export interface ProjectActionProposal {
   id: string;

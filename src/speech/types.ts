@@ -88,6 +88,8 @@ export interface SpeechSynthesizer {
   listVoices(): Promise<VoiceOption[]>;
   /** กำหนดเสียงและความเร็ว มีผลกับการพูดครั้งถัดไป */
   applySettings(settings: VoiceSettings): void;
+  /** เลือกเพศเสียงสำรองในเครื่องอัตโนมัติ (female = เดลลูน่า, male = จาวิสตอนเสียงหลักขัดข้อง) */
+  setFallbackGender?(gender: "female" | "male"): void;
   /**
    * เตรียมเสียงภาษาไทย ต้องเรียกภายในจังหวะที่ผู้ใช้แตะหน้าจอ
    * คืน false ถ้าอุปกรณ์ไม่มีเสียงภาษาไทย

@@ -6,11 +6,13 @@ import { ConversationController } from "../conversation/controller";
 import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
 import { runProjectActionRequest } from "../services/projectsApi";
+import { launchAllowedApp } from "../services/appLauncher";
 import { clearConversationSnapshot, restoredConversation, saveConversationSnapshot } from "../services/conversationSnapshot";
 import { leaveToPage, openExternalPage } from "../services/openPage";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import { createSpeechServices, handsFreeAvailable } from "../speech";
+import { CloudVoiceSynthesizer, resolveAssistantIdentity } from "../speech/cloudVoice";
 
 interface ConversationOptions {
   /** เซสชันผ่านการตรวจแล้วและใช้งานได้ บทสนทนาที่เก็บไว้จะถูกคืนให้หลังจากนี้เท่านั้น */
@@ -40,7 +42,13 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
 
     const controller: ConversationController = new ConversationController({
       ...services,
-      chat: streamChatReply,
+      chat: (messages, options) => {
+        const cloudStatus = services.synthesizer instanceof CloudVoiceSynthesizer ? services.synthesizer.status() : null;
+        return streamChatReply(messages, {
+          ...options,
+          identity: options.identity ?? resolveAssistantIdentity(cloudStatus)
+        });
+      },
       // เบราว์เซอร์บนคอมพิวเตอร์ฟังตลอดเวลา: เงียบก็ฟังต่อ ไม่ต้องให้ผู้ใช้แตะไมโครโฟนใหม่ทุกครั้ง
       handsFree: handsFreeAvailable(),
       // คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" (ลงทะเบียนที่ src/hooks/useMeeting.ts)
@@ -75,6 +83,7 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
           failure: "unavailable"
         },
       runProjectAction: (projectId, action) => runProjectActionRequest(projectId, action),
+      launchApp: (appId, appName) => launchAllowedApp(appId, appName),
       memory: { list: memoryStore.get, add: memoryStore.add, remove: memoryStore.remove }
     });
     return { controller, synthesizer: services.synthesizer };
@@ -124,6 +133,8 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
     cancelFill: controller.cancelFill,
     confirmProjectAction: controller.confirmProjectAction,
     cancelProjectAction: controller.cancelProjectAction,
+    confirmAppLaunch: controller.confirmAppLaunch,
+    cancelAppLaunch: controller.cancelAppLaunch,
     undoMemory: controller.undoMemory,
     markLinkOpened: controller.markLinkOpened
   };

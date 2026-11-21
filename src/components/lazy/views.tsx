@@ -6,6 +6,7 @@ import { lazyWithPreload } from "./lazyWithPreload";
  */
 export const MeetingPanel = lazyWithPreload(() => import("../MeetingPanel").then((module) => module.MeetingPanel), "MeetingPanel");
 export const ProjectsPanel = lazyWithPreload(() => import("../ProjectsPanel").then((module) => module.ProjectsPanel), "ProjectsPanel");
+export const WorkspacePanel = lazyWithPreload(() => import("../WorkspacePanel").then((module) => module.WorkspacePanel), "WorkspacePanel");
 export const RouterPanel = lazyWithPreload(() => import("../RouterPanel").then((module) => module.RouterPanel), "RouterPanel");
 export const VoiceSettingsDialog = lazyWithPreload(
   () => import("../VoiceSettingsDialog").then((module) => module.VoiceSettingsDialog),
@@ -50,7 +51,7 @@ const whenIdle = (task: () => void): (() => void) => {
  */
 export function preloadViews({ desktop, meeting }: PreloadOptions): () => void {
   return whenIdle(() => {
-    const views = [VoiceSettingsDialog, VoiceRecorderDialog, ProjectsPanel, RouterPanel, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
+    const views = [VoiceSettingsDialog, VoiceRecorderDialog, ProjectsPanel, WorkspacePanel, RouterPanel, desktop ? BrowserView : FrameView, ...(meeting ? [MeetingPanel] : [])];
     for (const view of views) void view.preload().catch(() => undefined);
   });
 }

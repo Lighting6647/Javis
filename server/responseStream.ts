@@ -1,7 +1,17 @@
-import type { ChatEvent, FillProposal, MemoryEntry, PageField, ProjectActionProposal, WebSource } from "./chatProtocol.js";
+import { resolveAllowedApp } from "./appLauncher.js";
+import type {
+  AppLaunchProposal,
+  ChatEvent,
+  FillProposal,
+  MemoryEntry,
+  PageField,
+  ProjectActionProposal,
+  WebSource
+} from "./chatProtocol.js";
 import { readUpstreamErrorCodes } from "./upstreamError.js";
 
 export const OPEN_PAGE_TOOL = "open_web_page";
+export const OPEN_APP_TOOL = "open_app";
 export const FILL_FORM_TOOL = "fill_form_fields";
 export const REMEMBER_TOOL = "remember";
 export const FORGET_TOOL = "forget_memory";
@@ -15,6 +25,12 @@ export const INSPECT_PROJECTS_TOOL = "inspect_projects";
 export const PROPOSE_PROJECT_ACTION_TOOL = "propose_project_action";
 /** เครื่องมือค้นหาบันทึกและคำสรุปการประชุมย้อนหลังในเครื่องของผู้ใช้ */
 export const SEARCH_MEETING_HISTORY_TOOL = "search_meeting_history";
+/** เครื่องมือเช็คและอ่านอีเมลสำคัญจาก Gmail (Lighting6647@gmail.com) */
+export const CHECK_EMAILS_TOOL = "check_important_emails";
+/** เครื่องมือดูหรือบันทึกนัดหมายบน Google Calendar */
+export const MANAGE_CALENDAR_TOOL = "manage_calendar";
+/** เครื่องมือจด ค้นหา หรือดูรายการ Note / Google Tasks */
+export const MANAGE_NOTES_TOOL = "manage_notes";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 /**
  * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
@@ -152,6 +168,26 @@ export interface ResponseReducer {
    * AI ขอค้นหาคลังประวัติสรุปการประชุมย้อนหลัง (null = ไม่ได้ขอ)
    */
   readonly meetingHistoryQuery: string | null;
+  /** AI ขอเช็ค/อ่านอีเมลสำคัญจาก Gmail (null = ไม่ได้ขอ) */
+  readonly emailCheckRequest: { query?: string; limit?: number } | null;
+  /** AI ขอดูหรือบันทึกนัดหมายบน Google Calendar (null = ไม่ได้ขอ) */
+  readonly calendarRequest: {
+    action: "list" | "create";
+    days?: number;
+    title?: string;
+    startIso?: string;
+    endIso?: string;
+    description?: string;
+    location?: string;
+  } | null;
+  /** AI ขอดู ค้นหา หรือจด Note / Google Tasks (null = ไม่ได้ขอ) */
+  readonly noteRequest: {
+    action: "list" | "create" | "search";
+    query?: string;
+    title?: string;
+    content?: string;
+    syncGoogleTasks?: boolean;
+  } | null;
 }
 
 export interface ResponseReducerOptions {
@@ -185,7 +221,11 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let readRequest: string | null = null;
   let projectInspectRequest: { project?: string; includeCloud?: boolean } | null = null;
   let projectAction: ProjectActionProposal | null = null;
+  let appLaunch: AppLaunchProposal | null = null;
   let meetingHistoryQuery: string | null = null;
+  let emailCheckRequest: { query?: string; limit?: number } | null = null;
+  let calendarRequest: ResponseReducer["calendarRequest"] = null;
+  let noteRequest: ResponseReducer["noteRequest"] = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
 
@@ -332,6 +372,58 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
           reason: reason || `สั่ง ${action} โปรเจกต์ ${project}`
         };
       }
+    } else if (item.type === "function_call" && item.name === OPEN_APP_TOOL && !appLaunch) {
+      const args = parseArguments(item.arguments);
+      const matched = resolveAllowedApp(args.app_id);
+      const reason = typeof args.reason === "string" ? cleanLine(args.reason, 200) : "";
+      if (matched) {
+        const callId = typeof item.call_id === "string" && item.call_id ? item.call_id : `app-${Date.now()}`;
+        appLaunch = {
+          id: callId,
+          appId: matched.id,
+          appName: matched.name,
+          reason: reason || `เปิดโปรแกรม ${matched.name}`
+        };
+      }
+    } else if (item.type === "function_call" && item.name === CHECK_EMAILS_TOOL && !emailCheckRequest) {
+      const args = parseArguments(item.arguments);
+      const query = typeof args.query === "string" ? cleanLine(args.query, 160) : "";
+      const rawLimit = typeof args.limit === "number" ? args.limit : 5;
+      emailCheckRequest = {
+        ...(query ? { query } : {}),
+        limit: Math.min(Math.max(Math.trunc(rawLimit) || 5, 1), 10)
+      };
+    } else if (item.type === "function_call" && item.name === MANAGE_CALENDAR_TOOL && !calendarRequest) {
+      const args = parseArguments(item.arguments);
+      const action = args.action === "create" ? "create" : "list";
+      const days = typeof args.days === "number" ? Math.min(Math.max(Math.trunc(args.days) || 7, 1), 30) : 7;
+      const title = typeof args.title === "string" ? cleanLine(args.title, 180) : "";
+      const startIso = typeof args.start_iso === "string" ? cleanLine(args.start_iso, 60) : "";
+      const endIso = typeof args.end_iso === "string" ? cleanLine(args.end_iso, 60) : "";
+      const description = typeof args.description === "string" ? cleanLine(args.description, 400) : "";
+      const location = typeof args.location === "string" ? cleanLine(args.location, 160) : "";
+      calendarRequest = {
+        action,
+        days,
+        ...(title ? { title } : {}),
+        ...(startIso ? { startIso } : {}),
+        ...(endIso ? { endIso } : {}),
+        ...(description ? { description } : {}),
+        ...(location ? { location } : {})
+      };
+    } else if (item.type === "function_call" && item.name === MANAGE_NOTES_TOOL && !noteRequest) {
+      const args = parseArguments(item.arguments);
+      const action = args.action === "create" ? "create" : args.action === "search" ? "search" : "list";
+      const query = typeof args.query === "string" ? cleanLine(args.query, 160) : "";
+      const title = typeof args.title === "string" ? cleanLine(args.title, 120) : "";
+      const content = typeof args.content === "string" ? cleanLine(args.content, 1000) : "";
+      noteRequest = {
+        action,
+        ...(query ? { query } : {}),
+        ...(title ? { title } : {}),
+        ...(content ? { content } : {}),
+        syncGoogleTasks: args.sync_google_tasks !== false
+      };
     }
   };
 
@@ -406,6 +498,12 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
         }
         events.push({ type: "project_action", proposal: projectAction });
       }
+      if (appLaunch) {
+        if (!text.trim() && !page && !fill && !projectAction) {
+          events.push({ type: "delta", text: `เตรียมเปิดโปรแกรม ${appLaunch.appName} ให้แล้วค่ะ กดยืนยันหรือพูดว่ายืนยันได้เลยนะคะ` });
+        }
+        events.push({ type: "open_app", proposal: appLaunch });
+      }
       if (memoryAdds.length > 0 || memoryRemoves.length > 0) {
         events.push({ type: "memory", added: [...memoryAdds], removed: [...memoryRemoves] });
       }
@@ -428,7 +526,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       return memoryCalls;
     },
     get needsFollowUp() {
-      return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction;
+      return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction && !appLaunch;
     },
     get memoryFallbackText() {
       if (memoryAdds.length > 0) return "จำไว้แล้วครับ";
@@ -449,6 +547,15 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get meetingHistoryQuery() {
       return meetingHistoryQuery;
+    },
+    get emailCheckRequest() {
+      return emailCheckRequest;
+    },
+    get calendarRequest() {
+      return calendarRequest;
+    },
+    get noteRequest() {
+      return noteRequest;
     }
   };
 }

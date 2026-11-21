@@ -7,6 +7,26 @@ const SILENT_WAV_BYTES = new Uint8Array([
   0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00
 ]);
 
+const RESUME_TIMEOUT_MS = 1200;
+
+function resumeContextWithTimeout(ctx: AudioContext): Promise<boolean> {
+  if (ctx.state === "running") return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    const finish = (running: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(running);
+    };
+    const timer = setTimeout(() => finish(ctx.state === "running"), RESUME_TIMEOUT_MS);
+    void ctx
+      .resume()
+      .then(() => finish(ctx.state === "running"))
+      .catch(() => finish(false));
+  });
+}
+
 type AudioContextCtor = typeof AudioContext;
 
 function getAudioContextCtor(): AudioContextCtor | null {
@@ -54,6 +74,9 @@ export function createBrowserAudioPlayer(): AudioPlayer {
     const url = URL.createObjectURL(audio);
     element.onended = null;
     element.onerror = null;
+    // รีเซ็ตระดับเสียงเสมอ ป้องกันกรณี unlock() เพิ่งตั้ง volume = 0 ค้างไว้ก่อนเล่นเสียงจริง
+    element.muted = false;
+    element.volume = 1;
     element.src = url;
     element.playbackRate = rate;
 
@@ -155,8 +178,10 @@ export function createBrowserAudioPlayer(): AudioPlayer {
       void (async () => {
         try {
           if (ctx.state === "suspended" || (ctx.state as string) === "interrupted") {
-            await ctx.resume();
+            const running = await resumeContextWithTimeout(ctx);
+            if (!running) throw new Error("audio-context-suspended");
           }
+          if (stopped || settled) return;
           const raw = await audio.arrayBuffer();
           if (stopped || settled) return;
           const decoded = await ctx.decodeAudioData(raw.slice(0));

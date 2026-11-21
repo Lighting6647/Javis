@@ -62,6 +62,18 @@ export type CloudVoiceStatus =
   /** ใช้ไม่ได้ชั่วคราว จะลองใหม่เองเมื่อถึงเวลา */
   | { mode: "paused"; reason: CloudVoiceFailure; until: number };
 
+/**
+ * ตัดสินใจชื่อตัวตนผู้ช่วยตามสถานะเสียงของเดลลูน่า:
+ * - เสียงของเดลลูน่าเป็นหลัก ("delluna") เมื่อเสียง Cloud TTS ปกติ
+ * - สลับเป็น "javis" อัตโนมัติเมื่อเสียงของเดลลูน่าขัดข้องชั่วคราว (paused) หรือใช้ไม่ได้ (unavailable)
+ */
+export function resolveAssistantIdentity(status: CloudVoiceStatus | null): "delluna" | "javis" {
+  if (status?.mode === "paused" || status?.mode === "unavailable") {
+    return "javis";
+  }
+  return "delluna";
+}
+
 /** เวลาที่พักเสียงของ Gemini หลังล้มเหลวแต่ละแบบ (มิลลิวินาที) ระหว่างพัก Javis ใช้เสียงในอุปกรณ์ */
 const PAUSE_MS: Record<Exclude<CloudVoiceFailure, "unavailable">, number> = {
   /** โควตาหมดโดยเซิร์ฟเวอร์ไม่บอกเวลา */
@@ -168,6 +180,12 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     this.fill();
   }
 
+  private speakWithFallback(text: string): Promise<void> {
+    const gender = resolveAssistantIdentity(this.status()) === "javis" ? "male" : "female";
+    this.deps.fallback.setFallbackGender?.(gender);
+    return this.deps.fallback.speak(text);
+  }
+
   async speak(text: string): Promise<void> {
     this.deps.player.unlock?.();
     const epoch = this.epoch;
@@ -179,7 +197,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
       if (head.next >= head.texts.length) this.queue.shift();
       // ข้อความแรกของก้อนเป็นตัวเล่นเสียงทั้งก้อน ข้อความที่เหลืออยู่ในเสียงที่เล่นไปแล้ว
       if (first) head.failed = !(await this.playBatch(head, epoch));
-      if (head.failed && epoch === this.epoch) await this.deps.fallback.speak(text);
+      if (head.failed && epoch === this.epoch) await this.speakWithFallback(text);
       return;
     }
 
@@ -187,11 +205,11 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     const index = this.waiting.indexOf(text);
     if (index !== -1) this.waiting.splice(index, 1);
     if (!this.usable()) {
-      await this.deps.fallback.speak(text);
+      await this.speakWithFallback(text);
       return;
     }
     const played = await this.playBatch(this.request([text]), epoch);
-    if (!played && epoch === this.epoch) await this.deps.fallback.speak(text);
+    if (!played && epoch === this.epoch) await this.speakWithFallback(text);
   }
 
   cancel(): void {

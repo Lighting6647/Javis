@@ -29,6 +29,9 @@ import { runProjectAction } from "./projectRunner.js";
 import { findProject, listProjects } from "./projects.js";
 import { createUserRoutes } from "./userRoutes.js";
 import { getUserStore } from "./userStore.js";
+import { getNotesStore } from "./notesStore.js";
+import { getPreferencesStore } from "./preferencesStore.js";
+import { createWorkspaceRoutes } from "./workspaceRoutes.js";
 
 /** เสียงพูดหนึ่งช่วง (สูงสุดราวหนึ่งนาที) มีขนาดไม่ถึง 1 MB เผื่อไว้สำหรับรูปแบบที่บีบอัดน้อย */
 const MAX_AUDIO_UPLOAD = "8mb";
@@ -231,6 +234,20 @@ export function createApp(options: AppOptions = {}): Express {
     const result = await runProjectAction(project, parsedBody.data.action, { rootDir: listing.rootDir });
     response.status(result.ok ? 200 : 400).json(result);
   });
+
+  // Google Workspace (Gmail + Calendar + Tasks สำหรับ Lighting6647@gmail.com) & DelLuna Notes & Preferences Sync
+  const workspaceRoutes = createWorkspaceRoutes(getNotesStore, getPreferencesStore);
+  app.get("/api/workspace/status", requireAuth, workspaceRoutes.status);
+  app.get("/api/workspace/briefing", requireAuth, workspaceRoutes.briefing);
+  app.get("/api/workspace/emails", requireAuth, workspaceRoutes.listEmails);
+  app.get("/api/workspace/calendar", requireAuth, workspaceRoutes.listCalendar);
+  app.post("/api/workspace/calendar", requireAuth, workspaceRoutes.createCalendar);
+  app.get("/api/workspace/notes", requireAuth, workspaceRoutes.listNotes);
+  app.post("/api/workspace/notes", requireAuth, workspaceRoutes.createNote);
+  app.patch("/api/workspace/notes/:id", requireAuth, workspaceRoutes.updateNote);
+  app.delete("/api/workspace/notes/:id", requireAuth, workspaceRoutes.deleteNote);
+  app.get("/api/workspace/preferences", requireAuth, workspaceRoutes.getPreferences);
+  app.put("/api/workspace/preferences", requireAuth, workspaceRoutes.putPreferences);
 
   app.use("/api", apiNotFound);
 

@@ -257,9 +257,13 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
     expect(toolsOf(call).map((tool) => tool.name ?? tool.type)).toEqual([
       "google_search",
       "open_web_page",
+      "open_app",
       "read_web_page",
       "inspect_projects",
       "propose_project_action",
+      "check_important_emails",
+      "manage_calendar",
+      "manage_notes",
       "remember",
       "forget_memory"
     ]);
@@ -276,8 +280,12 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
     expect(eventOf(reply, "suggestions")).toBeUndefined();
     expect(app.apis()).toEqual(["chat"]);
     expect(chatToolNames(app.calls[0])).toEqual([
+      "check_important_emails",
       "forget_memory",
       "inspect_projects",
+      "manage_calendar",
+      "manage_notes",
+      "open_app",
       "open_web_page",
       "propose_project_action",
       "read_web_page",
@@ -458,8 +466,12 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     expect(app.apis()).toEqual(["chat", "tavily", "chat"]);
     const [request, search, answer] = app.calls;
     expect(chatToolNames(request)).toEqual([
+      "check_important_emails",
       "forget_memory",
       "inspect_projects",
+      "manage_calendar",
+      "manage_notes",
+      "open_app",
       "open_web_page",
       "propose_project_action",
       "read_web_page",
@@ -778,8 +790,12 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
     // ขั้นแรก: โมเดลสนทนาตัวเดิม ได้เครื่องมือของ Javis ครบ พร้อมเครื่องมือขอค้น
     expect(chat?.body.model).toBe("gemini-3.5-flash-lite");
     expect(chatToolNames(chat)).toEqual([
+      "check_important_emails",
       "forget_memory",
       "inspect_projects",
+      "manage_calendar",
+      "manage_notes",
+      "open_app",
       "open_web_page",
       "propose_project_action",
       "read_web_page",

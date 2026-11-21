@@ -1,9 +1,10 @@
 import { Capacitor } from "@capacitor/core";
-import { AudioLines, FolderKanban, GitBranch, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, Briefcase, FolderKanban, GitBranch, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
+import { AppLaunchCard } from "./components/AppLaunchCard";
 import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
@@ -20,11 +21,15 @@ import {
   ProjectsPanel,
   RouterPanel,
   VoiceRecorderDialog,
-  VoiceSettingsDialog
+  VoiceSettingsDialog,
+  WorkspacePanel
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
+import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
 import { PHASE_LABEL } from "./conversation/messages";
+import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
+import { useCalendarReminder } from "./hooks/useCalendarReminder";
 import { useCloudVoiceStatus } from "./hooks/useCloudVoiceStatus";
 import { useConversation } from "./hooks/useConversation";
 import { useHandsFree } from "./hooks/useHandsFree";
@@ -36,9 +41,17 @@ import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
 import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
 import { appCommands } from "./conversation/appCommands";
+import { matchAssistantVoiceCommand } from "./conversation/assistantVoiceCommands";
 import { matchVoiceSwitchCommand } from "./conversation/voiceCommands";
+import { launchAllowedApp } from "./services/appLauncher";
+import { contactsStore } from "./services/contactsStore";
+import { customAppsStore } from "./services/customAppsStore";
 import { customVoicesStore } from "./services/customVoicesStore";
+import { openExternalPage } from "./services/openPage";
+import { startWorkspacePreferencesSync } from "./services/preferencesSync";
+import { themeStore } from "./services/themeStore";
 import { voiceSettingsStore } from "./services/voiceSettingsStore";
+import { resolveAssistantIdentity } from "./speech/cloudVoice";
 import { memoryStore } from "./memory/memoryStore";
 import {
   type CapturedScreenImage,
@@ -71,15 +84,18 @@ export default function App() {
     cancelFill,
     confirmProjectAction,
     cancelProjectAction,
+    confirmAppLaunch,
+    cancelAppLaunch,
     undoMemory,
     markLinkOpened
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, lastReplyMs } = state;
+  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [routerOpen, setRouterOpen] = useState(false);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
@@ -105,7 +121,8 @@ export default function App() {
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible && !inMeeting;
   const showingProjects = ready && projectsOpen && !showingWeb && !inMeeting;
-  const showingRouter = ready && routerOpen && !showingWeb && !showingProjects && !inMeeting;
+  const showingWorkspace = ready && workspaceOpen && !showingWeb && !showingProjects && !inMeeting;
+  const showingRouter = ready && routerOpen && !showingWeb && !showingProjects && !showingWorkspace && !inMeeting;
   const pendingFill = messages.find((message) => message.id === pendingFillId)?.fill ?? null;
   const ai = useAiStatus(ready, desktop);
   // บอกสถานะจริงตอนว่างอยู่ ระหว่างฟังหรือคิดยังแสดงจังหวะการสนทนาตามปกติ
@@ -131,6 +148,47 @@ export default function App() {
           : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const cloudVoiceStatus = useCloudVoiceStatus(synthesizer);
+  const assistantIdentity = resolveAssistantIdentity(cloudVoiceStatus);
+
+  const pushDesktopNotification = useCallback((title: string, body: string) => {
+    const desktopApi = (window as unknown as { javisDesktop?: { notify?: (t: string, b: string) => Promise<unknown> } }).javisDesktop;
+    if (desktopApi?.notify) {
+      void desktopApi.notify(title, body).catch(() => undefined);
+    }
+  }, []);
+
+  useCalendarReminder({
+    enabled: ready && !inMeeting,
+    phase,
+    identity: assistantIdentity,
+    onReminder: (spokenText, eventTitle) => {
+      controller.addExchange("แจ้งเตือนนัดหมาย Google Calendar", { text: spokenText });
+      pushDesktopNotification(eventTitle ? `นัดหมาย: ${eventTitle}` : "แจ้งเตือนนัดหมาย", spokenText);
+      void synthesizer.speak(spokenText).catch(() => undefined);
+    }
+  });
+
+  useEffect(() => {
+    if (!ready) return;
+    return startWorkspacePreferencesSync();
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready || !desktop) return;
+    const bridge = (window as unknown as {
+      javisDesktop?: { onHotkeyListen?: (cb: () => void) => () => void };
+    }).javisDesktop;
+    if (!bridge?.onHotkeyListen) return;
+
+    return bridge.onHotkeyListen(() => {
+      if (inMeeting) return;
+      setProjectsOpen(false);
+      setWorkspaceOpen(false);
+      setRouterOpen(false);
+      browserStore.hide();
+      if (!active) void start();
+    });
+  }, [ready, desktop, inMeeting, active, start]);
   const lastReply = [...messages].reverse().find((message) => message.role === "assistant" && message.text)?.text;
   const searchUsage = useSearchUsage(ready, messages.length);
   const readouts = useHudTelemetry({
@@ -157,7 +215,7 @@ export default function App() {
     !inMeeting &&
     (dockShown ||
       Boolean(
-        replyStrip || pendingFill || pendingProjectAction || shownCapture || captureError || notice || meetingNotice || speechHint || heard
+        replyStrip || pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint || heard
       ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
@@ -353,6 +411,29 @@ export default function App() {
     });
   }, [ready, inMeeting, controller, synthesizer, openRecorder]);
 
+  const runMorningBriefing = useCallback(async () => {
+    setWorkspaceOpen(false);
+    setProjectsOpen(false);
+    setRouterOpen(false);
+    browserStore.hide();
+    try {
+      const briefing = await fetchMorningBriefing();
+      sendMessage(buildMorningBriefingPrompt(briefing), { speak: true });
+    } catch {
+      sendMessage("ช่วยสรุปงาน เมลสำคัญ ปฏิทิน และโน้ตเช้านี้ให้ฟังหน่อย", { speak: true });
+    }
+  }, [sendMessage]);
+
+  useEffect(() => {
+    if (!ready || inMeeting) return;
+    return appCommands.register({
+      matches: isMorningBriefingCommand,
+      run: () => {
+        void runMorningBriefing();
+      }
+    });
+  }, [ready, inMeeting, runMorningBriefing]);
+
   useEffect(() => {
     if (!ready || inMeeting) return;
     return appCommands.register({
@@ -361,15 +442,120 @@ export default function App() {
     });
   }, [ready, inMeeting, openRecorder]);
 
+  const voiceTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (voiceTimerRef.current !== null) window.clearTimeout(voiceTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || inMeeting) return;
+    return appCommands.register({
+      matches: (text) => matchAssistantVoiceCommand(text, customAppsStore.get(), new Date(), contactsStore.get()) !== null,
+      run: (text) => {
+        const command = matchAssistantVoiceCommand(text, customAppsStore.get(), new Date(), contactsStore.get());
+        if (!command) return "keep-listening";
+
+        const speakInstant = (replyText: string) => {
+          synthesizer.cancel();
+          controller.addExchange(text, { text: replyText });
+          void synthesizer.speak(replyText).catch(() => undefined);
+        };
+
+        switch (command.kind) {
+          case "time":
+          case "date":
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "timer-set": {
+            if (voiceTimerRef.current !== null) window.clearTimeout(voiceTimerRef.current);
+            voiceTimerRef.current = window.setTimeout(() => {
+              voiceTimerRef.current = null;
+              const alertText = `ครบเวลา ${command.label} ที่ตั้งไว้แล้วค่ะ`;
+              controller.addExchange(`ครบเวลา ${command.label}`, { text: alertText });
+              pushDesktopNotification("ตัวจับเวลาครบกำหนด", alertText);
+              void synthesizer.speak(alertText).catch(() => undefined);
+            }, command.durationMs);
+            speakInstant(command.reply);
+            return "keep-listening";
+          }
+
+          case "timer-cancel":
+            if (voiceTimerRef.current !== null) {
+              window.clearTimeout(voiceTimerRef.current);
+              voiceTimerRef.current = null;
+            }
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "navigate":
+            setProjectsOpen(command.target === "projects");
+            setWorkspaceOpen(command.target === "workspace");
+            setRouterOpen(false);
+            if (command.target === "settings") setSettingsOpen(true);
+            browserStore.hide();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "speech-rate": {
+            const current = voiceSettingsStore.get();
+            const nextRate =
+              command.delta === "normal"
+                ? 1
+                : command.delta === "faster"
+                  ? Math.min(1.4, Number((current.rate + 0.15).toFixed(2)))
+                  : Math.max(0.8, Number((current.rate - 0.15).toFixed(2)));
+            voiceSettingsStore.update({ rate: nextRate });
+            synthesizer.applySettings({ ...current, rate: nextRate });
+            speakInstant(command.reply);
+            return "keep-listening";
+          }
+
+          case "theme":
+            themeStore.set(command.theme);
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "clear-chat":
+            reset();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "open-url":
+            if (command.url.startsWith("tel:") || command.url.startsWith("mailto:")) {
+              window.location.href = command.url;
+            } else if (desktop && command.url.startsWith("https://")) {
+              browserStore.open(command.url);
+            } else {
+              openExternalPage(command.url);
+            }
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "launch-custom-app":
+            void launchAllowedApp(command.app.id, command.app.name).then((res) => {
+              controller.addExchange(text, { text: res.message });
+              void synthesizer.speak(res.message).catch(() => undefined);
+            });
+            return "keep-listening";
+        }
+      }
+    });
+  }, [ready, inMeeting, controller, synthesizer, desktop, reset, pushDesktopNotification]);
+
   return (
     <div className={`app${stageShown ? " has-stage" : ""}`}>
       <HudFrame />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>DL</span>
+          <span className="brand-mark" aria-hidden>{assistantIdentity === "javis" ? "JV" : "DL"}</span>
           <div className="brand-title">
-            <strong>เดลลูน่า</strong>
-            <span className="brand-sub">CENTRAL VOICE STUDIO</span>
+            <strong>{assistantIdentity === "javis" ? "จาวิส" : "เดลลูน่า"}</strong>
+            <span className="brand-sub">
+              {assistantIdentity === "javis" ? "JAVIS · เสียงสำรอง" : "CENTRAL VOICE STUDIO"}
+            </span>
           </div>
           {ready && !aiDown && (
             <span className="live-tag" aria-hidden>
@@ -384,9 +570,10 @@ export default function App() {
             <button
               type="button"
               aria-label="สนทนา"
-              aria-pressed={!showingWeb && !showingProjects && !showingRouter}
+              aria-pressed={!showingWeb && !showingProjects && !showingWorkspace && !showingRouter}
               onClick={() => {
                 setProjectsOpen(false);
+                setWorkspaceOpen(false);
                 setRouterOpen(false);
                 browserStore.hide();
               }}
@@ -395,10 +582,24 @@ export default function App() {
             </button>
             <button
               type="button"
+              aria-label="Workspace Hub"
+              aria-pressed={showingWorkspace}
+              onClick={() => {
+                setProjectsOpen(false);
+                setWorkspaceOpen(true);
+                setRouterOpen(false);
+                browserStore.hide();
+              }}
+            >
+              <Briefcase size={15} aria-hidden /> งาน
+            </button>
+            <button
+              type="button"
               aria-label="โปรเจกต์"
               aria-pressed={showingProjects}
               onClick={() => {
                 setProjectsOpen(true);
+                setWorkspaceOpen(false);
                 setRouterOpen(false);
                 browserStore.hide();
               }}
@@ -411,6 +612,7 @@ export default function App() {
               aria-pressed={showingRouter}
               onClick={() => {
                 setProjectsOpen(false);
+                setWorkspaceOpen(false);
                 setRouterOpen(true);
                 browserStore.hide();
               }}
@@ -424,6 +626,7 @@ export default function App() {
                 aria-pressed={showingWeb}
                 onClick={() => {
                   setProjectsOpen(false);
+                  setWorkspaceOpen(false);
                   setRouterOpen(false);
                   browserStore.show();
                 }}
@@ -504,7 +707,7 @@ export default function App() {
           phase={shownPhase}
           statusLabel={statusLabel}
           readouts={readouts}
-          compact={messages.length > 0 || showingWeb || showingProjects || showingRouter || inMeeting}
+          compact={messages.length > 0 || showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting}
           offline={aiDown}
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
@@ -515,7 +718,7 @@ export default function App() {
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
         )}
-        <div className="scroll-area" hidden={showingWeb || showingProjects || showingRouter || inMeeting}>
+        <div className="scroll-area" hidden={showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}
           {session.phase === "signed-out" && <AccessGate onSignIn={session.signIn} />}
@@ -587,6 +790,19 @@ export default function App() {
             />
           </LazyBoundary>
         )}
+        {showingWorkspace && (
+          <LazyBoundary
+            label="Workspace Hub"
+            retry={WorkspacePanel.preload}
+            fallback={<MainViewSkeleton label="Workspace Hub" />}
+            onDismiss={() => setWorkspaceOpen(false)}
+          >
+            <WorkspacePanel
+              onClose={() => setWorkspaceOpen(false)}
+              onRunBriefing={() => void runMorningBriefing()}
+            />
+          </LazyBoundary>
+        )}
         {showingRouter && (
           <LazyBoundary
             label="แผง JEV Router"
@@ -622,6 +838,13 @@ export default function App() {
               proposal={pendingProjectAction}
               onConfirm={confirmProjectAction}
               onCancel={cancelProjectAction}
+            />
+          )}
+          {pendingAppLaunch && (
+            <AppLaunchCard
+              proposal={pendingAppLaunch}
+              onConfirm={confirmAppLaunch}
+              onCancel={cancelAppLaunch}
             />
           )}
           {shownCapture && (

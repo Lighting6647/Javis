@@ -470,6 +470,7 @@ describe("ConversationController", () => {
       searching: false,
       pendingFillId: null,
       pendingProjectAction: null,
+      pendingAppLaunch: null,
       lastReplyMs: null
     });
   });

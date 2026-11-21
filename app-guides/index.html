@@ -1,0 +1,1313 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Light App Suite · Interactive Video Walkthrough &amp; Workflow Studio (14 Apps)</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%230ea5e9'/><polygon points='24,18 48,32 24,46' fill='white'/></svg>" />
+  <style>
+    :root {
+      --bg: #070b12;
+      --surface: #0f1623;
+      --surface-2: #162032;
+      --border: rgba(148, 163, 184, 0.16);
+      --border-strong: rgba(34, 211, 238, 0.42);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Noto Sans Thai", "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    button, input { font: inherit; color: inherit; }
+    .app-shell {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    /* Sidebar Playlist */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+    }
+    .brand {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+    }
+    .brand h1 { font-size: 17px; font-weight: 700; color: var(--text); }
+    .brand p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .sidebar-controls {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .search-input {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+    .search-input:focus-visible { outline: none; border-color: var(--cyan); }
+    .cat-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .cat-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .cat-pill:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.4); }
+    .cat-pill.active {
+      background: rgba(34, 211, 238, 0.14);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .playlist {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .playlist-item {
+      text-align: left;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .playlist-item:hover { background: rgba(148, 163, 184, 0.08); }
+    .playlist-item.active {
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+    }
+    .playlist-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .playlist-num {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .playlist-port {
+      font-size: 10.5px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--emerald);
+      font-weight: 600;
+    }
+    .playlist-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+    .playlist-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Main Workspace */
+    .main {
+      padding: 20px 26px 40px;
+      max-width: 1160px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .top-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .app-meta-kicker {
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--cyan);
+    }
+    .top-header h2 { font-size: 24px; font-weight: 800; margin-top: 2px; }
+    .top-header p { font-size: 13.5px; color: var(--muted); margin-top: 4px; max-width: 720px; }
+
+    .mode-switch {
+      display: inline-flex;
+      padding: 4px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      gap: 4px;
+    }
+    .mode-btn {
+      padding: 7px 14px;
+      border-radius: 9px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.active {
+      background: rgba(34, 211, 238, 0.16);
+      color: var(--cyan);
+    }
+
+    /* Cinema Video Stage */
+    .cinema-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    }
+    .stage-viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #03060c;
+      overflow: hidden;
+    }
+    .stage-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 2.8s ease, opacity 0.35s ease;
+    }
+    .stage-img.playing { transform: scale(1.025); }
+    .stage-video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+    .stage-top-overlay {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      gap: 8px;
+    }
+    .scene-pill {
+      background: rgba(7, 11, 18, 0.84);
+      border: 1px solid rgba(34, 211, 238, 0.45);
+      backdrop-filter: blur(8px);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+    .voice-pill {
+      background: rgba(7, 11, 18, 0.84);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      color: var(--emerald);
+      font-weight: 600;
+    }
+    .caption-overlay {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      background: rgba(7, 11, 18, 0.9);
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .caption-title { font-size: 15px; font-weight: 700; color: var(--cyan); }
+    .caption-text { font-size: 13.5px; color: var(--text); }
+
+    /* Player Controls */
+    .player-controls {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: rgba(15, 22, 35, 0.96);
+    }
+    .timeline-track {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .chapter-btn {
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    .chapter-btn:hover { border-color: rgba(148, 163, 184, 0.45); color: var(--text); }
+    .chapter-btn.active {
+      border-color: var(--cyan);
+      color: var(--text);
+      background: rgba(34, 211, 238, 0.12);
+    }
+    .chapter-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 2.5px;
+      background: var(--cyan);
+      transition: width 0.1s linear;
+    }
+
+    .transport-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .transport-left, .transport-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 7px 13px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--cyan); }
+    .btn-primary {
+      background: var(--cyan);
+      color: #03111a;
+      border-color: var(--cyan);
+      font-weight: 700;
+    }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn.on {
+      border-color: var(--emerald);
+      color: var(--emerald);
+      background: rgba(52, 211, 153, 0.12);
+    }
+
+    /* Command & Guide Sections */
+    .cmd-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .cmd-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .cmd-info span { font-size: 11.5px; color: var(--muted); }
+    .cmd-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px;
+      color: var(--emerald);
+      word-break: break-all;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel h3 {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel h3 span { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .step-card {
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(7, 11, 18, 0.55);
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .step-card:hover { border-color: rgba(34, 211, 238, 0.45); }
+    .step-card.active {
+      border-color: var(--cyan);
+      background: rgba(34, 211, 238, 0.08);
+    }
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: rgba(34, 211, 238, 0.14);
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-body strong { display: block; font-size: 13px; color: var(--text); }
+    .step-body p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+    .arch-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .arch-box {
+      padding: 11px 13px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(7, 11, 18, 0.55);
+    }
+    .arch-tag {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--emerald);
+      margin-bottom: 4px;
+      display: block;
+    }
+    .arch-box.logic .arch-tag { color: var(--cyan); }
+    .arch-box.storage .arch-tag { color: var(--amber); }
+    .arch-box p { font-size: 12.5px; color: var(--text); }
+    .views-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .view-chip {
+      font-size: 11.5px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    @media (max-width: 980px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { height: auto; position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
+      .playlist { max-height: 260px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .main { padding: 16px 14px 32px; }
+    }
+    @media (max-width: 640px) {
+      .timeline-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .caption-overlay { position: static; border-radius: 0; border-left: none; border-right: none; border-bottom: none; }
+      .stage-top-overlay { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="รายชื่อ App ทั้งหมด">
+      <div class="brand">
+        <div class="brand-top">
+          <span class="brand-badge"><i class="brand-dot"></i> Light App Suite</span>
+          <span style="font-size:11px;color:var(--muted);" id="appCountLabel">14 Apps</span>
+        </div>
+        <h1>วิดีโอแนะนำการใช้งานระบบ</h1>
+        <p>คู่มือโต้ตอบ + คลิปหน้าจอจริง (.webm) + โครงสร้างการทำงาน</p>
+      </div>
+      <div class="sidebar-controls">
+        <input id="searchBox" class="search-input" type="search" placeholder="ค้นหาชื่อ App หรือหน้าที่..." aria-label="ค้นหา App" />
+        <div class="cat-pills" id="catPills"></div>
+      </div>
+      <div class="playlist" id="playlist" role="list"></div>
+    </aside>
+
+    <main class="main">
+      <header class="top-header">
+        <div>
+          <span class="app-meta-kicker" id="appCategory">—</span>
+          <h2 id="appTitle">—</h2>
+          <p id="appDesc">—</p>
+        </div>
+        <div class="mode-switch" role="group" aria-label="โหมดการเล่น">
+          <button type="button" class="mode-btn active" id="modeInteractiveBtn">▶ Interactive Walkthrough</button>
+          <button type="button" class="mode-btn" id="modeWebmBtn">🎬 คลิปหน้าจอจริง (.webm)</button>
+        </div>
+      </header>
+
+      <section class="cinema-card" aria-label="Video Walkthrough Player">
+        <div class="stage-viewport" id="interactiveStage">
+          <img id="sceneImg" class="stage-img" alt="ภาพหน้าจอขั้นตอนการใช้งาน" />
+          <div class="stage-top-overlay">
+            <span class="scene-pill" id="sceneBadge">SCENE 1 / 4</span>
+            <span class="voice-pill" id="voiceStatusPill">🔇 ปิดเสียงพากย์ (กดเปิดได้ด้านล่าง)</span>
+          </div>
+          <div class="caption-overlay">
+            <div class="caption-title" id="sceneTitle">—</div>
+            <div class="caption-text" id="sceneText">—</div>
+          </div>
+        </div>
+
+        <div class="stage-viewport" id="webmStage" hidden>
+          <video id="webmPlayer" class="stage-video" controls playsinline preload="metadata"></video>
+        </div>
+
+        <div class="player-controls">
+          <div class="timeline-track" id="timelineTrack"></div>
+          <div class="transport-row">
+            <div class="transport-left">
+              <button type="button" class="btn btn-primary" id="playPauseBtn">▶ เล่นอัตโนมัติ</button>
+              <button type="button" class="btn" id="prevSceneBtn">⏮ ก่อนหน้า</button>
+              <button type="button" class="btn" id="nextSceneBtn">⏭ ถัดไป</button>
+              <button type="button" class="btn" id="ttsToggleBtn">🔊 พากย์เสียงไทย</button>
+            </div>
+            <div class="transport-right">
+              <button type="button" class="btn" id="speedBtn">ความเร็ว 1x</button>
+              <a class="btn" id="downloadWebmBtn" download>⬇ ดาวน์โหลด .webm</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cmd-bar" aria-label="คำสั่งเปิดใช้งานระบบ">
+        <div class="cmd-info">
+          <span>วิธีเปิดใช้งานจริงในเครื่อง (<strong id="appPath">—</strong>)</span>
+          <code class="cmd-code" id="appCmd">—</code>
+        </div>
+        <button type="button" class="btn" id="copyCmdBtn">📋 คัดลอกคำสั่ง</button>
+      </section>
+
+      <section class="grid-2">
+        <div class="panel">
+          <h3>ขั้นตอนการใช้งานจริง (5 Steps) <span>คลิกเพื่อข้ามฉาก</span></h3>
+          <div class="steps-list" id="stepsList"></div>
+        </div>
+
+        <div class="panel">
+          <h3>ขั้นตอนการทำงานเบื้องหลัง (End-to-End Architecture)</h3>
+          <div class="arch-flow">
+            <div class="arch-box">
+              <span class="arch-tag">1. Input (ข้อมูลเข้า)</span>
+              <p id="archInput">—</p>
+            </div>
+            <div class="arch-box logic">
+              <span class="arch-tag">2. Logic &amp; Processing (การประมวลผล)</span>
+              <p id="archLogic">—</p>
+            </div>
+            <div class="arch-box storage">
+              <span class="arch-tag">3. Storage &amp; API (ที่เก็บข้อมูลและเชื่อมต่อ)</span>
+              <p id="archStorage">—</p>
+            </div>
+          </div>
+          <div>
+            <span style="font-size:11.5px;color:var(--muted);font-weight:700;">หน้าจอ / เมนูหลักในระบบ:</span>
+            <div class="views-chips" id="viewsChips"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const APPS = [
+      {
+        id: "tracking-light",
+        name: "Tracking Light (LightBeam OS)",
+        cat: "งาน & IT",
+        port: "Port 5173",
+        path: "d:\\AI\\Light\\Tracking Light",
+        cmd: "cd \"d:\\AI\\Light\\Tracking Light\" && npm run dev",
+        desc: "ระบบบริหารงานและติดตามโปรเจกต์สไตล์ monday.com รองรับ 5 มุมมองบอร์ด, Connect Boards & Mirror, Automation Engine, Activity Log และ My Work แยกตามกำหนดส่ง",
+        views: ["Home (Main table)", "Kanban", "Timeline", "Form", "Presentation", "My work", "AI Notetaker", "Automate"],
+        scenes: [
+          { title: "ฉาก 1: กระดานงานหลัก & สรุปผลท้ายกลุ่ม", text: "เปิด Main table เพื่อดูรายการงานแยกตาม Sprint/กลุ่ม พร้อมแถบ % Done และผลรวมท้ายกลุ่มอัตโนมัติ", img: "frames/tracking-light-1.png", nar: "เริ่มที่หน้าแรกของ Tracking Light ครับ แสดงกระดานงานหลักแบบตาราง แบ่งกลุ่มชัดเจน พร้อมแถบสรุปเปอร์เซ็นต์งานเสร็จและยอดรวมท้ายกลุ่ม" },
+          { title: "ฉาก 2: เพิ่มงานใหม่ + Automation ทำงานทันที", text: "กดปุ่ม New Item ระบบรันกฎอัตโนมัติกำหนดแผนกเริ่มต้นและบันทึกประวัติให้ทันที", img: "frames/tracking-light-2.png", nar: "เมื่อกดเพิ่มรายการงานใหม่ ระบบ Automation จะทำงานทันที ทั้งกำหนดแผนกเริ่มต้น และย้ายงานเข้ากลุ่ม Completed Tasks เมื่อสถานะเป็น Done" },
+          { title: "ฉาก 3: Task Drawer & Activity Log", text: "คลิกเปิดงานเพื่อแชตอัปเดต เขียนรายละเอียด และดูประวัติการแก้ไขทุกอย่างใน Activity Log", img: "frames/tracking-light-3.png", nar: "เมื่อคลิกที่งาน จะเปิดแถบด้านข้างสำหรับอัปเดตข้อความ แนบคำอธิบาย และดู Activity Log ที่บันทึกทุกการเปลี่ยนแปลงไว้ครบถ้วน" },
+          { title: "ฉาก 4: My Work จัดกลุ่มตามกำหนดส่ง", text: "สลับไปหน้า My work เพื่อรวมงานจากทุกบอร์ด แยกตาม เลยกำหนด / วันนี้ / สัปดาห์นี้ / เสร็จแล้ว", img: "frames/tracking-light-4.png", nar: "และในหน้า My work ระบบจะรวมงานจากทุกกระดานมาจัดกลุ่มตามกำหนดส่ง ช่วยให้ทีมเห็นงานเร่งด่วนได้ทันทีครับ" }
+        ],
+        steps: [
+          "เลือกบอร์ดใน Main workspace หรือกด + สร้าง Board / Document / Dashboard / Folder ใหม่",
+          "กด New Item เพื่อเพิ่มงาน แก้ไข Owner, Status, Due Date และเชื่อมบอร์ดข้ามกันผ่านคอลัมน์ Connect Boards & Mirror",
+          "คลิกเปิด TaskDrawer เพื่อแชตอัปเดตงาน เขียนคำอธิบาย และตรวจประวัติในแท็บ Activity Log",
+          "เปิด Automate เพื่อตั้งกฎอัตโนมัติ (เช่น Status เป็น Done ให้ย้ายกลุ่มและส่งแจ้งเตือน) พร้อมใช้งานจริงทันที",
+          "เปิด My work เพื่อดูงานรวมทุกบอร์ดตามกำหนดส่ง หรือใช้ AI Notetaker แปลงบันทึกประชุมเป็นรายการงาน"
+        ],
+        arch: {
+          input: "การแก้ไขแถวงาน, ฟอร์ม FormView, นำเข้า CSV, บันทึกประชุมใน AI Notetaker และคำสั่งจาก Toolbar",
+          logic: "React State (App.jsx) + automationEngine.js รันกฎ status_is / item_created, บันทึก activityLog, จัดกลุ่มเวลา My Work และเปิด Wake Lock กันหน้าจอดับ",
+          storage: "บันทึกลงเบราว์เซอร์ (localStorage: monday_boards_v7, lightbeam_automations_v1, lightbeam_notifications_v1) พร้อม Export CSV/PDF"
+        }
+      },
+      {
+        id: "tamsang",
+        name: "Tamsang POS (ตามสั่ง)",
+        cat: "ขาย & บัญชี",
+        port: "Port 5173",
+        path: "d:\\AI\\Light\\Tamsang",
+        cmd: "cd \"d:\\AI\\Light\\Tamsang\" && npm run dev",
+        desc: "ระบบ POS ร้านอาหารตามสั่งครบวงจร สั่งอาหารผ่าน QR ประจำโต๊ะ, จอคิวครัว KDS รวบยอดผัดกระทะเดียวกัน และเช็คบิลรวม/หารรายคนด้วย QR PromptPay",
+        views: ["หน้าร้าน (POS)", "QR ประจำโต๊ะ", "จอคิวครัว (KDS)", "คิดเงิน / เช็คบิล & QR", "ตั้งค่าร้าน"],
+        scenes: [
+          { title: "ฉาก 1: เลือกช่องทาง & โต๊ะอาหาร", text: "เลือก ทานที่ร้าน (โต๊ะ 1..N), สั่งกลับบ้าน หรือ เดลิเวอรี หรือให้ลูกค้าสแกน QR ประจำโต๊ะสั่งเอง", img: "frames/tamsang-1.png", nar: "เริ่มที่หน้า POS ครับ พนักงานเลือกประเภทออเดอร์และเลขโต๊ะ หรือสร้าง QR ประจำโต๊ะให้ลูกค้าสแกนสั่งจากมือถือได้เลย" },
+          { title: "ฉาก 2: ปรับแต่งเมนู & ส่งเข้าครัว", text: "เลือกเนื้อสัตว์ ระดับความเผ็ด พิเศษ/ธรรมดา ท็อปปิ้งไข่ แล้วกดส่งออเดอร์เข้าครัวทันที", img: "frames/tamsang-2.png", nar: "กดเลือกเมนูเพื่อระบุเนื้อสัตว์ ความเผ็ด และไข่ดาวหรือไข่เจียว จากนั้นกดส่งออเดอร์เข้าครัวทันที" },
+          { title: "ฉาก 3: จอคิวครัว (KDS) รวบยอดผัด", text: "แม่ครัวดูสรุปรวมเมนูผัดชนิดเดียวกันและจำนวนไข่ พร้อมกดไล่สถานะ รอคิว -> กำลังผัด -> พร้อมเสิร์ฟ", img: "frames/tamsang-3.png", nar: "ฝั่งจอคิวครัว KDS จะช่วยรวบเมนูที่ผัดพร้อมกันได้และนับจำนวนไข่ให้หน้าเตา พร้อมปุ่มเปลี่ยนสถานะจนเสิร์ฟถึงโต๊ะ" },
+          { title: "ฉาก 4: เช็คบิลรวม / หารค่าข้าวรายคน", text: "คำนวณเงินทอน หรือสลับโหมดหารค่าข้าวรายคน พร้อมสร้าง QR PromptPay ประจำยอดจริง", img: "frames/tamsang-4.png", nar: "ตอนคิดเงินสามารถเลือกเช็คบิลรวมทั้งโต๊ะ หรือแยกหารค่าข้าวรายคน พร้อมสร้าง QR PromptPay อัตโนมัติครับ" }
+        ],
+        steps: [
+          "ในหน้า POS เลือก ทานที่ร้าน + เลขโต๊ะ (หรือ สั่งกลับบ้าน / เดลิเวอรี) หรือเปิด QR ประจำโต๊ะ",
+          "แตะเมนูยอดฮิตหรือเลือกจากหมวดหมู่ เพื่อระบุเนื้อสัตว์ ความเผ็ด ท็อปปิ้ง และจำนวนในหน้าต่างปรับแต่ง",
+          "ใส่หมายเหตุเพิ่มเติมแล้วกด ส่งออเดอร์เข้าครัวทันที ระบบสร้างคิว Q-101+ ให้อัตโนมัติ",
+          "ที่แท็บ จอคิวครัว (KDS) กด เริ่มผัดหน้าเตา -> ผัดเสร็จ · พร้อมเสิร์ฟ -> ยืนยันเสิร์ฟถึงโต๊ะแล้ว",
+          "ที่แท็บ คิดเงิน / เช็คบิล & QR ปรับส่วนลด/ค่ากล่อง แล้วรับชำระด้วย QR PromptPay หรือเงินสดพร้อมคำนวณทอน"
+        ],
+        arch: {
+          input: "พารามิเตอร์ ?table=N จาก QR, รายการปรับแต่งจาน, การกดอัปเดตคิว KDS และการรับชำระเงิน",
+          logic: "pricing.ts คำนวณราคาและชื่อเมนู, aggregator.ts รวมยอดหน้าเตา, billSplitter.ts หารยอดรายคน, promptpay.ts สร้าง EMVCo QR",
+          storage: "Client-side SPA เก็บออเดอร์และการตั้งค่าร้านลง localStorage (tamsang_pos_restaurant_v2)"
+        }
+      },
+      {
+        id: "pass-app-light",
+        name: "Pass App Light (Passly Vault)",
+        cat: "งาน & IT",
+        port: "Port 3030",
+        path: "d:\\AI\\Light\\Pass App Light",
+        cmd: "cd \"d:\\AI\\Light\\Pass App Light\" && npm start",
+        desc: "ระบบจัดการรหัสผ่านองค์กรเข้ารหัส AES-GCM-256 พร้อมศูนย์รับคำขอรหัสผ่านจาก Lark / Telegram / LINE และส่งลิงก์แชร์แบบหมดอายุแยก PIN",
+        views: ["Lock / Demo Mode", "Vault", "คำขอ Password", "ตัวสร้างรหัส", "รายงานความเสี่ยง", "Collections", "Activity Log"],
+        scenes: [
+          { title: "ฉาก 1: หน้าล็อกอิน PIN & Demo Mode", text: "เข้าสู่ระบบด้วยรหัส PIN ของผู้ดูแล หรือกดเข้าชมโหมดตัวอย่างเพื่อทดลองใช้งาน", img: "frames/pass-app-light-1.png", nar: "เริ่มต้นที่หน้าจอความปลอดภัย Passly Vault สามารถใส่ PIN เข้าสู่ระบบ หรือเลือกโหมดตัวอย่างได้ครับ" },
+          { title: "ฉาก 2: คลังรหัสผ่านเข้ารหัส AES-GCM-256", text: "ค้นหาและจัดระเบียบ Logins, Cards, Secure Notes พร้อมนำเข้าไฟล์ Excel/CSV", img: "frames/pass-app-light-2.png", nar: "ภายใน Vault เก็บข้อมูลรหัสผ่านทั้งหมดแบบเข้ารหัสบนฝั่งผู้ใช้ รองรับการจัดหมวดหมู่และนำเข้าจาก Excel" },
+          { title: "ฉาก 3: ศูนย์รับคำขอจาก Lark / Telegram / LINE", text: "รับคำขอรหัสผ่านจากพนักงาน กดอนุมัติเพื่อส่งลิงก์หมดอายุและ PIN แยกคนละข้อความ", img: "frames/pass-app-light-3.png", nar: "เมื่อพนักงานขอรหัสผ่านผ่านแชท ระบบจะส่งเข้าคิวอนุมัติ และแจกลิงก์ชั่วคราวแบบแยก PIN ปลอดภัย 2 ชั้น" },
+          { title: "ฉาก 4: ตัวสร้างรหัสผ่าน & รายงานความเสี่ยง", text: "สร้างรหัสผ่านที่คาดเดายาก และสแกนหารหัสผ่านที่ซ้ำหรืออ่อนแอในองค์กร", img: "frames/pass-app-light-4.png", nar: "มีเครื่องมือสุ่มรหัสผ่านและรายงานวิเคราะห์ความเสี่ยงเพื่อไล่เปลี่ยนรหัสที่ซ้ำกันในทีมครับ" }
+        ],
+        steps: [
+          "เปิดพอร์ต 3030 แล้วล็อกอินด้วย PIN/รหัสผ่าน หรือกด เข้าชมโหมดตัวอย่าง (Demo Mode)",
+          "เพิ่มรายการใน Vault (+ รายการใหม่ หรือ นำเข้า Excel) แล้วจัดเข้า Collections ตามแผนก",
+          "ตรวจสอบคำขอรหัสผ่านที่พนักงานส่งเข้ามาจาก Lark / Telegram / LINE ในแท็บ คำขอ Password",
+          "กดอนุมัติคำขอ เลือกรายการใน Vault และกำหนดเวลาหมดอายุ (1–24 ชม.) เพื่อส่งลิงก์ /share.html",
+          "ผู้รับเปิดลิงก์ กรอก Share PIN เพื่อคัดลอก Username/Password และตรวจสอบรหัสเสี่ยงใน รายงานความเสี่ยง"
+        ],
+        arch: {
+          input: "PIN ล็อกอิน, ข้อมูล Vault, ไฟล์ Excel/CSV/JSON และ Webhook จาก /api/lark, /api/telegram, /api/line",
+          logic: "server.cjs ตรวจ scrypt PIN + cookie เซสชัน และส่งข้อความแยก 2 รอบ; ฝั่งเบราว์เซอร์เข้ารหัส PBKDF2 + AES-GCM-256 ใน vault-crypto.js",
+          storage: "PostgreSQL (passly_encrypted_vault, passly_line_requests) เมื่อมี DATABASE_URL หรือ fallback ลงไฟล์ JSON (data/vault.json) และ localStorage"
+        }
+      },
+      {
+        id: "ios-asset-light",
+        name: "IOS,Asset Light (iAsset Store)",
+        cat: "งาน & IT",
+        port: "Port 3000",
+        path: "d:\\AI\\Light\\IOS,Asset Light",
+        cmd: "cd \"d:\\AI\\Light\\IOS,Asset Light\" && npm start",
+        desc: "ระบบบริหารสโตร์ คลังพัสดุ เครื่องมือช่าง (เบิก-ยืม-คืน-Cycle Count-สแกน QR) และติดตามสถานะอุปกรณ์ iOS รอบ 15 วันพร้อมพิกัด GPS และแจ้งเตือน Lark",
+        views: ["แดชบอร์ดสโตร์", "ทะเบียนพัสดุ", "ครุภัณฑ์ & แผนที่ GPS", "สแกน QR (/scanner.html)", "แจ้งเตือน Lark (/lark-reminders.html)"],
+        scenes: [
+          { title: "ฉาก 1: แดชบอร์ดสโตร์ & ผังชั้นวาง", text: "ดูยอดพัสดุพร้อมใช้ กำลังถูกยืม มูลค่ารวม และทางลัดเข้าโมดูลทั้ง 10 ส่วน", img: "frames/ios-asset-light-1.png", nar: "หน้าแดชบอร์ดสโตร์แสดงจำนวนพัสดุคงคลัง ยอดเบิกยืม มูลค่ารวม และปุ่มเข้าถึงโมดูลเบิกคืนด่วนครับ" },
+          { title: "ฉาก 2: เบิกยืม-รับคืนผ่าน QR Code", text: "สแกน QR พัสดุหรือเปิด /scanner.html เพื่อระบุผู้เบิก-กำหนดคืนและจ่ายของออกจากชั้นวาง", img: "frames/ios-asset-light-2.png", nar: "สามารถสแกน QR เพื่อเบิกยืมหรือรับคืนพัสดุได้ทันที พร้อมอัปเดตสถานะในคลังแบบเรียลไทม์" },
+          { title: "ฉาก 3: ติดตามอุปกรณ์ iOS & แผนที่พิกัด", text: "ตรวจสอบอุปกรณ์ iOS ที่ถึงรอบรายงานตัว 15 วัน พร้อมดูพิกัดล่าสุดบนแผนที่", img: "frames/ios-asset-light-3.png", nar: "สำหรับอุปกรณ์ iOS ระบบจะติดตามการยืนยันตัวตนทุก 15 วัน และแสดงพิกัดล่าสุดบนแผนที่ครับ" },
+          { title: "ฉาก 4: Audit Log & แจ้งเตือน Lark Bot", text: "ตรวจประวัติเบิก-คืน และส่งข้อความเตือนรายการค้างส่งผ่าน Lark Reminders", img: "frames/ios-asset-light-4.png", nar: "ทุกการเบิกจ่ายถูกบันทึกลงประวัติ และสามารถส่งแจ้งเตือนทวงคืนอุปกรณ์ผ่าน Lark Bot ได้อัตโนมัติครับ" }
+        ],
+        steps: [
+          "เปิดหน้าแดชบอร์ดสโตร์ ดูยอดพัสดุ Available / Borrowed และรายการค้างส่ง",
+          "ไปที่ ทะเบียนพัสดุและเครื่องมือช่าง เพื่อเพิ่มพัสดุใหม่ (S/N, ชั้นวาง, รูปภาพ) หรือเพิ่มอุปกรณ์ iOS",
+          "กด เบิกยืมด่วน / รับคืนด่วน หรือสแกน QR ไปที่ /scanner.html?id=... เพื่อจ่ายของและรับคืน",
+          "ใช้โหมด Cycle Count ยิง QR ตรวจนับสต็อกต่อเนื่องแล้วบันทึกผลเข้าระบบ",
+          "ตรวจสอบการแจ้งเตือนใน /lark-reminders.html เพื่อส่งรายงานทวงคืนเข้า Lark หรือ Export Excel"
+        ],
+        arch: {
+          input: "ฟอร์มลงทะเบียน/เบิกคืนพัสดุ, QR Scan (/scanner.html), พิกัด Check-in อุปกรณ์ iOS และรหัส ACTION_PASSWORD",
+          logic: "server.js คำนวณสถานะ 15-Day Check (active/pending/overdue), แปลงพิกัดผ่าน Nominatim และรัน pollLark() ทุก 60 วินาที",
+          storage: "Cache ใน dbInMemory พร้อมบันทึกลง data/db.json หรือ Cloud JSONBin.io เมื่อกำหนดคีย์"
+        }
+      },
+      {
+        id: "remote-light",
+        name: "Remote Light (Remote Support)",
+        cat: "งาน & IT",
+        port: "Server 8080 + Desktop",
+        path: "d:\\AI\\Light\\Remote Light",
+        cmd: "cd \"d:\\AI\\Light\\Remote Light\" && npm run dev:server",
+        desc: "ระบบ Remote Support ข้ามเครือข่ายแบบ Consent-first ผ่าน WebRTC + TURN Relay แชร์หน้าจอ ควบคุมเมาส์/คีย์บอร์ด ซิงก์คลิปบอร์ด และส่งไฟล์ 25MB",
+        views: ["Signaling Server (:8080)", "Desktop Agent (เครื่องผู้ใช้)", "IT Controller Console", "Address Book & TURN"],
+        scenes: [
+          { title: "ฉาก 1: Desktop Agent (ฝั่งผู้รับความช่วยเหลือ)", text: "เลือกหน้าจอที่จะแชร์ ติ๊กยินยอมสิทธิ์ แล้วคัดลอกรหัส 9 หลัก + รหัสผ่าน 6 หลักส่งให้ IT", img: "frames/remote-light-1.png", nar: "ฝั่งผู้ใช้งานเปิดโปรแกรม Desktop Agent เลือกหน้าจอที่ต้องการแชร์ ยืนยันความยินยอม แล้วส่งรหัส 9 หลักให้ทีม IT ครับ" },
+          { title: "ฉาก 2: กำหนดสิทธิ์แบบละเอียด (Consent-first)", text: "เลือกว่าจะอนุญาตควบคุมเมาส์คีย์บอร์ด ซิงก์คลิปบอร์ด หรือรับไฟล์ (ถาม Save As ทุกครั้ง)", img: "frames/remote-light-2.png", nar: "ผู้ใช้สามารถคุมสิทธิ์ได้ละเอียด ทั้งอนุญาตควบคุม ซิงก์คลิปบอร์ด หรือรับส่งไฟล์ โดยกดปุ่มฉุกเฉินตัดสายได้ตลอดเวลา" },
+          { title: "ฉาก 3: IT Controller Console", text: "เจ้าหน้าที่ IT กรอกรหัสเครื่องหรือเลือกจาก Address Book แล้วกดเชื่อมต่อผ่าน WebRTC", img: "frames/remote-light-3.png", nar: "ฝั่งเจ้าหน้าที่ IT กรอกรหัสและรหัสผ่านใน Controller Console เพื่อเชื่อมต่อหน้าจอแบบเรียลไทม์ครับ" },
+          { title: "ฉาก 4: ควบคุมระยะไกล & ส่งไฟล์ 25 MB", text: "ควบคุมหน้าจอ ใช้ปุ่มลัด Win+R/Win+D ลากวางไฟล์ 25MB และบันทึก Log การทำงาน", img: "frames/remote-light-4.png", nar: "เมื่อเชื่อมต่อแล้ว สามารถใช้ปุ่มลัด Windows ส่งไฟล์ขนาดไม่เกิน 25 เมกะไบต์ และดู Log การช่วยเหลือได้ครบครับ" }
+        ],
+        steps: [
+          "สตาร์ต Signaling Server (npm run dev:server พอร์ต 8080) จากนั้นเปิด Desktop Agent และ Controller",
+          "ฝั่งผู้ใช้ (Agent) เลือกหน้าจอ ติ๊กยินยอมสิทธิ์ แล้วกด คัดลอกรหัส 9 หลัก + รหัสผ่าน 6 หลักส่งให้ IT",
+          "ฝั่ง Agent กด เริ่มแชร์หน้าจอ เพื่อลงทะเบียน Session กับ Signaling Server",
+          "ฝั่ง IT (Controller) กรอกรหัสหรือเลือกจาก Address Book แล้วกด เชื่อมต่อ",
+          "ควบคุมหน้าจอ ส่งคีย์ลัด Win+... หรือลากไฟล์วางส่ง (สูงสุด 25 MB) และกด Ctrl+Alt+Shift+Esc เมื่อต้องการตัดสายทันที"
+        ],
+        arch: {
+          input: "รหัส sessionId 9 หลัก, joinToken 6 หลัก, สิทธิ์ยินยอม, สัญญาณภาพ/เมาส์/คีย์บอร์ด และไฟล์ DataChannel",
+          logic: "Signaling Server (WebSocket /signal) ตรวจสอบ timingSafeEqual + ขอ Cloudflare TURN ICE แล้วจับคู่ WebRTC P2P; Agent สั่งเมาส์คีย์บอร์ดผ่าน robotjs/Broker",
+          storage: "Session เก็บใน memory, Address Book เก็บใน localStorage, ประวัติ Admin Mode ลง audit/admin-mode.jsonl"
+        }
+      },
+      {
+        id: "dashboard-light",
+        name: "แดชบอร์ด Light (IT Monthly Dashboard)",
+        cat: "งาน & IT",
+        port: "Port 5173 / API 5000",
+        path: "d:\\AI\\Light\\แดชบอร์ด Light",
+        cmd: "cd \"d:\\AI\\Light\\แดชบอร์ด Light\" && npm start",
+        desc: "แดชบอร์ดบริหารงาน IT รายเดือน ครบทั้งคลัง Asset, Ticket, เบิก-คืนอุปกรณ์, Software License, นำเข้า/ส่งออก Excel และพิมพ์รายงาน PDF/QR Code",
+        views: ["Dashboard (/)", "แจ้ง Ticket (/form)", "รายงานลูกค้า (/clinic)", "เบิก-คืน & อนุมัติ", "Excel & PDF/QR"],
+        scenes: [
+          { title: "ฉาก 1: ล็อกอิน & โหมด Demo", text: "เข้าสู่ระบบด้วยสิทธิ์ admin/staff/viewer หรือกดเข้าชมระบบเวอร์ชัน Demo", img: "frames/dashboard-light-1.png", nar: "เริ่มที่หน้าล็อกอิน IT Monthly Dashboard สามารถเข้าด้วยบัญชีทีม IT หรือกดดูโหมด Demo ได้ทันทีครับ" },
+          { title: "ฉาก 2: KPI ทรัพย์สิน, Ticket/SLA & License", text: "เลือกเดือนที่ต้องการเพื่อดูสถิติทรัพย์สิน งานซ่อมบำรุง ลิขสิทธิ์ และความปลอดภัย", img: "frames/dashboard-light-2.png", nar: "หลังเข้าสู่ระบบ เลือกเดือนรายงานเพื่อดู KPI ทรัพย์สิน อัตราปิด Ticket และสถานะแจ้งเตือนลิขสิทธิ์ซอฟต์แวร์" },
+          { title: "ฉาก 3: เบิก-คืน & นำเข้า/ส่งออก Excel (.xlsx)", text: "อนุมัติจ่ายเครื่องตาม S/N ตรวจ Checklist พนักงานเข้า-ออก และอัปเดตฐานข้อมูลผ่าน Excel", img: "frames/dashboard-light-3.png", nar: "ทีม IT สามารถอนุมัติเบิกเครื่องตาม Serial Number ปิดงาน Ticket และนำเข้าหรือส่งออกฐานข้อมูล Excel ได้ทันที" },
+          { title: "ฉาก 4: รายงาน PDF & QR Code ติดเครื่อง A4", text: "สร้าง Executive Report PDF หรือพิมพ์สติกเกอร์ QR Code ติดครุภัณฑ์ขนาด A4", img: "frames/dashboard-light-4.png", nar: "และสั่งพิมพ์สรุปรายงานผู้บริหาร หรือพิมพ์ป้าย QR Code สำหรับติดเครื่องครุภัณฑ์เป็นแผ่น A4 ได้เลยครับ" }
+        ],
+        steps: [
+          "เปิดหน้าเว็บและเข้าสู่ระบบ (หรือกดเข้าชมเวอร์ชัน Demo)",
+          "เลือกเดือนที่ต้องการรายงานจาก Sidebar เพื่อดูตัวเลข KPI, Asset, Support และ Software License",
+          "พนักงานแจ้งซ่อมผ่าน /form หรือกด ขอเบิกอุปกรณ์ / คืนอุปกรณ์ จาก Sidebar",
+          "ทีม IT เปิด IT อนุมัติการใช้งาน เพื่อจ่ายเครื่อง, ปิดงานใน IT Close หรือนำเข้าไฟล์ .xlsx",
+          "กด สรุปรายงาน PDF หรือ พิมพ์ QR Code ติดเครื่อง (A4 Tags) หรือเปิดดูรายงานลูกค้าที่ /clinic"
+        ],
+        arch: {
+          input: "ฟอร์ม React (/form, Modals เบิก-คืน), ไฟล์ Excel (.xlsx ผ่าน XLSX) ส่งเข้า API พร้อม Bearer Token",
+          logic: "Express (server/index.js) ตรวจสิทธิ์ Role (admin/staff/viewer), คำนวณยอดสรุปเดือน, ซิงค์ Device Monitor และส่งเตือน License ผ่าน Lark/LINE",
+          storage: "PostgreSQL (auth_users, monthly_data, assets, tickets, asset_requests) พร้อมโหมด Fallback ลง seed-data.json"
+        }
+      },
+      {
+        id: "accounting-light",
+        name: "บัญชี Light (Thai Accounting ERP)",
+        cat: "ขาย & บัญชี",
+        port: "Port 3000",
+        path: "d:\\AI\\Light\\บัญชี Light\\accounting-app",
+        cmd: "cd \"d:\\AI\\Light\\บัญชี Light\\accounting-app\" && npm run dev",
+        desc: "ระบบบัญชีและ ERP มาตรฐานไทย ครบวงจร ซื้อ-เจ้าหนี้ (PO->RR->PV), ขาย-ลูกหนี้ (QT->SO->IV->RE), Stock Card, Auto-GL, VAT ภ.พ.30, WHT และงบการเงิน",
+        views: ["Executive Dashboard", "ซื้อ & เจ้าหนี้ (PO/RR/PV)", "ขาย & ลูกหนี้ (QT/SO/IV/RE)", "Stock Card & สินทรัพย์", "Auto-GL / ภ.พ.30 / งบการเงิน"],
+        scenes: [
+          { title: "ฉาก 1: หน้าล็อกอินเลือกสิทธิ์ (Demo Roles)", text: "เลือกบทบาท Admin / Manager / Accountant / Viewer เพื่อทดสอบสิทธิ์การทำงาน", img: "frames/accounting-light-1.png", nar: "เริ่มต้นในระบบบัญชีไทย สามารถเลือกเข้าสู่ระบบตามบทบาท ทั้งผู้ดูแลระบบ ผู้จัดการ หรือนักบัญชีครับ" },
+          { title: "ฉาก 2: Executive Dashboard & AR/AP Aging", text: "ดูภาพรวมรายรับ-รายจ่าย สต็อกใกล้หมด อายุหนี้ และลิงก์สร้างเอกสารด่วน QT/PO/IV", img: "frames/accounting-light-2.png", nar: "หน้า Dashboard สรุปยอดขาย ต้นทุน กำไร อายุลูกหนี้เจ้าหนี้ และมีทางลัดสร้างใบเสนอราคาหรือใบแจ้งหนี้ได้ทันที" },
+          { title: "ฉาก 3: วงจรขาย-ซื้อ & คำนวณ VAT/WHT", text: "ออก QT -> SO -> IV -> RE และ PO -> RR -> PV พร้อมตัดสต็อกและคำนวณภาษีอัตโนมัติ", img: "frames/accounting-light-3.png", nar: "เมื่อออกใบแจ้งหนี้หรือใบรับสินค้า ระบบจะตัดสต็อก คำนวณภาษีมูลค่าเพิ่ม 7 เปอร์เซ็นต์ และหัก ณ ที่จ่ายให้อัตโนมัติ" },
+          { title: "ฉาก 4: สมุดรายวัน Auto-GL & งบการเงิน", text: "ระบบลงบัญชีคู่ Dr/Cr อัตโนมัติ พร้อมออก ภ.พ.30, งบทดลอง, งบกำไรขาดทุน และงบดุล", img: "frames/accounting-light-4.png", nar: "ทุกเอกสารจะถูกลงบัญชีคู่เดบิตเครดิตในสมุดรายวันอัตโนมัติ พร้อมออกงบการเงินและรายงานภาษีครบชุดครับ" }
+        ],
+        steps: [
+          "เปิดพอร์ต 3000 ล็อกอินตามบทบาท (เช่น admin / accountant) เพื่อเข้า Executive Dashboard",
+          "ตั้งค่าข้อมูลหลักใน ตั้งค่าบริษัท, ผังบัญชี 5 หมวด, ผู้ติดต่อ และคลังสินค้า & Stock Card",
+          "ฝั่งขาย: สร้างใบเสนอราคา (QT) -> ใบสั่งขาย (SO) -> ใบแจ้งหนี้ (IV) -> รับชำระด้วยใบเสร็จ (RE)",
+          "ฝั่งซื้อ: สร้างใบสั่งซื้อ (PO) -> รับสินค้า (RR) -> ใบสำคัญจ่าย (PV) หรือบันทึกค่าใช้จ่ายพร้อมหัก ณ ที่จ่าย",
+          "ตรวจสมุดรายวัน (Auto-GL), กระทบยอดธนาคาร, ยื่น ภ.พ.30 / WHT และส่งออกงบทดลอง-งบการเงิน"
+        ],
+        arch: {
+          input: "ฟอร์มเอกสาร ERP (/ar/*, /ap/*, /income/*, /expenses) ส่ง JSON เข้า Next.js API Route Handlers",
+          logic: "ตรวจสอบด้วย Zod, รันเลขเอกสารอัตโนมัติ, tax-engine คำนวณ VAT/WHT และรัน Prisma $transaction ตัดสต็อก + สร้าง JournalEntry (Dr/Cr)",
+          storage: "Prisma ORM เชื่อมต่อ SQLite (local/serverless) หรือ PostgreSQL (ปรับ provider อัตโนมัติผ่าน sync-provider.cjs)"
+        }
+      },
+      {
+        id: "inventory-ai-light",
+        name: "Inventoty AI Light (DPOS)",
+        cat: "ขาย & บัญชี",
+        port: "Port 3000",
+        path: "d:\\AI\\Light\\Inventoty AI Light",
+        cmd: "cd \"d:\\AI\\Light\\Inventoty AI Light\" && npm run dev",
+        desc: "ระบบคลังสินค้าและ POS ขายหน้าร้าน (DPOS) รองรับสแกนบาร์โค้ด, จอลูกค้า, รับสินค้า CSV, สะสมแต้ม, โปรโมชั่น, QR PromptPay และแจ้งเตือน LINE Notify",
+        views: ["ภาพรวม (/)", "งานขายและ POS (/pos)", "จอลูกค้า (/customer-display)", "สินค้า (/inventory)", "ซื้อ/รับเข้า (/inbound)", "โปรโมชั่น & LINE"],
+        scenes: [
+          { title: "ฉาก 1: งานขายหน้าร้าน DPOS (/pos)", text: "ยิงบาร์โค้ดหรือคลิกสินค้า เพิ่มเข้าตะกร้า พร้อมซิงก์ขึ้นหน้าจอลูกค้าอัตโนมัติ", img: "frames/inventory-ai-light-1.png", nar: "หน้าขาย POS สามารถคลิกเลือกสินค้าหรือสแกนบาร์โค้ด พร้อมเชื่อมข้อมูลตะกร้าไปยังหน้าจอลูกค้าแบบเรียลไทม์ครับ" },
+          { title: "ฉาก 2: ภาพรวมยอดขาย & เตือนสต็อกด่วน", text: "ดู KPI ยอดขาย กำไร สินค้าขายดี และแจ้งเตือนสินค้าที่ต่ำกว่าจุดสั่งซื้อ", img: "frames/inventory-ai-light-2.png", nar: "หน้าภาพรวมจะสรุปยอดขาย กำไร และแจ้งเตือนรายการสินค้าใกล้หมดเพื่อกดสั่งเติมสต็อกได้ทันที" },
+          { title: "ฉาก 3: คลังสินค้า & ตรวจนับสต็อก (/inventory)", text: "ค้นหาด้วย SKU/Barcode ปรับยอดสต็อกจริง และดูประวัติ Lot เคลื่อนไหว", img: "frames/inventory-ai-light-3.png", nar: "หน้าคลังสินค้าใช้ค้นหาตาม SKU หรือบาร์โค้ดเพื่อตรวจเช็กและปรับปรุงจำนวนคงเหลือครับ" },
+          { title: "ฉาก 4: รับสินค้าเข้า (/inbound) & Import CSV", text: "เพิ่มสินค้าใหม่ นำเข้าไฟล์ CSV และเชื่อมต่อ LINE Notify แจ้งยอดขาย/สต็อกต่ำ", img: "frames/inventory-ai-light-4.png", nar: "ในหน้ารับสินค้าเข้า รองรับการนำเข้าไฟล์ CSV และระบบจะส่งแจ้งเตือนยอดขายหรือสต็อกต่ำเข้า LINE Notify ครับ" }
+        ],
+        steps: [
+          "เปิด / (ภาพรวม) ดูยอดขาย กำไร และรายการแจ้งเตือนสต็อกด่วน",
+          "ไปที่ ซื้อ (/inbound) เพื่อเพิ่มสินค้าใหม่ หรือนำเข้าไฟล์ CSV และตรวจนับสต็อกใน สินค้า (/inventory)",
+          "เปิด งานขายและ POS (/pos) (เปิดคู่กับ /customer-display ได้) เพื่อสแกนบาร์โค้ดหรือเลือกสินค้าลงตะกร้า",
+          "เลือกลูกค้าเพื่อใช้แต้มสะสมหรือกรอกโค้ดโปรโมชั่น แล้วเลือกวิธีชำระ (เงินสด / QR PromptPay / บัตร)",
+          "กด ชำระเงิน & ออกใบเสร็จ ระบบจะตัดสต็อก ให้แต้มสะสม ออกใบเสร็จ และแจ้งเตือนผ่าน LINE Notify"
+        ],
+        arch: {
+          input: "กล้อง/เครื่องสแกนบาร์โค้ด (html5-qrcode), ไฟล์ CSV (papaparse) และหน้า POS Checkout",
+          logic: "Route Handler POST /api/pos/checkout ตรวจสต็อก คำนวณส่วนลด/แต้ม ตัด Product.currentStock และยิง lineNotify เมื่อสต็อกต่ำหรือยอดถึงเป้า",
+          storage: "Prisma Client + PostgreSQL (ต้องตั้ง DATABASE_URL จริงใน .env) และใช้ localStorage (pos-live-cart) ซิงก์หน้าจอลูกค้า"
+        }
+      },
+      {
+        id: "all-chat-light",
+        name: "All Chat Light (Fern Clinic Inbox)",
+        cat: "แชท & โฆษณา",
+        port: "Port 3000",
+        path: "d:\\AI\\Light\\All Chat Light\\omnichannel-chat-app\\omnichannel-chat-app",
+        cmd: "cd \"d:\\AI\\Light\\All Chat Light\\omnichannel-chat-app\\omnichannel-chat-app\" && npm start",
+        desc: "ระบบรวมแชทคลินิก (Facebook, LINE 2 บัญชี, TikTok) ไว้จุดเดียว พร้อมจับ SLA 2 นาที, AI ตอบต้อนรับ/ประเมิน Tier, เก็บสลิป/รูปก่อน-หลัง และ Export Excel",
+        views: ["ระบบ Admin (Inbox)", "Workflow (11 Flow)", "ข้อมูลลูกค้า & Tier", "ดูแดชบอร์ด & ข้อมูล", "เชื่อมต่อช่องทาง"],
+        scenes: [
+          { title: "ฉาก 1: Unified Inbox (FB / LINE / TikTok)", text: "กรองแชทตามช่องทาง กด AI ตอบต้อนรับเมื่อใกล้เกิน SLA 2 นาที และบันทึกสลิป/รูปคนไข้", img: "frames/all-chat-light-1.png", nar: "หน้า Inbox รวมแชทจาก Facebook, LINE และ TikTok พร้อมเตือนเวลาตอบกลับ 2 นาที และปุ่มให้ AI ช่วยตอบต้อนรับครับ" },
+          { title: "ฉาก 2: Workflow 11 ขั้นตอน & ประเมิน Tier", text: "แก้ไข ทดสอบ Flow และให้ AI ประเมินจัดกลุ่มลูกค้า Tier 1–3 อัตโนมัติ", img: "frames/all-chat-light-2.png", nar: "ในหน้า Workflow สามารถปรับแก้สคริปต์ตอบกลับทั้ง 11 ขั้นตอน และสั่ง AI ประเมินจัด Tier ลูกค้าได้ครับ" },
+          { title: "ฉาก 3: ฐานข้อมูลลูกค้า & ส่งออก Excel", text: "รวมประวัติลูกค้า สลิปโอนเงิน ภาพก่อน-หลัง พร้อมส่งออกเป็นไฟล์ Excel", img: "frames/all-chat-light-3.png", nar: "หน้าข้อมูลลูกค้าจะรวมสลิปและประวัติการบริการทั้งหมด สามารถกดส่งออกเป็นไฟล์ Excel ได้ทันที" },
+          { title: "ฉาก 4: แดชบอร์ดภาพรวม & แคมเปญ", text: "ดู KPI การตอบแชท ยอดแคมเปญวันเกิด และเปิด AI สรุปแชทประจำวัน", img: "frames/all-chat-light-4.png", nar: "และหน้าแดชบอร์ดใช้ติดตาม KPI ทีมแอดมินและผลลัพธ์ของแต่ละแคมเปญแบบครบวงจรครับ" }
+        ],
+        steps: [
+          "เปิด ระบบ Admin เลือกกรองช่องทาง (ทั้งหมด / Facebook / LINE / TikTok) หรือค้นหาชื่อ/เบอร์โทร",
+          "ในห้องแชท กด AI ตอบต้อนรับ เมื่อคิวรอตอบเกิน SLA, กด เก็บเข้าข้อมูลลูกค้า บนสลิป หรือระบุภาพ ก่อนทำ/หลังทำ",
+          "เปิด ดูแดชบอร์ด หรือ ข้อมูล เพื่อตรวจสถิติ Campaign และกด AI สรุปแชท หรือ ส่งออกข้อมูล Excel",
+          "เปิด Workflow เพื่อแก้ไข/ทดสอบ Flow ทั้ง 11 ขั้น และสั่ง AI ประเมิน Tier ลูกค้า",
+          "ตั้งค่า Token ของ Facebook, LINE 1–2, TikTok และ Webhook ในหน้า เชื่อมต่อช่องทาง"
+        ],
+        arch: {
+          input: "Webhooks (/api/webhooks/facebook, /api/webhooks/line), OAuth callbacks และข้อความตอบกลับจาก Admin",
+          logic: "server.js จับเวลา SLA 2 นาที, รัน jevTriage.js คัดแยกด้วย System-One/0.85 Gate และ app.js คำนวณ Tier 1–3 + ยอดสลิป",
+          storage: "Server เก็บ conversation ใน memory และส่งออก Meta Graph / LINE Messaging API; ฝั่งหน้าเว็บเก็บ config/slips/tiers ลง localStorage"
+        }
+      },
+      {
+        id: "ad-manager-light",
+        name: "Ad Manager Light (AdLaunch AI Studio)",
+        cat: "แชท & โฆษณา",
+        port: "Port 3000",
+        path: "d:\\AI\\Light\\Ad Manager Light",
+        cmd: "cd \"d:\\AI\\Light\\Ad Manager Light\" && npm run dev",
+        desc: "สตูดิโอสร้างสื่อโฆษณา AI 3 ขั้นตอน: วิเคราะห์ภาพและแต่งแคปชัน 3 สไตล์, เรนเดอร์วิดีโอ 15 วินาที/โปสเตอร์ HD บน Canvas และยิงแอด TikTok / FB / IG",
+        views: ["1. สร้างสื่อ & คำโปรย", "พรีวิวมือถือ (TikTok/FB/IG)", "2. บัญชีโฆษณา", "3. กดยิงแอด"],
+        scenes: [
+          { title: "ฉาก 1: เลือกสินค้า & ให้ AI แต่งคำโปรย", text: "เลือก Preset หรืออัปโหลดภาพสูงสุด 5 มุม แล้วกดให้ AI วิเคราะห์ภาพและคิดคำโปรย 3 สไตล์", img: "frames/ad-manager-light-1.png", nar: "ขั้นตอนที่ 1 เลือกสินค้าตัวอย่างหรืออัปโหลดรูปสินค้า เพื่อให้ AI วิเคราะห์โทนสีและสร้างแคปชันให้เลือก 3 สไตล์ครับ" },
+          { title: "ฉาก 2: พรีวิวบนมือถือ & โหลดวิดีโอ 15 วิ", text: "สลับดูพรีวิวบน TikTok, Facebook, Instagram พร้อมโหลดรูปโปสเตอร์ HD หรือวิดีโอ .webm", img: "frames/ad-manager-light-2.png", nar: "จากนั้นดูพรีวิวบนหน้าจอมือถือจำลองของ TikTok, Facebook และ IG พร้อมดาวน์โหลดโปสเตอร์ HD หรือคลิป 15 วินาทีได้ทันที" },
+          { title: "ฉาก 3: ตรวจสอบบัญชีโฆษณา", text: "เช็กสถานะ Sandbox หรือกรอก Access Token และ Account ID สำหรับ TikTok และ Meta", img: "frames/ad-manager-light-3.png", nar: "ขั้นตอนที่ 2 ตรวจสอบสถานะการเชื่อมต่อบัญชีโฆษณา TikTok และ Meta" },
+          { title: "ฉาก 4: ตั้งงบรายวัน & กดยิงแอด", text: "เลือกช่องทางที่ต้องการปล่อย กำหนดงบรายวัน แล้วกด Launch All Platforms", img: "frames/ad-manager-light-4.png", nar: "ขั้นตอนสุดท้าย เลือกช่องทาง กำหนดงบประมาณต่อวัน แล้วกดยิงแอดเพื่อสร้างแคมเปญครับ" }
+        ],
+        steps: [
+          "ในขั้น 1. สร้างสื่อ & คำโปรย เลือก Preset หรือกรอกชื่อสินค้า อัปโหลดรูป (สูงสุด 5 รูป) และใส่โปรโมชั่น",
+          "กด ให้ AI วิเคราะห์ภาพ ตกแต่งสื่อ & สร้างคำโปรยใหม่ แล้วเลือก 1 ใน 3 สไตล์แคปชันที่ชอบ",
+          "สลับดูจอมือถือ TikTok / Facebook / Instagram และกดโหลดรูปโปสเตอร์ (.png) หรือวิดีโอ 15 วินาที (.webm)",
+          "ไปขั้น 2. บัญชีโฆษณา เพื่อเช็กบัญชี Sandbox หรือกรอก Token/Account ID",
+          "ไปขั้น 3. กดยิงแอด ตั้งชื่อแคมเปญ เลือกช่องทาง + งบรายวัน แล้วกด กดยิงแอดทันที"
+        ],
+        arch: {
+          input: "ข้อมูลสินค้า, ไฟล์ภาพที่อัปโหลด, โทนเสียง/เพลงประกอบ, บัญชีโฆษณา และงบรายวัน",
+          logic: "Client-side เต็มรูปแบบ: aiVisionService วิเคราะห์สีบน Canvas, aiCopyService สร้างข้อความ, AdVideoRenderer เรนเดอร์วิดีโอ 9:16 บน Canvas",
+          storage: "ทำงานในหน่วยความจำ React (ไม่มี Backend) และส่งออกไฟล์ .png / .webm ลงเครื่องผู้ใช้โดยตรง"
+        }
+      },
+      {
+        id: "sale-page-light",
+        name: "Sale page Light (NexusCore Platform)",
+        cat: "แชท & โฆษณา",
+        port: "Static HTML / PWA",
+        path: "d:\\AI\\Light\\Sale page Light",
+        cmd: "เปิดไฟล์ d:\\AI\\Light\\Sale page Light\\index.html (หรือ npx serve)",
+        desc: "หน้า Sale Page B2B SaaS แสดง 9 โซลูชันธุรกิจไทย พร้อม QuickView พรีวิว Desktop/Mobile, คำนวณ ROI, Catalog PDF และ Lead Inquiry Console",
+        views: ["Hero 3D Coverflow", "9 โซลูชัน & QuickView", "ROI Calculator & Pricing", "Lead Form & Inquiry Console", "ad-campaign.html"],
+        scenes: [
+          { title: "ฉาก 1: Hero Showcase · NexusCore", text: "แนะนำแพลตฟอร์มซอฟต์แวร์ธุรกิจไทย 9 ระบบ พร้อมตรา Official Verified และเมนูนำทางด่วน", img: "frames/sale-page-light-1.png", nar: "หน้าแรกของ Sale page Light นำเสนอแพลตฟอร์ม NexusCore รวมซอฟต์แวร์ธุรกิจไทยทั้ง 9 ระบบครับ" },
+          { title: "ฉาก 2: กรองหมวดหมู่ & QuickView", text: "ค้นหาและกรองระบบตามหมวด IT / บัญชี / งาน / ฟิตเนส พร้อมดูพรีวิว Desktop และ Mobile", img: "frames/sale-page-light-2.png", nar: "ลูกค้าสามารถค้นหาหรือกรองตามขนาดธุรกิจ และคลิกดู QuickView พรีวิวหน้าจอจริงของแต่ละระบบได้ครับ" },
+          { title: "ฉาก 3: คำนวณ ROI & แพ็กเกจราคา", text: "เลื่อนสไลเดอร์จำนวนพนักงานและเงินเดือนเพื่อดูชั่วโมงและงบที่ประหยัดได้ต่อปี", img: "frames/sale-page-light-3.png", nar: "ส่วนคำนวณ ROI ช่วยประเมินเวลาและค่าใช้จ่ายที่ประหยัดได้จริง ก่อนเปรียบเทียบแพ็กเกจราคาครับ" },
+          { title: "ฉาก 4: ลงทะเบียนทดลองใช้ & Catalog", text: "กรอก Lead Form รับรหัส NX-XXXXXX หรือดูรายชื่อผู้ติดต่อใน Inquiry Console (Ctrl+Shift+L)", img: "frames/sale-page-light-4.png", nar: "เมื่อลูกค้ากรอกขอทดลองใช้ฟรี 14 วัน ระบบจะสร้างรหัสติดตามและเก็บลง Inquiry Console เพื่อส่งออก CSV ได้ครับ" }
+        ],
+        steps: [
+          "เปิดหน้าแรกดู Hero 3D Coverflow Slider แนะนำผลิตภัณฑ์ทั้งหมด",
+          "ค้นหาหรือกรองการ์ด 9 ระบบตามหมวดหมู่และขนาดธุรกิจ (Startup / SME / Enterprise)",
+          "คลิกการ์ดเพื่อเปิด QuickView (สลับดู Desktop/Mobile) หรือเปิด Catalog เพื่อเซฟ PDF",
+          "ปรับตัวเลขใน ROI Calculator (#pricing) แล้วกดเลือกแพ็กเกจหรือทดลองใช้ฟรี 14 วัน",
+          "ส่งฟอร์มขอรับสิทธิ์เพื่อสร้างรหัส NX-XXXXXX (ผู้ดูแลกด Ctrl+Shift+L เปิด Inquiry Console ดูสถิติและ Export CSV)"
+        ],
+        arch: {
+          input: "การค้นหา/กรองการ์ด, ค่าจากสไลเดอร์ ROI, ฟอร์มลงทะเบียน (ป้องกันบอทด้วย honeypot + rate limit 30 วิ)",
+          logic: "Vanilla JS + GSAP คำนวณเวลา/เงินที่ประหยัดได้ต่อปี, สร้างรหัส NX-XXXXXX และบันทึก engagement metrics",
+          storage: "เก็บประวัติ Lead ลง localStorage (nexus_inquiries_log), Cache ไฟล์ PWA ด้วย Service Worker (sw.js)"
+        }
+      },
+      {
+        id: "fitness",
+        name: "Fitness (FITPULSE PRO)",
+        cat: "ฟิตเนส & เทรด",
+        port: "Port 5173",
+        path: "d:\\AI\\Light\\Fitness",
+        cmd: "cd \"d:\\AI\\Light\\Fitness\" && npm run dev",
+        desc: "แพลตฟอร์มบริหารจัดการฟิตเนสครบวงจร: แดชบอร์ดผู้บริหาร, เช็คอินเข้ายิมด้วย QR Code, ขายคอร์สพร้อมเซ็นสัญญาออนไลน์, การเงิน-คอมมิชชั่น และ CRM",
+        views: ["หน้าหลัก (แดชบอร์ด)", "เช็คอินเข้ายิม (QR)", "คอร์ส & แพ็กเกจ", "สัญญาคอร์ส", "การเงิน & ใบเสร็จ", "ข้อมูลลูกค้า (CRM)"],
+        scenes: [
+          { title: "ฉาก 1: แดชบอร์ด FITPULSE PRO", text: "ดูรายรับรวม จำนวนสมาชิก สัญญา และจำนวนคนเข้าใช้ยิมขณะนี้ พร้อมทางลัด 4 ปุ่มหลัก", img: "frames/fitness-1.png", nar: "หน้าหลักของ FitPulse Pro สรุปยอดรายรับ สมาชิก สัญญา และจำนวนผู้เข้าใช้ยิมแบบเรียลไทม์ครับ" },
+          { title: "ฉาก 2: เช็คอินเข้ายิม & บัตร QR สมาชิก", text: "สมัครสมาชิกใหม่ถ่ายรูปสร้างบัตร QR และสแกน QR เช็คอินพร้อมตัดชั่วโมง PT อัตโนมัติ", img: "frames/fitness-2.png", nar: "ในหน้าเช็คอิน สามารถถ่ายรูปสร้าง QR Pass ให้สมาชิกใหม่ และสแกนเช็คอินเพื่อตัดครั้งฝึกกับเทรนเนอร์อัตโนมัติ" },
+          { title: "ฉาก 3: สมัครคอร์ส & เซ็นสัญญาออนไลน์", text: "เลือกแพ็กเกจ กรอกข้อมูล และลงลายมือชื่อดิจิทัลบนหน้าจอเพื่อออกสัญญาและใบเสร็จทันที", img: "frames/fitness-3.png", nar: "หน้าคอร์สและแพ็กเกจรองรับการขายคอร์สพร้อมให้ลูกค้าเซ็นชื่อดิจิทัลบนหน้าจอแล้วออกใบเสร็จทันทีครับ" },
+          { title: "ฉาก 4: CRM ติดตามลูกค้า & คอมมิชชั่น", text: "กรองสถานะ Lead / Trial / Active / VIP / At Risk และติดตามค่าคอมมิชชั่นโค้ช 30%", img: "frames/fitness-4.png", nar: "ส่วน CRM ใช้ติดตามลูกค้าแต่ละระดับ และหน้าการเงินจะคำนวณค่าคอมมิชชั่นโค้ชให้อัตโนมัติครับ" }
+        ],
+        steps: [
+          "เปิด หน้าหลัก (แดชบอร์ด) ตรวจดูรายรับสะสม จำนวนผู้เข้าใช้ยิม และรายการเช็คอินล่าสุด",
+          "ไปที่ เช็คอินเข้ายิม เพื่อเพิ่มสมาชิกใหม่พร้อมสร้างบัตร QR หรือสแกน QR เพื่อบันทึกเข้ายิม/ฝึก PT",
+          "ไปที่ คอร์ส & แพ็กเกจ เลือกคอร์ส กดสมัคร กรอกข้อมูลลูกค้าและเซ็นลายมือชื่อดิจิทัลเพื่อยืนยัน",
+          "เปิด สัญญาคอร์ส เพื่อดูและพิมพ์สัญญา PDF และตรวจรายรับ-รายจ่าย-ค่าคอมมิชชั่นโค้ชที่ การเงิน & ใบเสร็จ",
+          "เปิด ข้อมูลลูกค้า (CRM) เพื่อบันทึกการโทร/แชตติดตามลูกค้า และดูกลุ่ม At Risk ที่ไม่ได้มายิมเกิน 14 วัน"
+        ],
+        arch: {
+          input: "QR Scan (html5-qrcode หรือ ?checkin=), รูปถ่ายสมาชิก, แบบฟอร์มสัญญา + ลายเซ็น Canvas และบันทึก CRM",
+          logic: "App.tsx ตัดชั่วโมง PT เมื่อเช็คอิน, ออก CourseContract + Transaction + ค่าคอมมิชชั่น 30% และซิงค์ข้อมูลเข้า CRM Lead อัตโนมัติ",
+          storage: "Client-side SPA เก็บลง localStorage (fitpulse_members, fitpulse_contracts, fitpulse_checkins, fitpulse_transactions, fitpulse_crm_leads)"
+        }
+      },
+      {
+        id: "quotation-light",
+        name: "ใบเสนอรา Light (KROB Quotation)",
+        cat: "ขาย & บัญชี",
+        port: "Port 4090 + A4 HTML",
+        path: "d:\\AI\\Light\\ใบเสนอรา Light",
+        cmd: "cd \"d:\\AI\\Light\\ใบเสนอรา Light\" && npm start",
+        desc: "ระบบสร้างใบเสนอราคาอัตโนมัติ (ส่วนลด 15% + VAT 7% + PromptPay CRC-16 + ลายเซ็น KROB-SIG) พร้อมแบบฟอร์มใบเสนอราคา A4 แก้ไขสดและพิมพ์ PDF",
+        views: ["KROB Portal (/)", "API /api/quote", "lighting-quotation.html (A4)", "Print / PDF"],
+        scenes: [
+          { title: "ฉาก 1: KROB Quotation Portal", text: "แสดงสรุปเลขที่ใบเสนอราคา ยอดหักส่วนลด 15% ภาษี VAT 7% และยอดสุทธิพร้อมปุ่มพิมพ์", img: "frames/quotation-light-1.png", nar: "หน้า Portal ของ Quotation Light แสดงสรุปเลขที่ใบเสนอราคา ส่วนลด 15 เปอร์เซ็นต์ และยอดสุทธิรวมภาษีครับ" },
+          { title: "ฉาก 2: Microservice API (/api/quote)", text: "คืนค่า JSON คำนวณส่วนลด VAT, Payload PromptPay CRC-16 และลายเซ็น KROB-SIG", img: "frames/quotation-light-2.png", nar: "ฝั่ง API จะคำนวณตัวเลขพร้อมสร้างรหัส PromptPay CRC-16 และลายเซ็นดิจิทัลให้อัตโนมัติครับ" },
+          { title: "ฉาก 3: ใบเสนอราคา A4 แก้ไขตัวเลขสด", text: "เปิด lighting-quotation.html เพื่อแก้จำนวน/ราคาสินค้า คำนวณยอดรวมและบาทไทยทันที", img: "frames/quotation-light-3.png", nar: "แบบฟอร์ม A4 มาตรฐานสามารถคลิกแก้จำนวนหรือราคาต่อหน่วย แล้วคำนวณยอดรวมและตัวอักษรบาทไทยให้ทันที" },
+          { title: "ฉาก 4: พิมพ์ / บันทึกเป็น PDF A4", text: "กด พิมพ์ / บันทึก PDF จัดหน้ากระดาษ A4 แนวตั้งพร้อมลายเซ็นเสนอราคา", img: "frames/quotation-light-4.png", nar: "เสร็จแล้วกดพิมพ์หรือบันทึกเป็นไฟล์ PDF ขนาด A4 ส่งให้ลูกค้าได้ทันทีครับ" }
+        ],
+        steps: [
+          "รัน npm start เพื่อเปิด KROB Quotation Portal ที่พอร์ต 4090 (หรือเปิด lighting-quotation.html)",
+          "เรียก GET /api/quote เพื่อรับข้อมูลคำนวณส่วนลด, VAT 7%, PromptPay Payload และลายเซ็น KROB-SIG",
+          "ในแบบฟอร์ม A4 (lighting-quotation.html) ตรวจสอบข้อมูลลูกค้าและรายการสินค้าทั้ง 6 รายการ",
+          "คลิกแก้ไขตัวเลข จำนวน หรือ ราคา/หน่วย ระบบคำนวณยอดรวมและจำนวนเงินตัวอักษรให้อัตโนมัติ",
+          "กด พิมพ์ / บันทึก PDF เพื่อออกเอกสาร A4 (หรือกด คืนค่าล่าสุด เพื่อรีเซ็ต)"
+        ],
+        arch: {
+          input: "คำขอ GET /api/quote บน server.js และการแก้ไขจำนวน/ราคาในตาราง lighting-quotation.html",
+          logic: "quotationEngine.js คำนวณส่วนลด 15% + VAT 7% + EMVCo CRC-16 + ลายเซ็น FNV-1a; หน้า A4 รัน updateTotals() + toThaiBahtText()",
+          storage: "Stateless (ไม่มีฐานข้อมูลหรือ localStorage) พิมพ์เป็นเอกสาร PDF ผ่าน window.print()"
+        }
+      },
+      {
+        id: "trading-light",
+        name: "เทรด Light (Trading Bot Pro v3.0)",
+        cat: "ฟิตเนส & เทรด",
+        port: "Port 3000 / 3010 (+MT5 5001)",
+        path: "d:\\AI\\Light\\เทรด Light\\trading-app",
+        cmd: "cd \"d:\\AI\\Light\\เทรด Light\\trading-app\" && npm run dev",
+        desc: "เทอร์มินัลเทรด MT5, วิเคราะห์สัญญาณ AI & Market Regime, Backtest แท่งเทียนจริง, บอทเทรดเดโม/รายวินาที และระบบล็อกความปลอดภัยบัญชีจริง",
+        views: ["เทรด (Terminal)", "ภาพรวม (AI Signal)", "บอทเทรดเดโม & Scalper", "Backtest (MT5 Bars)", "บัญชีจริง (Locked)"],
+        scenes: [
+          { title: "ฉาก 1: หน้าเทรด (Terminal)", text: "ดู Watchlist, กราฟแท่งเทียน Bid/Ask และส่งคำสั่งซื้อขายพร้อม Take Profit / Stop Loss", img: "frames/trading-light-1.png", nar: "หน้าเทรด Terminal แสดง Watchlist กราฟราคาเรียลไทม์ และแผงส่งคำสั่ง Buy/Sell พร้อมตั้ง TP/SL ครับ" },
+          { title: "ฉาก 2: ภาพรวมสัญญาณ AI & Regime", text: "ติดตามทิศทาง BUY/SELL/HOLD, ความมั่นใจ % และกราฟตำแหน่งออเดอร์ของบอท", img: "frames/trading-light-2.png", nar: "ในแท็บภาพรวม จะแสดงสัญญาณ AI, สภาพตลาด Regime และสถานะการเชื่อมต่อกับ Local MT5 Bridge ครับ" },
+          { title: "ฉาก 3: Backtest ด้วยแท่งเทียนจริง MT5", text: "ทดสอบย้อนหลังแบบ ค่าเดียว / กวาด 60–85% / Walk-forward เพื่อผ่านเกณฑ์ก่อนรันบอท", img: "frames/trading-light-3.png", nar: "แท็บ Backtest ใช้จำลองกลยุทธ์จากแท่งเทียนจริงทั้งแบบ Walk-forward และจูนค่าพารามิเตอร์ครับ" },
+          { title: "ฉาก 4: บอทเดโม & ระบบล็อกบัญชีจริง", text: "รันบอทเดโมหรือ Scalper รายวินาที ส่วนบัญชีจริงต้องยืนยันตัวตน 2 ชั้นและมีปุ่มหยุดฉุกเฉิน", img: "frames/trading-light-4.png", nar: "โหมดบัญชีจริงมีระบบล็อกความปลอดภัยหลายชั้น พร้อมปุ่มหยุดฉุกเฉินสำหรับปิดออเดอร์ทั้งหมดทันทีครับ" }
+        ],
+        steps: [
+          "เปิดโปรแกรม MetaTrader 5 + รัน START_MT5_BRIDGE.bat (พอร์ต 5001) แล้วเปิด Trading App (พอร์ต 3000/3010)",
+          "ในแท็บ เทรด เลือกคู่เงิน (เช่น BTCUSDm, XAUUSDm) ดูกราฟและจัดการออเดอร์ใน PositionsPanel",
+          "เปิด ภาพรวม เพื่อเช็กสัญญาณ AI, Market Regime และค่า Equity/Free Margin จาก MT5",
+          "เข้าแท็บ Backtest รันทดสอบกลยุทธ์ย้อนหลังบนแท่งเทียน M5/M15/H1",
+          "เปิด บอทเทรดเดโม เพื่อรันออโต้บน Demo หรือเปิด บัญชีจริง (ต้องล็อกอิน 2 ชั้น + พิมพ์ ยืนยันเทรดเงินจริง และมีปุ่มหยุดฉุกเฉิน)"
+        ],
+        arch: {
+          input: "คำสั่งเทรดจาก Terminal, พารามิเตอร์ Backtest/AutoTrader และข้อมูลราคาเรียลไทม์จาก MT5 Bridge (127.0.0.1:5001)",
+          logic: "Next.js API (/api/terminal/*, /api/autotrader, /api/real-trading) บังคับสิทธิ์ localhost, ส่งคำสั่งเข้า MT5 Bridge และจัดการ worker เบื้องหลัง (demo/scalper/real) พร้อมตัวกันขาดทุน",
+          storage: "บันทึกการตั้งค่า/ผล Backtest/ประวัติเทรดลงโฟลเดอร์ logs/*.json, *.csv และ config/real-trading.json"
+        }
+      }
+    ];
+
+    const state = {
+      appId: APPS[0].id,
+      cat: "ทั้งหมด",
+      query: "",
+      mode: "interactive", // 'interactive' | 'webm'
+      sceneIdx: 0,
+      playing: false,
+      speed: 1,
+      tts: false,
+      progress: 0
+    };
+
+    const categories = ["ทั้งหมด", "งาน & IT", "ขาย & บัญชี", "แชท & โฆษณา", "ฟิตเนส & เทรด"];
+    let timerId = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function currentApp() {
+      return APPS.find((a) => a.id === state.appId) || APPS[0];
+    }
+
+    function stopSpeech() {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+
+    function speakScene(text) {
+      if (!state.tts || !("speechSynthesis" in window)) return;
+      stopSpeech();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "th-TH";
+      utter.rate = state.speed;
+      window.speechSynthesis.speak(utter);
+    }
+
+    function stopPlayback() {
+      state.playing = false;
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      stopSpeech();
+      $("playPauseBtn").textContent = "▶ เล่นอัตโนมัติ";
+      $("sceneImg").classList.remove("playing");
+    }
+
+    function startPlayback() {
+      if (state.mode !== "interactive") return;
+      stopPlayback();
+      state.playing = true;
+      state.progress = 0;
+      $("playPauseBtn").textContent = "⏸ หยุดชั่วคราว";
+      $("sceneImg").classList.add("playing");
+      speakScene(currentApp().scenes[state.sceneIdx].nar);
+
+      const durationMs = 4500 / state.speed;
+      const tickMs = 80;
+      timerId = setInterval(() => {
+        state.progress += (tickMs / durationMs) * 100;
+        if (state.progress >= 100) {
+          state.progress = 0;
+          const app = currentApp();
+          if (state.sceneIdx < app.scenes.length - 1) {
+            state.sceneIdx += 1;
+            renderScene();
+            speakScene(app.scenes[state.sceneIdx].nar);
+          } else {
+            stopPlayback();
+            state.progress = 100;
+            renderTimeline();
+            return;
+          }
+        }
+        renderTimeline();
+      }, tickMs);
+    }
+
+    function selectScene(idx, autoContinue = false) {
+      const app = currentApp();
+      state.sceneIdx = Math.max(0, Math.min(app.scenes.length - 1, idx));
+      state.progress = 0;
+      renderScene();
+      if (state.playing || autoContinue) {
+        startPlayback();
+      } else if (state.tts) {
+        speakScene(app.scenes[state.sceneIdx].nar);
+      }
+    }
+
+    function renderCategories() {
+      const container = $("catPills");
+      container.innerHTML = "";
+      categories.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `cat-pill${state.cat === c ? " active" : ""}`;
+        btn.textContent = c;
+        btn.onclick = () => {
+          state.cat = c;
+          renderCategories();
+          renderPlaylist();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderPlaylist() {
+      const q = state.query.trim().toLowerCase();
+      const filtered = APPS.filter((a) => {
+        if (state.cat !== "ทั้งหมด" && a.cat !== state.cat) return false;
+        if (!q) return true;
+        return (
+          a.name.toLowerCase().includes(q) ||
+          a.desc.toLowerCase().includes(q) ||
+          a.cat.toLowerCase().includes(q) ||
+          a.views.some((v) => v.toLowerCase().includes(q))
+        );
+      });
+
+      $("appCountLabel").textContent = `${filtered.length}/${APPS.length} Apps`;
+      const list = $("playlist");
+      list.innerHTML = "";
+
+      filtered.forEach((app) => {
+        const idx = APPS.indexOf(app) + 1;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `playlist-item${app.id === state.appId ? " active" : ""}`;
+        btn.innerHTML = `
+          <div class="playlist-row">
+            <span class="playlist-num">#${String(idx).padStart(2, "0")} · ${app.cat}</span>
+            <span class="playlist-port">${app.port}</span>
+          </div>
+          <div class="playlist-title">${app.name}</div>
+          <div class="playlist-sub">${app.desc}</div>
+        `;
+        btn.onclick = () => selectApp(app.id);
+        list.appendChild(btn);
+      });
+    }
+
+    function renderTimeline() {
+      const app = currentApp();
+      const track = $("timelineTrack");
+      track.innerHTML = "";
+      app.scenes.forEach((sc, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `chapter-btn${idx === state.sceneIdx ? " active" : ""}`;
+        const fillPct = idx < state.sceneIdx ? 100 : idx === state.sceneIdx ? state.progress : 0;
+        btn.innerHTML = `
+          <span>${sc.title}</span>
+          <span class="chapter-fill" style="width:${fillPct}%"></span>
+        `;
+        btn.onclick = () => selectScene(idx, state.playing);
+        track.appendChild(btn);
+      });
+
+      document.querySelectorAll(".step-card").forEach((el, idx) => {
+        const mappedScene = Math.min(app.scenes.length - 1, idx);
+        el.classList.toggle("active", mappedScene === state.sceneIdx && idx < app.scenes.length);
+      });
+    }
+
+    function renderScene() {
+      const app = currentApp();
+      const sc = app.scenes[state.sceneIdx];
+      $("sceneImg").src = sc.img;
+      $("sceneImg").alt = `${app.name} - ${sc.title}`;
+      $("sceneBadge").textContent = `SCENE ${state.sceneIdx + 1} / ${app.scenes.length}`;
+      $("sceneTitle").textContent = sc.title;
+      $("sceneText").textContent = sc.text;
+      renderTimeline();
+    }
+
+    function renderAppDetails() {
+      const app = currentApp();
+      $("appCategory").textContent = `${app.cat} · ${app.port}`;
+      $("appTitle").textContent = app.name;
+      $("appDesc").textContent = app.desc;
+      $("appPath").textContent = app.path;
+      $("appCmd").textContent = app.cmd;
+      $("archInput").textContent = app.arch.input;
+      $("archLogic").textContent = app.arch.logic;
+      $("archStorage").textContent = app.arch.storage;
+
+      const webmSrc = `videos/${app.id}.webm`;
+      $("webmPlayer").src = webmSrc;
+      $("downloadWebmBtn").href = webmSrc;
+      $("downloadWebmBtn").setAttribute("download", `${app.id}-walkthrough.webm`);
+
+      const chips = $("viewsChips");
+      chips.innerHTML = "";
+      app.views.forEach((v) => {
+        const span = document.createElement("span");
+        span.className = "view-chip";
+        span.textContent = v;
+        chips.appendChild(span);
+      });
+
+      const steps = $("stepsList");
+      steps.innerHTML = "";
+      app.steps.forEach((stepText, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "step-card";
+        btn.innerHTML = `
+          <span class="step-num">${idx + 1}</span>
+          <div class="step-body">
+            <strong>ขั้นตอนที่ ${idx + 1}</strong>
+            <p>${stepText}</p>
+          </div>
+        `;
+        btn.onclick = () => {
+          setMode("interactive");
+          selectScene(Math.min(app.scenes.length - 1, idx), false);
+        };
+        steps.appendChild(btn);
+      });
+
+      renderScene();
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      const isInteractive = mode === "interactive";
+      $("modeInteractiveBtn").classList.toggle("active", isInteractive);
+      $("modeWebmBtn").classList.toggle("active", !isInteractive);
+      $("interactiveStage").hidden = !isInteractive;
+      $("webmStage").hidden = isInteractive;
+      if (!isInteractive) {
+        stopPlayback();
+        $("webmPlayer").play().catch(() => {});
+      } else {
+        $("webmPlayer").pause();
+      }
+    }
+
+    function selectApp(id) {
+      stopPlayback();
+      state.appId = id;
+      state.sceneIdx = 0;
+      state.progress = 0;
+      renderPlaylist();
+      renderAppDetails();
+    }
+
+    $("searchBox").addEventListener("input", (e) => {
+      state.query = e.target.value;
+      renderPlaylist();
+    });
+    $("modeInteractiveBtn").onclick = () => setMode("interactive");
+    $("modeWebmBtn").onclick = () => setMode("webm");
+    $("playPauseBtn").onclick = () => {
+      if (state.mode !== "interactive") setMode("interactive");
+      if (state.playing) stopPlayback();
+      else startPlayback();
+    };
+    $("prevSceneBtn").onclick = () => selectScene(Math.max(0, state.sceneIdx - 1), state.playing);
+    $("nextSceneBtn").onclick = () => selectScene((state.sceneIdx + 1) % currentApp().scenes.length, state.playing);
+    $("ttsToggleBtn").onclick = () => {
+      state.tts = !state.tts;
+      $("ttsToggleBtn").classList.toggle("on", state.tts);
+      $("ttsToggleBtn").textContent = state.tts ? "🔊 กำลังเปิดพากย์ไทย" : "🔊 พากย์เสียงไทย";
+      $("voiceStatusPill").textContent = state.tts ? "🔊 เปิดพากย์เสียงไทย (th-TH)" : "🔇 ปิดเสียงพากย์ (กดเปิดได้ด้านล่าง)";
+      if (state.tts) speakScene(currentApp().scenes[state.sceneIdx].nar);
+      else stopSpeech();
+    };
+    $("speedBtn").onclick = () => {
+      const speeds = [0.8, 1, 1.25];
+      state.speed = speeds[(speeds.indexOf(state.speed) + 1) % speeds.length];
+      $("speedBtn").textContent = `ความเร็ว ${state.speed}x`;
+      if (state.playing) startPlayback();
+    };
+    $("copyCmdBtn").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(currentApp().cmd);
+        $("copyCmdBtn").textContent = "✓ คัดลอกแล้ว";
+        setTimeout(() => { $("copyCmdBtn").textContent = "📋 คัดลอกคำสั่ง"; }, 1800);
+      } catch {
+        $("copyCmdBtn").textContent = "คัดลอกไม่สำเร็จ";
+      }
+    };
+
+    renderCategories();
+    renderPlaylist();
+    renderAppDetails();
+  </script>
+</body>
+</html>

@@ -76,6 +76,8 @@ export const chatRequestSchema = z.object({
   meeting: meetingSchema.optional(),
   /** คลังประวัติสรุปการประชุมย้อนหลังจากอุปกรณ์ของผู้ใช้ สำหรับเครื่องมือ search_meeting_history */
   meetingHistory: z.array(meetingHistoryItemSchema).max(15).optional(),
+  /** ตัวตนผู้ช่วยในเทิร์นนี้: delluna (ค่าเริ่มต้นเมื่อเสียงลูน่าปกติ) หรือ javis (เมื่อเสียงลูน่าขัดข้อง) */
+  identity: z.enum(["delluna", "javis"]).optional(),
   /** รหัสของช่องวินิจฉัยของผู้ดูแล แอปไม่ส่งค่านี้ */
   diagnose: z.string().max(200).optional(),
   /** โมเดลค้นเว็บที่ผู้ถือรหัสวินิจฉัยขอลองในคำขอนี้ คำขอที่ไม่มีรหัสจะถูกเมิน */

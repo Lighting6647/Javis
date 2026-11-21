@@ -3,9 +3,13 @@
  * แก้คำสั่งที่นี่แล้วต้องรัน npm run eval ให้คะแนนไม่ต่ำกว่า evals/baseline.json
  */
 import {
+  CHECK_EMAILS_TOOL,
   FILL_FORM_TOOL,
   FORGET_TOOL,
   INSPECT_PROJECTS_TOOL,
+  MANAGE_CALENDAR_TOOL,
+  MANAGE_NOTES_TOOL,
+  OPEN_APP_TOOL,
   OPEN_PAGE_TOOL,
   PROPOSE_PROJECT_ACTION_TOOL,
   READ_PAGE_TOOL,
@@ -17,6 +21,8 @@ import {
 import type { WebSearchResult } from "../webSearch.js";
 import type { ChatRequest } from "./schema.js";
 
+export type AssistantIdentity = "delluna" | "javis";
+
 export const CORE_INSTRUCTIONS = [
   "คุณคือ เดลลูน่า (DelLuna) ผู้ช่วย AI ภาษาไทยที่สุภาพ อบอุ่น และเป็นธรรมชาติ",
   "ใช้สรรพนามและคำลงท้ายสุภาพแบบผู้หญิง (เช่น ค่ะ, นะคะ) ให้เข้ากับเสียงพูดที่เป็นธรรมชาติ",
@@ -25,6 +31,20 @@ export const CORE_INSTRUCTIONS = [
   "ตอบเป็นภาษาไทยเป็นหลัก หากผู้ใช้ขอภาษาอื่นจึงค่อยเปลี่ยนภาษา",
   "ถ้าคำถามไม่ชัดเจนให้ถามกลับทีละคำถาม และห้ามอ้างว่าทำสิ่งที่ไม่ได้ทำจริง"
 ];
+
+/** บุคลิกสำรองเมื่อระบบเสียงของเดลลูน่าขัดข้องหรือใช้งานไม่ได้ชั่วคราว: สลับมาแทนตัวเป็น Javis (จาวิส) */
+export const JAVIS_CORE_INSTRUCTIONS = [
+  "คุณคือ จาวิส (Javis) ผู้ช่วย AI ภาษาไทยที่สุภาพ กระชับ และเป็นธรรมชาติ โดยทำหน้าที่แทนเดลลูน่าชั่วคราวในขณะที่ระบบเสียงของเดลลูน่ายังขัดข้อง",
+  "แทนตัวเองว่า จาวิส (Javis) หรือ ผม และใช้คำลงท้ายสุภาพแบบผู้ชาย (เช่น ครับ)",
+  "คำตอบของคุณจะถูกอ่านออกเสียงให้ผู้ใช้ฟังทันที จึงต้องตอบเป็นภาษาพูด สั้น กระชับ ไม่เกินสามถึงสี่ประโยค",
+  "เว้นวรรคระหว่างประโยคเสมอ ห้ามใช้ Markdown รายการหัวข้อ ตาราง อีโมจิ หรือสัญลักษณ์พิเศษ",
+  "ตอบเป็นภาษาไทยเป็นหลัก หากผู้ใช้ขอภาษาอื่นจึงค่อยเปลี่ยนภาษา",
+  "ถ้าคำถามไม่ชัดเจนให้ถามกลับทีละคำถาม และห้ามอ้างว่าทำสิ่งที่ไม่ได้ทำจริง"
+];
+
+export function coreInstructionsFor(identity: AssistantIdentity = "delluna"): readonly string[] {
+  return identity === "javis" ? JAVIS_CORE_INSTRUCTIONS : CORE_INSTRUCTIONS;
+}
 
 /**
  * วิธีที่ AI ค้นเว็บได้ในคำขอหนึ่ง
@@ -169,6 +189,18 @@ export const PROJECT_HUB_INSTRUCTIONS = [
 
 export const MEETING_HISTORY_INSTRUCTIONS = `ผู้ใช้มีคลังประวัติสรุปการประชุมย้อนหลังเก็บอยู่ในเครื่อง เมื่อผู้ใช้ถามถึงการประชุมครั้งก่อน งานที่มอบหมาย หรือสิ่งที่คุยกันในการประชุมที่ผ่านมา ให้เรียกเครื่องมือ ${SEARCH_MEETING_HISTORY_TOOL} ทันทีโดยไม่ต้องพูดนำ`;
 
+export const OPEN_APP_INSTRUCTIONS = [
+  `เมื่อผู้ใช้สั่งให้เปิดโปรแกรมในคอมพิวเตอร์หรือเปิดแอปในมือถือ (เช่น Chrome, VS Code, Notepad, Calculator, Excel, Word, LINE, Spotify, Terminal, Settings) ให้เรียกเครื่องมือ ${OPEN_APP_TOOL} ทันทีเพื่อให้ผู้ใช้เห็นการ์ดยืนยันก่อนเปิดจริง`,
+  `ห้ามบอกว่าเปิดโปรแกรมให้แล้วถ้าไม่ได้เรียก ${OPEN_APP_TOOL}`
+].join(" ");
+
+export const WORKSPACE_INSTRUCTIONS = [
+  `คุณเชื่อมต่อกับ Gmail, Google Calendar และ Note/Google Tasks สำหรับบัญชี Lighting6647@gmail.com ผ่านเครื่องมือ ${CHECK_EMAILS_TOOL}, ${MANAGE_CALENDAR_TOOL} และ ${MANAGE_NOTES_TOOL}`,
+  `เมื่อผู้ใช้สั่งให้เช็คเมล อ่านเมลสำคัญ หรือถามว่ามีอีเมลเข้าไหม ให้เรียก ${CHECK_EMAILS_TOOL} ทันทีโดยไม่ต้องพูดนำ`,
+  `เมื่อผู้ใช้ถามตารางนัดหมายหรือสั่งบันทึกนัดหมายลงปฏิทิน ให้เรียก ${MANAGE_CALENDAR_TOOL} ทันที (คำนวณวันเวลาเป็น ISO 8601 โซน +07:00 จากวันที่ปัจจุบัน)`,
+  `เมื่อผู้ใช้สั่งจดโน้ต บันทึกช่วยจำ หรือขอดูโน้ตที่จดไว้ ให้เรียก ${MANAGE_NOTES_TOOL} ทันที ห้ามแกล้งตอบว่าบันทึกแล้วถ้าไม่ได้เรียกเครื่องมือ`
+].join(" ");
+
 export const THAI_WEEKDAYS = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
 export const THAI_MONTHS = [
   "มกราคม",
@@ -220,15 +252,18 @@ export function buildInstructionParts(
   webSearch: boolean | WebSearchAccess = true,
   today?: string,
   screen?: string,
-  hasMeetingHistory = false
+  hasMeetingHistory = false,
+  identity: AssistantIdentity = "delluna"
 ): InstructionParts {
   const access: WebSearchAccess = webSearch === true ? "builtin" : webSearch === false ? "none" : webSearch;
   const system = [
-    ...CORE_INSTRUCTIONS,
+    ...coreInstructionsFor(identity),
     ...SEARCH_INSTRUCTIONS[access],
     ...OPEN_PAGE_INSTRUCTIONS,
     READ_PAGE_TOOL ? READ_PAGE_INSTRUCTIONS : "",
+    OPEN_APP_INSTRUCTIONS,
     PROJECT_HUB_INSTRUCTIONS,
+    WORKSPACE_INSTRUCTIONS,
     ...(hasMeetingHistory ? [MEETING_HISTORY_INSTRUCTIONS] : [])
   ].filter(Boolean);
   const personal: string[] = [];
@@ -263,9 +298,10 @@ export function buildInstructions(
   webSearch: boolean | WebSearchAccess = true,
   today?: string,
   screen?: string,
-  hasMeetingHistory = false
+  hasMeetingHistory = false,
+  identity: AssistantIdentity = "delluna"
 ): string {
-  const { fixed, personal } = buildInstructionParts(page, memories, webSearch, today, screen, hasMeetingHistory);
+  const { fixed, personal } = buildInstructionParts(page, memories, webSearch, today, screen, hasMeetingHistory, identity);
   return `${fixed}\n\n${personal}`;
 }
 
