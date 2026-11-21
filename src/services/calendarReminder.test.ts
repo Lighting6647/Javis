@@ -35,6 +35,6 @@ describe("findDueCalendarReminders", () => {
     expect(dueLuna[0]?.spokenText).toContain("ประชุมทีม AI");
 
     const dueJavis = findDueCalendarReminders(events, now, new Set(["ev-reminded"]), "javis");
-    expect(dueJavis[0]?.spokenText).toContain("แจ้งเตือนนัดหมายครับ");
+    expect(dueJavis[0]?.spokenText).toContain("แจ้งเตือนนัดหมายค่ะ");
   });
 });

@@ -1,11 +1,23 @@
-import { aiAccount, describeAccountCheck, runAccountCheck } from "./aiAccount.js";
+import { type AccountCheckResult, aiAccount, describeAccountCheck, runAccountCheck } from "./aiAccount.js";
 import type { AiProvider } from "./aiProvider.js";
 import { createClaudeAccountProbe } from "./claudeClient.js";
+import { claudeCodeSdkInstalled } from "./claudeCode.js";
 import { config } from "./config.js";
 
 let running: Promise<void> | null = null;
 
-function probeProvider(ai: AiProvider) {
+/**
+ * Claude Code บนเครื่องนี้ไม่มีกุญแจและเครดิตให้ตรวจ ตรวจได้แค่ว่าติดตั้ง SDK แล้ว (ไม่ส่งคำถามจริง จึงไม่ใช้โควตา)
+ * ยังไม่ได้ติดตั้ง = รายงานว่าโมเดลใช้ไม่ได้ ซึ่งทำให้สลับไปรายที่มีกุญแจตั้งแต่เริ่มเซิร์ฟเวอร์ ถ้ามี
+ */
+async function probeClaudeCode(): Promise<AccountCheckResult> {
+  const installed = await claudeCodeSdkInstalled();
+  if (!installed) console.warn("ผู้ให้บริการ claude-code: ยังไม่ได้ติดตั้ง @anthropic-ai/claude-agent-sdk ให้รัน npm install @anthropic-ai/claude-agent-sdk");
+  return { chat: installed ? "ok" : "model", transcribe: "unsupported", credits: "skipped", retiring: [] };
+}
+
+function probeProvider(ai: AiProvider): Promise<AccountCheckResult> {
+  if (ai.apiStyle === "claude-code") return probeClaudeCode();
   return runAccountCheck({
     baseUrl: ai.baseUrl,
     apiKey: ai.apiKey,
@@ -23,7 +35,8 @@ function probeProvider(ai: AiProvider) {
 
 function buildSettingsReport(ai: AiProvider) {
   return {
-    hasApiKey: Boolean(ai.apiKey),
+    // Claude Code ไม่ใช้กุญแจ จึงไม่ต้องเตือนว่ายังไม่ได้ตั้งกุญแจ
+    hasApiKey: Boolean(ai.apiKey) || ai.apiStyle === "claude-code",
     chatModel: ai.chatModel,
     transcribeModel: ai.transcribeModel,
     keyVariable: ai.keyVariable,

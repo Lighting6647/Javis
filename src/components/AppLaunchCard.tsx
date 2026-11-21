@@ -16,7 +16,7 @@ export function AppLaunchCard({ proposal, onConfirm, onCancel }: AppLaunchCardPr
         <strong>ยืนยันการเปิดโปรแกรม: {proposal.appName}</strong>
       </div>
 
-      <p>{proposal.reason || `เดลลูน่ากำลังจะเปิดโปรแกรม ${proposal.appName} ให้ค่ะ`}</p>
+      <p>{proposal.reason || `ลูน่ากำลังจะเปิดโปรแกรม ${proposal.appName} ให้ค่ะ`}</p>
       <p>เฉพาะโปรแกรมที่อนุญาตในระบบเท่านั้น พูดว่า &quot;ยืนยัน&quot; หรือ &quot;ยกเลิก&quot; ก็ได้ค่ะ</p>
 
       <div className="fill-card-actions">

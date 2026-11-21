@@ -120,7 +120,7 @@ export async function runProjectAction(
       projectId: project.id,
       projectName: project.name,
       durationMs: Date.now() - started,
-      summary: `คำสั่ง ${action} รันได้เฉพาะในโหมด Local/Desktop บนเครื่องของคุณไลท์ครับ (ตอนนี้เซิร์ฟเวอร์ทำงานบน Cloud)`
+      summary: `คำสั่ง ${action} รันได้เฉพาะในโหมด Local/Desktop บนเครื่องของคุณไลท์ค่ะ (ตอนนี้เซิร์ฟเวอร์ทำงานบน Cloud)`
     };
   }
 
@@ -132,7 +132,7 @@ export async function runProjectAction(
       projectId: project.id,
       projectName: project.name,
       durationMs: Date.now() - started,
-      summary: `ไม่พบโฟลเดอร์ของโปรเจกต์ ${project.name} ในเครื่องครับ`
+      summary: `ไม่พบโฟลเดอร์ของโปรเจกต์ ${project.name} ในเครื่องค่ะ`
     };
   }
 
@@ -143,7 +143,7 @@ export async function runProjectAction(
       projectId: project.id,
       projectName: project.name,
       durationMs: Date.now() - started,
-      summary: `โปรเจกต์ ${project.name} ไม่มีสคริปต์ "${action}" ใน package.json ครับ`
+      summary: `โปรเจกต์ ${project.name} ไม่มีสคริปต์ "${action}" ใน package.json ค่ะ`
     };
   }
 
@@ -157,7 +157,7 @@ export async function runProjectAction(
     durationMs: Date.now() - started,
     summary:
       result.code === 0
-        ? `รัน ${action} ของโปรเจกต์ ${project.name} ผ่านเรียบร้อยครับ`
+        ? `รัน ${action} ของโปรเจกต์ ${project.name} ผ่านเรียบร้อยค่ะ`
         : `รัน ${action} ของโปรเจกต์ ${project.name} ไม่ผ่าน (exit ${result.code})`,
     output: result.output
   };

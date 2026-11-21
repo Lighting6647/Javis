@@ -30,7 +30,7 @@ import {
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
 import { pickThaiFiller } from "./conversation/fillers";
-import { PHASE_LABEL } from "./conversation/messages";
+import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useCalendarReminder } from "./hooks/useCalendarReminder";
@@ -91,7 +91,7 @@ export default function App() {
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
+  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -165,7 +165,9 @@ export default function App() {
         ? "AI ใช้งานไม่ได้"
         : micOff
           ? "ไมโครโฟนปิดอยู่"
-          : PHASE_LABEL[phase];
+          : phase === "listening" && wake === "waiting"
+            ? WAITING_FOR_WAKE_LABEL
+            : PHASE_LABEL[phase];
   const platformLabel = desktop ? "แอปเดสก์ท็อป" : Capacitor.isNativePlatform() ? "แอปมือถือ" : "เว็บ";
   const cloudVoiceStatus = useCloudVoiceStatus(synthesizer);
   const assistantIdentity = resolveAssistantIdentity(cloudVoiceStatus);
@@ -275,7 +277,7 @@ export default function App() {
       lines.push(`ความจำที่บันทึกไว้: ${memories.slice(-3).map((m) => m.text).join(" / ")}`);
     }
     if (lastReply) {
-      lines.push(`คำตอบล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
+      lines.push(`คำตอบล่าสุดจาก ลูน่า: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
   }, [ready, showingWeb, showingProjects, showingRouter, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
@@ -356,7 +358,7 @@ export default function App() {
       pendingCaptureRef.current = captured;
       setPendingCapture(captured);
     } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : "ไม่สามารถจับภาพหน้าจอได้ครับ");
+      setCaptureError(error instanceof Error ? error.message : "ไม่สามารถจับภาพหน้าจอได้ค่ะ");
     } finally {
       setCapturingScreen(false);
     }
@@ -696,9 +698,9 @@ export default function App() {
       )}
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>JR</span>
+          <span className="brand-mark" aria-hidden>LU</span>
           <div className="brand-title">
-            <strong>J.A.R.V.I.S.</strong>
+            <strong>LUNA</strong>
             <span className="brand-sub">CENTRAL VOICE STUDIO</span>
           </div>
           {ready && !aiDown && (
@@ -795,7 +797,7 @@ export default function App() {
               className="meeting-entry"
               onClick={meeting.begin}
               aria-label="เริ่มโหมดสรุปการประชุม"
-              title="โหมดสรุปการประชุม: Javis ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
+              title="โหมดสรุปการประชุม: ลูน่า ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
             >
               <NotebookPen size={16} aria-hidden />
               <span>ประชุม</span>
@@ -855,7 +857,7 @@ export default function App() {
                     text: next
                       ? active
                         ? "เปิดโหมดตบมือแล้ว (จะทำงานเมื่อปิดไมโครโฟนพักอยู่)"
-                        : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสแล้ว"
+                        : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกลูน่าแล้ว"
                       : "ปิดโหมดตบมือปลุกแล้ว"
                   });
                   return next;
@@ -863,7 +865,7 @@ export default function App() {
               }}
               aria-pressed={clapEnabled}
               aria-label="ตบมือปลุก"
-              title={clapEnabled ? "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสอยู่ แตะเพื่อปิด" : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิส"}
+              title={clapEnabled ? "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกลูน่าอยู่ แตะเพื่อปิด" : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกลูน่า"}
             >
               <Sparkles size={16} aria-hidden />
               <span>ตบมือ</span>
@@ -875,7 +877,7 @@ export default function App() {
               className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
-              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ Javis จดจำและใช้เสียงนี้พูดตอบกลับ"
+              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ ลูน่า จดจำและใช้เสียงนี้พูดตอบกลับ"
             >
               <AudioLines size={16} aria-hidden />
               <span>บันทึกเสียง</span>
@@ -893,7 +895,7 @@ export default function App() {
               onClick={micOn ? handsFree.disable : handsFree.enable}
               aria-pressed={micOn}
               aria-label="ไมโครโฟนฟังตลอดเวลา"
-              title={micOn ? "ไมโครโฟนเปิดอยู่ Javis ฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้ Javis ฟังตลอดเวลา"}
+              title={micOn ? "ไมโครโฟนเปิดอยู่ ลูน่า ฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้ ลูน่า ฟังตลอดเวลา"}
             >
               {micOn ? <Mic size={17} aria-hidden /> : <MicOff size={17} aria-hidden />}
             </button>
@@ -925,6 +927,7 @@ export default function App() {
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
           thinkHard={thinkHard}
+          waitingForWake={!meetingStatus && phase === "listening" && wake === "waiting"}
         />
       )}
 
@@ -1045,7 +1048,7 @@ export default function App() {
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img
                 src={`data:${shownCapture.mimeType};base64,${shownCapture.data}`}
-                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ Javis วิเคราะห์"
+                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ ลูน่า วิเคราะห์"
                 className="capture-preview-thumb"
               />
               <div className="capture-preview-meta">
@@ -1098,12 +1101,12 @@ export default function App() {
           )}
           {elsewhereHint && (
             <div className="toast info" role="status">
-              Jarvis กำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
+              ลูน่ากำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
             </div>
           )}
           {speechHint && (
             <div className="toast info" role="status">
-              เบราว์เซอร์ยังไม่ให้ Jarvis พูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
+              เบราว์เซอร์ยังไม่ให้ลูน่าพูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
             </div>
           )}
           {heard && (

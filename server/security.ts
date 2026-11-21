@@ -131,7 +131,7 @@ export const speechRateLimiter = rateLimit({
     return typeof userName === "string" ? `speech:user:${userName}` : `speech:${ipKeyGenerator(request.ip ?? "")}`;
   },
   handler: (_request, response) => {
-    response.status(429).json({ error: "ขอเสียงพูดถี่เกินไป Javis ใช้เสียงในอุปกรณ์แทนไปก่อน", code: "rate" });
+    response.status(429).json({ error: "ขอเสียงพูดถี่เกินไป ลูน่า ใช้เสียงในอุปกรณ์แทนไปก่อน", code: "rate" });
   }
 });
 

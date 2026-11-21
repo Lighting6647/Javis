@@ -26,7 +26,7 @@ export function canCaptureScreen(): boolean {
 }
 
 const SCREEN_CAPTURE_VOICE_PATTERN =
-  /^(?:เดลลูน่า|เดลูนา|delluna|deluna|นีน่า|nina|จาวิส|javis)?\s*(?:ช่วย)?(?:ส่อง|ดู|จับภาพ|แคป)(?:หน้าจอ(?:อื่น|นี้)?|โปรแกรม(?:อื่น|ที่เปิดอยู่)?|แท็บอื่น)(?:ให้หน่อย|ให้ที|หน่อย|ที|ให้ดูหน่อย)?$/i;
+  /^(?:ลูน่า|ลูนา|luna|เดลลูน่า|เดลูนา|delluna|deluna|นีน่า|nina|จาวิส|javis)?\s*(?:ช่วย)?(?:ส่อง|ดู|จับภาพ|แคป)(?:หน้าจอ(?:อื่น|นี้)?|โปรแกรม(?:อื่น|ที่เปิดอยู่)?|แท็บอื่น)(?:ให้หน่อย|ให้ที|หน่อย|ที|ให้ดูหน่อย)?$/i;
 
 /** ตรวจว่าคำพูดหรือข้อความนี้เป็นคำสั่งให้เปิดหน้าต่างเลือกจับภาพหน้าจอหรือโปรแกรมอื่นหรือไม่ */
 export function isScreenCaptureVoiceCommand(text: string): boolean {
@@ -50,7 +50,7 @@ export function fitCaptureDimensions(width: number, height: number, maxDimension
 function stripDataUrlPrefix(dataUrl: string): { mimeType: CapturedImageMimeType; data: string } {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
   if (!match) {
-    throw new Error("ไม่สามารถแปลงภาพหน้าจอเป็นข้อมูลส่งให้ AI ได้ครับ");
+    throw new Error("ไม่สามารถแปลงภาพหน้าจอเป็นข้อมูลส่งให้ AI ได้ค่ะ");
   }
   return {
     mimeType: match[1] as CapturedImageMimeType,
@@ -65,7 +65,7 @@ export function encodeCanvasFrame(canvas: HTMLCanvasElement): CapturedScreenImag
     encoded = stripDataUrlPrefix(canvas.toDataURL("image/jpeg", FALLBACK_JPEG_QUALITY));
   }
   if (encoded.data.length > HARD_MAX_BASE64_CHARS) {
-    throw new Error("ภาพหน้าจอมีขนาดใหญ่เกินไป ลองเลือกเฉพาะหน้าต่างโปรแกรมหรือแท็บแทนทั้งหน้าจอครับ");
+    throw new Error("ภาพหน้าจอมีขนาดใหญ่เกินไป ลองเลือกเฉพาะหน้าต่างโปรแกรมหรือแท็บแทนทั้งหน้าจอค่ะ");
   }
   return {
     mimeType: encoded.mimeType,
@@ -88,7 +88,7 @@ function waitForFirstFrame(video: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
       cleanup();
-      reject(new Error("ไม่สามารถอ่านภาพจากหน้าจอที่เลือกได้ทันเวลาครับ"));
+      reject(new Error("ไม่สามารถอ่านภาพจากหน้าจอที่เลือกได้ทันเวลาค่ะ"));
     }, VIDEO_READY_TIMEOUT_MS);
 
     const onReady = () => {
@@ -99,7 +99,7 @@ function waitForFirstFrame(video: HTMLVideoElement): Promise<void> {
     };
     const onError = () => {
       cleanup();
-      reject(new Error("เกิดข้อผิดพลาดระหว่างอ่านภาพหน้าจอครับ"));
+      reject(new Error("เกิดข้อผิดพลาดระหว่างอ่านภาพหน้าจอค่ะ"));
     };
 
     const cleanup = () => {
@@ -123,7 +123,7 @@ function waitForFirstFrame(video: HTMLVideoElement): Promise<void> {
  */
 export async function captureScreenImage(): Promise<CapturedScreenImage | null> {
   if (!canCaptureScreen()) {
-    throw new Error("เบราว์เซอร์หรืออุปกรณ์นี้ยังไม่รองรับการจับภาพหน้าจอครับ");
+    throw new Error("เบราว์เซอร์หรืออุปกรณ์นี้ยังไม่รองรับการจับภาพหน้าจอค่ะ");
   }
 
   let stream: MediaStream;
@@ -134,7 +134,7 @@ export async function captureScreenImage(): Promise<CapturedScreenImage | null> 
     });
   } catch (error) {
     if (isUserCanceledCapture(error)) return null;
-    throw new Error("ไม่สามารถเปิดหน้าต่างเลือกหน้าจอได้ กรุณาตรวจสอบสิทธิ์ของเบราว์เซอร์ครับ", { cause: error });
+    throw new Error("ไม่สามารถเปิดหน้าต่างเลือกหน้าจอได้ กรุณาตรวจสอบสิทธิ์ของเบราว์เซอร์ค่ะ", { cause: error });
   }
 
   const video = document.createElement("video");
@@ -155,7 +155,7 @@ export async function captureScreenImage(): Promise<CapturedScreenImage | null> 
 
     const context = canvas.getContext("2d");
     if (!context) {
-      throw new Error("เบราว์เซอร์ไม่รองรับการวาดภาพหน้าจอเพื่อวิเคราะห์ครับ");
+      throw new Error("เบราว์เซอร์ไม่รองรับการวาดภาพหน้าจอเพื่อวิเคราะห์ค่ะ");
     }
     context.drawImage(video, 0, 0, width, height);
     return encodeCanvasFrame(canvas);

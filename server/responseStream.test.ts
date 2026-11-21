@@ -137,7 +137,7 @@ describe("createResponseReducer", () => {
 
   it("สั่งเปิดหน้าเว็บให้อัตโนมัติเมื่อไม่ได้อ่านเนื้อหาเว็บมาก่อน และเติมคำพูดถ้า AI ไม่ได้พูดอะไร", () => {
     expect(run([openCall({ url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก" })])).toEqual([
-      { type: "delta", text: "ได้เลยครับ นี่คือหน้า ผลค้นหา ก ครับ" },
+      { type: "delta", text: "เปิดให้แล้วค่ะ นี่คือหน้า ผลค้นหา ก ค่ะ" },
       { type: "open", url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก", auto: true }
     ]);
   });
@@ -203,7 +203,7 @@ describe("createResponseReducer", () => {
       "https://www.bing.com/search?q=&form=QBLH",
       "https://duckduckgo.com/?q="
     ])("ไม่เปิด %s แต่ถามเรื่องที่จะค้นแทน", (url) => {
-      expect(run([openCall({ url, title: "ผลค้นหา" })])).toEqual([{ type: "delta", text: "ต้องการให้ค้นหาเรื่องอะไรดีครับ" }]);
+      expect(run([openCall({ url, title: "ผลค้นหา" })])).toEqual([{ type: "delta", text: "อยากให้ค้นหาเรื่องอะไรดีคะ" }]);
     });
 
     it("AI พูดเองแล้ว: ไม่เปิดหน้าเปล่า และไม่ถามซ้ำ", () => {
@@ -229,7 +229,7 @@ describe("createResponseReducer", () => {
       ]);
 
       expect(events).toEqual([
-        { type: "delta", text: "ได้เลยครับ นี่คือหน้า ผลค้นหา ก ครับ" },
+        { type: "delta", text: "เปิดให้แล้วค่ะ นี่คือหน้า ผลค้นหา ก ค่ะ" },
         { type: "open", url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก", auto: true }
       ]);
     });
@@ -322,7 +322,7 @@ describe("createResponseReducer", () => {
       ]);
 
       expect(events).toEqual([
-        { type: "delta", text: "เตรียมข้อมูลไว้ให้แล้วครับ ตรวจรายการแล้วกดยืนยันเพื่อกรอกได้เลย" },
+        { type: "delta", text: "เตรียมข้อมูลไว้ให้แล้วค่ะ ตรวจรายการแล้วกดยืนยันเพื่อกรอกได้เลยนะคะ" },
         {
           type: "fill",
           fields: [
@@ -406,7 +406,7 @@ describe("createResponseReducer", () => {
       expect(events).toEqual([{ type: "memory", added: ["ทำงานที่คลินิก เฟิร์น"], removed: [] }]);
       expect(reducer.needsFollowUp).toBe(true);
       expect(reducer.memoryCalls).toMatchObject([{ name: REMEMBER_TOOL, output: "บันทึกแล้ว" }]);
-      expect(reducer.memoryFallbackText).toBe("จำไว้แล้วครับ");
+      expect(reducer.memoryFallbackText).toBe("จำไว้แล้วค่ะ");
     });
 
     it("ไม่ต้องขอตอบต่อเมื่อ AI พูดไปแล้ว", () => {
@@ -427,7 +427,7 @@ describe("createResponseReducer", () => {
 
       expect(events).toEqual([]);
       expect(reducer.memoryCalls[0]?.output).toContain("ข้อมูลอ่อนไหว");
-      expect(reducer.memoryFallbackText).toBe("เรื่องนี้ผมไม่ได้บันทึกไว้ครับ");
+      expect(reducer.memoryFallbackText).toBe("เรื่องนี้ลูน่าไม่ได้บันทึกไว้ค่ะ");
     });
 
     it("จำเบอร์โทรศัพท์ได้ เพราะไม่ใช่เลขบัตรหรือเลขประจำตัว", () => {
@@ -484,7 +484,7 @@ describe("createResponseReducer", () => {
 
       expect(events).toEqual([{ type: "memory", added: [], removed: ["m2"] }]);
       expect(reducer.memoryCalls.map((call) => call.output)).toEqual(["ลบแล้ว", "ลบแล้ว", "ไม่พบความจำนี้", "ไม่พบความจำนี้"]);
-      expect(reducer.memoryFallbackText).toBe("ลืมเรื่องนั้นให้แล้วครับ");
+      expect(reducer.memoryFallbackText).toBe("ลืมเรื่องนั้นให้แล้วค่ะ");
     });
 
     it("ไม่นับการเรียกเดิมซ้ำเมื่อมาอีกครั้งในเหตุการณ์จบ", () => {

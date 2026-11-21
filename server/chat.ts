@@ -3,6 +3,7 @@ import { aiAccount } from "./aiAccount.js";
 import { CLAUDE_EFFORTS } from "./aiProvider.js";
 import { createChatCompletionsTranslator, type ImageAttachment, memoryFollowUpNote, toChatCompletionsRequest, traceChatStream } from "./chatCompletions.js";
 import { startClaudeReply } from "./claudeClient.js";
+import { startClaudeCodeReply } from "./claudeCode.js";
 import { memoryOperatorNote } from "./claudeMessages.js";
 import { config } from "./config.js";
 import { isDiagnosticToken } from "./diagnostics.js";
@@ -50,6 +51,7 @@ import {
   buildInstructionParts,
   buildInstructions,
   buildSearchStepInstructions,
+  buildClaudeCodeInstructions,
   memoryNoteOf,
   buildSearchAnswerInstructions,
   buildSearchUnavailableInstructions
@@ -139,7 +141,7 @@ const hasAnswerText = (event: unknown): boolean =>
 const textDelta = (text: string) => ({ type: "response.output_text.delta", delta: text });
 
 /** บอกผู้ใช้เมื่อขั้นค้นเว็บไม่ได้คำตอบกลับมาเลย แทนการส่งคำตอบว่าง */
-const SEARCH_FAILED_TEXT = "ขออภัยครับ ผมค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ";
+const SEARCH_FAILED_TEXT = "ขออภัยค่ะ ลูน่าค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งค่ะ";
 
 /*
  * ช่องวินิจฉัยของผู้ดูแล (server/diagnostics.ts): คำขอที่แนบรหัส (diagnose) ที่ถูกต้อง จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
@@ -200,8 +202,9 @@ interface ReplyOptions {
  */
 export const chatHandler: RequestHandler = async (request, response, next) => {
   const ai = config.ai;
-  const { apiKey } = ai;
-  if (!apiKey) {
+  // Claude Code ใช้บัญชีที่ล็อกอินไว้บนเครื่อง ไม่มีกุญแจ
+  const apiKey = ai.apiKey ?? "";
+  if (!apiKey && ai.apiStyle !== "claude-code") {
     // เป็นเรื่องการตั้งค่าของผู้ดูแล ไม่ใช่ข้อผิดพลาดภายในของเซิร์ฟเวอร์ จึงตอบ 503 เหมือนการตั้งค่าอื่นที่ยังไม่ครบ
     response.status(503).json({ error: "เซิร์ฟเวอร์ยังไม่ได้ตั้งค่ากุญแจของบริการ AI กรุณาแจ้งผู้ดูแลระบบ" });
     return;
@@ -364,6 +367,22 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     const turns = input as Array<{ role: string; content: string }>;
     /** คำอธิบายคำขอนี้ในช่องวินิจฉัย */
     const target = `${ai.apiStyle} ${routedModel} search=${searchTool} tools=${options.tools} extras=${options.extras}`;
+
+    if (ai.apiStyle === "claude-code") {
+      return tracked(target, () =>
+        startClaudeCodeReply({
+          model: routedModel,
+          effort: options.extras ? CLAUDE_EFFORTS.find((effort) => effort === effectiveReasoningEffort) : undefined,
+          instructions:
+            options.instructions ??
+            buildClaudeCodeInstructions(memories, describeToday(), options.webSearch, assistantIdentity, page, screen),
+          messages: turns,
+          webSearch: options.webSearch,
+          signal,
+          timeoutMs: UPSTREAM_TIMEOUT_MS
+        })
+      );
+    }
 
     if (ai.apiStyle === "claude") {
       // คำสั่งที่ใช้แทนชุดปกติ (การสรุปการประชุม) ไม่มีส่วนเฉพาะตัวผู้ใช้ แต่ Claude ไม่รับส่วนที่ว่างเปล่า
@@ -547,7 +566,9 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   if (!reply.ok) {
     const { codes, logDetail } = reply.rejection;
     const failure = describeUpstreamFailure("chat", reply.status, codes);
-    if (failure.reason === "quota" && config.fallbackAi.length > 0 && !response.headersSent) {
+    // Claude Code บนเครื่องนี้ใช้ไม่ได้ (ยังไม่ได้ติดตั้ง SDK ยังไม่ได้ล็อกอิน หรือโควตาของแพ็กเกจเต็ม): สลับไปรายที่มีกุญแจเช่นกัน
+    const switchable = failure.reason === "quota" || (ai.apiStyle === "claude-code" && failure.reason !== "busy");
+    if (switchable && config.fallbackAi.length > 0 && !response.headersSent) {
       const nextProvider = config.fallbackAi.shift();
       if (nextProvider?.apiKey) {
         config.ai = nextProvider;
@@ -791,7 +812,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     });
 
     if (!outcome.ok) {
-      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยครับ ผมอ่านหน้าเว็บนี้ไม่ได้ (${outcome.detail})`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยค่ะ ลูน่าอ่านหน้าเว็บนี้ไม่ได้ (${outcome.detail})`));
       return;
     }
 
@@ -828,7 +849,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
         annotation: { type: "url_citation", url: outcome.url, title: outcome.title }
       });
     } else {
-      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยครับ ผมสรุปเนื้อหาจากหน้าเว็บนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยค่ะ ลูน่าสรุปเนื้อหาจากหน้าเว็บนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง`));
     }
   };
 
@@ -901,7 +922,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       });
     }
     if (!answered) {
-      forward(textDelta(`${spokeBefore ? " " : ""}ตอนนี้มี ${targets.length} โปรเจกต์ในระบบ (${listing.mode}) ครับ`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ตอนนี้มี ${targets.length} โปรเจกต์ในระบบ (${listing.mode}) ค่ะ`));
     }
   };
 
@@ -1155,7 +1176,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       if (event.type === "project_action" && projectListing) {
         const matched = findProject(event.proposal.projectId, projectListing.projects);
         if (!matched) {
-          send({ type: "delta", text: " ขออภัยครับ ไม่พบโปรเจกต์ที่ระบุในรายการโปรเจกต์ที่อนุญาตครับ" });
+          send({ type: "delta", text: " ขออภัยค่ะ ไม่พบโปรเจกต์ที่ระบุในรายการโปรเจกต์ที่อนุญาตค่ะ" });
           continue;
         }
         send({

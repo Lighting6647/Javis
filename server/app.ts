@@ -162,14 +162,14 @@ export function createApp(options: AppOptions = {}): Express {
     const id = typeof rawId === "string" ? rawId : "";
     const parsedDecision = z.object({ decision: z.enum(["approved", "rejected"]) }).safeParse(request.body);
     if (!/^rev_[a-zA-Z0-9-]{4,32}$/.test(id) || !parsedDecision.success) {
-      response.status(400).json({ ok: false, error: "ข้อมูลคำขออนุมัติไม่ถูกต้องครับ" });
+      response.status(400).json({ ok: false, error: "ข้อมูลคำขออนุมัติไม่ถูกต้องค่ะ" });
       return;
     }
     await routerPersistence.load(true);
     const updated = resolveReviewItem(id, parsedDecision.data.decision);
     if (updated) await routerPersistence.save();
     if (!updated) {
-      response.status(404).json({ ok: false, error: "ไม่พบรายการในคิวตรวจสอบครับ" });
+      response.status(404).json({ ok: false, error: "ไม่พบรายการในคิวตรวจสอบค่ะ" });
       return;
     }
     response.json({ ok: true, item: updated, telemetry: getJevTelemetry() });
@@ -208,7 +208,7 @@ export function createApp(options: AppOptions = {}): Express {
     const listing = await listProjects();
     const project = findProject(String(request.params.id ?? ""), listing.projects);
     if (!project) {
-      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนครับ" });
+      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนค่ะ" });
       return;
     }
     const cloud = project.githubRepo || project.vercelProject ? await fetchProjectCloudStatus(project) : null;
@@ -228,7 +228,7 @@ export function createApp(options: AppOptions = {}): Express {
     const listing = await listProjects();
     const project = findProject(String(request.params.id ?? ""), listing.projects);
     if (!project) {
-      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนครับ" });
+      response.status(404).json({ ok: false, error: "ไม่พบโปรเจกต์นี้ในทะเบียนค่ะ" });
       return;
     }
     const result = await runProjectAction(project, parsedBody.data.action, { rootDir: listing.rootDir });

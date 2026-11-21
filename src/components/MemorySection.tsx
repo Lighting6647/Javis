@@ -18,7 +18,7 @@ export function MemorySection() {
       setDraft("");
       setHint("");
     } else {
-      setHint("เดลลูน่าจำเรื่องนี้ไว้อยู่แล้ว");
+      setHint("ลูน่าจำเรื่องนี้ไว้อยู่แล้ว");
     }
   };
 
@@ -33,16 +33,16 @@ export function MemorySection() {
 
   return (
     <div className="settings-section">
-      <h3>ความจำของเดลลูน่า</h3>
+      <h3>ความจำของลูน่า</h3>
       <p className="settings-note">
-        สิ่งที่เดลลูน่าจำเกี่ยวกับคุณ เก็บในอุปกรณ์นี้เท่านั้น และส่งไปให้ AI พร้อมคำถามเพื่อปรับคำตอบให้เข้ากับคุณ
+        สิ่งที่ลูน่าจำเกี่ยวกับคุณ เก็บในอุปกรณ์นี้เท่านั้น และส่งไปให้ AI พร้อมคำถามเพื่อปรับคำตอบให้เข้ากับคุณ
         พูดว่า "จำไว้ว่า…" หรือ "ลืมเรื่อง…" ระหว่างคุยก็ได้
       </p>
 
       {memories.length === 0 ? (
-        <p className="callout">ยังไม่มีสิ่งที่จำไว้ ลองบอกเดลลูน่าว่าอยากให้เรียกคุณว่าอะไร หรือชอบคำตอบแบบไหน</p>
+        <p className="callout">ยังไม่มีสิ่งที่จำไว้ ลองบอกลูน่าว่าอยากให้เรียกคุณว่าอะไร หรือชอบคำตอบแบบไหน</p>
       ) : (
-        <ul className="memory-list" aria-label="สิ่งที่เดลลูน่าจำไว้">
+        <ul className="memory-list" aria-label="สิ่งที่ลูน่าจำไว้">
           {memories.map((memory) => (
             <li key={memory.id}>
               <span>{memory.text}</span>
@@ -60,7 +60,7 @@ export function MemorySection() {
       )}
 
       <form className="memory-add" onSubmit={handleAdd}>
-        <label htmlFor={inputId} className="visually-hidden">เพิ่มสิ่งที่อยากให้เดลลูน่าจำ</label>
+        <label htmlFor={inputId} className="visually-hidden">เพิ่มสิ่งที่อยากให้ลูน่าจำ</label>
         <input
           id={inputId}
           value={draft}

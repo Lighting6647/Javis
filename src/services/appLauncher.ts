@@ -121,7 +121,7 @@ export async function launchAllowedApp(appId: string, appName?: string): Promise
     return {
       ok: false,
       platform: Capacitor.isNativePlatform() ? "mobile" : "web",
-      message: `โปรแกรมเฉพาะทาง ${label} เปิดได้เฉพาะบนแอปเดลลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ`
+      message: `โปรแกรมเฉพาะทาง ${label} เปิดได้เฉพาะบนแอปลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ`
     };
   }
 
@@ -166,6 +166,6 @@ export async function launchAllowedApp(appId: string, appName?: string): Promise
   return {
     ok: false,
     platform: "web",
-    message: `การเปิดโปรแกรม ${label} ในเครื่อง ต้องใช้งานผ่านแอปเดลลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ`
+    message: `การเปิดโปรแกรม ${label} ในเครื่อง ต้องใช้งานผ่านแอปลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ`
   };
 }

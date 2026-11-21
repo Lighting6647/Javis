@@ -1,8 +1,18 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/**
+ * เพลงตอนเปิดระบบเป็นไฟล์ในเครื่องเท่านั้น (public/audio/ ไม่ถูกเก็บใน git เพราะยังไม่รู้ที่มาและลิขสิทธิ์)
+ * ไม่มีไฟล์ = ไม่เปิดเพลงและไม่ขอไฟล์นั้นเลย จึงไม่มีข้อผิดพลาด 404 บนเว็บที่ deploy
+ */
+const bootMusicAvailable = existsSync("public/audio/boot-music.mp3");
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __BOOT_MUSIC__: JSON.stringify(bootMusicAvailable)
+  },
   build: {
     // ฟอนต์ชุดอักษรเล็ก ๆ ห้ามฝังเป็น data: ใน CSS: ทำให้ CSS ที่บล็อกการแสดงผลบวม และ CSP font-src 'self' ไม่ยอมให้โหลด
     assetsInlineLimit: (filePath) => (/\.woff2?$/.test(filePath) ? false : undefined),

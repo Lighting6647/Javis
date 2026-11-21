@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { WAITING_FOR_WAKE_LABEL } from "../../conversation/messages";
 import type { Phase } from "../../conversation/types";
 import { micLevelStore } from "../../services/micLevelStore";
 import { getSessionMeter } from "../../speech/sessionMeter";
@@ -7,12 +8,15 @@ interface VoiceWaveformProps {
   phase: Phase;
   offline?: boolean;
   thinkHard?: boolean;
+  /** กำลังฟังเพื่อรอคำเรียกชื่อ */
+  waitingForWake?: boolean;
 }
 
 const BAR_WEIGHTS = [0.22, 0.34, 0.46, 0.58, 0.72, 0.86, 0.94, 1, 0.94, 0.86, 0.72, 0.58, 0.46, 0.34, 0.22];
 
-function resolveThaiPhaseLabel(phase: Phase, offline: boolean, thinkHard: boolean): string {
+function resolveThaiPhaseLabel(phase: Phase, offline: boolean, thinkHard: boolean, waitingForWake: boolean): string {
   if (offline) return "ระบบ AI ออฟไลน์";
+  if (phase === "listening" && waitingForWake) return WAITING_FOR_WAKE_LABEL;
   switch (phase) {
     case "starting":
       return "กำลังเตรียมไมโครโฟน";
@@ -32,10 +36,10 @@ function resolveThaiPhaseLabel(phase: Phase, offline: boolean, thinkHard: boolea
  * แถบคลื่นเสียงแนวนอนใต้แกนพลังงาน (Audio Waveform) พร้อมป้ายสถานะภาษาไทยล้วน
  * อ่านค่าเสียงจริงจากไมโครโฟนเมื่อกำลังฟังโดยไม่กระตุก React render
  */
-export function VoiceWaveform({ phase, offline = false, thinkHard = false }: VoiceWaveformProps) {
+export function VoiceWaveform({ phase, offline = false, thinkHard = false, waitingForWake = false }: VoiceWaveformProps) {
   const micAvailable = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
   const barsRef = useRef<HTMLDivElement>(null);
-  const label = resolveThaiPhaseLabel(phase, offline, thinkHard);
+  const label = resolveThaiPhaseLabel(phase, offline, thinkHard, waitingForWake);
 
   useEffect(() => {
     const container = barsRef.current;
@@ -62,7 +66,7 @@ export function VoiceWaveform({ phase, offline = false, thinkHard = false }: Voi
   }, [phase, micAvailable]);
 
   return (
-    <div className={`voice-waveform ${phase}${offline ? " offline" : ""}${thinkHard ? " think-hard" : ""}`} aria-hidden>
+    <div className={`voice-waveform ${phase}${waitingForWake ? " wake-waiting" : ""}${offline ? " offline" : ""}${thinkHard ? " think-hard" : ""}`} aria-hidden>
       <div className="voice-waveform-bars" ref={barsRef}>
         {BAR_WEIGHTS.map((weight, index) => {
           const heightPct = Math.round(18 + weight * (phase === "speaking" ? 74 : phase === "thinking" ? 56 : 22));

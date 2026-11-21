@@ -38,7 +38,7 @@ export function findDueCalendarReminders(
     const locationPart = event.location ? ` ที่ ${event.location}` : "";
     const spokenText =
       identity === "javis"
-        ? `แจ้งเตือนนัดหมายครับ ${timing} ${event.title}${locationPart} ครับ`
+        ? `แจ้งเตือนนัดหมายค่ะ ${timing} ${event.title}${locationPart} ค่ะ`
         : `แจ้งเตือนนัดหมายค่ะ ${timing} ${event.title}${locationPart} นะคะ`;
 
     due.push({

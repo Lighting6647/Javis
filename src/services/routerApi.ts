@@ -74,7 +74,7 @@ export interface ReviewQueueItem {
 async function handleJson<T>(response: Response, fallbackError: string): Promise<T> {
   if (response.status === 401) {
     sessionStore.clear();
-    throw new Error("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้งครับ");
+    throw new Error("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้งค่ะ");
   }
   const body = (await response.json().catch(() => null)) as (T & { ok?: boolean; error?: string }) | null;
   if (!response.ok || !body) {
@@ -92,7 +92,7 @@ export async function fetchRouterSnapshot(): Promise<{
   });
   return handleJson<{ telemetry: JevTelemetrySnapshot; items: ReviewQueueItem[] }>(
     response,
-    "ไม่สามารถโหลดข้อมูล JEV Router ได้ครับ"
+    "ไม่สามารถโหลดข้อมูล JEV Router ได้ค่ะ"
   );
 }
 
@@ -110,7 +110,7 @@ export async function classifyRouterGoal(goal: string, gapsCount = 0): Promise<{
   });
   return handleJson<{ decision: JevRouteDecision; telemetry: JevTelemetrySnapshot }>(
     response,
-    "ไม่สามารถทดสอบคัดแยกคำสั่งได้ครับ"
+    "ไม่สามารถทดสอบคัดแยกคำสั่งได้ค่ะ"
   );
 }
 
@@ -128,6 +128,6 @@ export async function decideReviewItem(
   });
   return handleJson<{ item: ReviewQueueItem; telemetry: JevTelemetrySnapshot }>(
     response,
-    "ไม่สามารถอัปเดตสถานะคิวตรวจสอบได้ครับ"
+    "ไม่สามารถอัปเดตสถานะคิวตรวจสอบได้ค่ะ"
   );
 }

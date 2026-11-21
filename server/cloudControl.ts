@@ -212,10 +212,10 @@ export async function triggerProjectRedeploy(
   const signal = combineTimeout(options.signal);
 
   if (!vercelToken) {
-    return { ok: false, detail: "ยังไม่ได้ตั้งค่า VERCEL_TOKEN บนเซิร์ฟเวอร์ จึงยังสั่ง Redeploy ออนไลน์ไม่ได้ครับ" };
+    return { ok: false, detail: "ยังไม่ได้ตั้งค่า VERCEL_TOKEN บนเซิร์ฟเวอร์ จึงยังสั่ง Redeploy ออนไลน์ไม่ได้ค่ะ" };
   }
   if (!project.vercelProject) {
-    return { ok: false, detail: `โปรเจกต์ ${project.name} ยังไม่ได้ผูกชื่อโปรเจกต์ Vercel ครับ` };
+    return { ok: false, detail: `โปรเจกต์ ${project.name} ยังไม่ได้ผูกชื่อโปรเจกต์ Vercel ค่ะ` };
   }
 
   try {
@@ -257,7 +257,7 @@ export async function triggerProjectRedeploy(
     const url = deployed.url ? `https://${deployed.url}` : undefined;
     return {
       ok: true,
-      detail: `สั่ง Redeploy โปรเจกต์ ${project.name} บน Vercel สำเร็จแล้วครับ`,
+      detail: `สั่ง Redeploy โปรเจกต์ ${project.name} บน Vercel สำเร็จแล้วค่ะ`,
       ...(url ? { url } : {}),
       ...(deployed.readyState ? { state: deployed.readyState } : {})
     };

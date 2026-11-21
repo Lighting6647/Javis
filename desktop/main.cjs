@@ -61,7 +61,7 @@ function createWindow() {
     height: 780,
     minWidth: 400,
     minHeight: 560,
-    title: "Javis",
+    title: "LUNA",
     backgroundColor: "#020b14",
     autoHideMenuBar: true,
     show: false,
@@ -282,7 +282,7 @@ function configureIpcHandlers() {
     if (!isAppUrl(senderUrl) || !Notification.isSupported()) {
       return { ok: false };
     }
-    const title = typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim().slice(0, 100) : "เดลลูน่า (DelLuna)";
+    const title = typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim().slice(0, 100) : "ลูน่า (LUNA)";
     const body = typeof rawBody === "string" ? rawBody.trim().slice(0, 300) : "";
     const notice = new Notification({ title, body });
     notice.on("click", () => {

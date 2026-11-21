@@ -100,6 +100,12 @@ export interface MeetingRecord extends MeetingTranscript {
  */
 export type Phase = "idle" | "starting" | "listening" | "thinking" | "speaking";
 
+/**
+ * คำเรียกชื่อระหว่างฟัง: ปิดอยู่ (ทุกประโยคเป็นคำสั่ง) · รอคำเรียกชื่อ (ประโยคที่ไม่ได้เรียกชื่อถูกทิ้ง)
+ * · เรียกชื่อแล้ว (ประโยคถัดไปเป็นคำสั่ง)
+ */
+export type WakeState = "off" | "waiting" | "awake";
+
 export interface Notice {
   tone: "error" | "info";
   text: string;
@@ -115,6 +121,8 @@ export interface ProjectActionProposal {
 
 export interface ConversationState {
   phase: Phase;
+  /** สถานะคำเรียกชื่อ มีความหมายเฉพาะตอน phase เป็น "listening" */
+  wake: WakeState;
   /** อยู่ในโหมดสนทนาด้วยเสียง: ตอบเสร็จแล้วจะกลับมาฟังต่อเอง */
   active: boolean;
   messages: ConversationMessage[];

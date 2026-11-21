@@ -28,7 +28,7 @@ interface VoiceDockProps {
 }
 
 const ORB_LABEL: Record<Phase, string> = {
-  idle: "เริ่มพูดสั่งงาน Jarvis",
+  idle: "เริ่มพูดสั่งงานลูน่า",
   starting: "กำลังเตรียมไมโครโฟน",
   listening: "พูดจบแล้ว ส่งคำสั่งเสียง",
   thinking: "หยุดคำตอบแล้วพูดใหม่",
@@ -36,11 +36,11 @@ const ORB_LABEL: Record<Phase, string> = {
 };
 
 const CAPTION: Record<Phase, string> = {
-  idle: "แตะไมโครโฟนเพื่อพูดสั่งงาน Jarvis",
+  idle: "แตะไมโครโฟนเพื่อพูดสั่งงานลูน่า",
   starting: "กำลังเตรียมไมโครโฟน…",
   listening: "กำลังฟังคำสั่งเสียงอยู่…",
   thinking: "กำลังคิดคำตอบ…",
-  speaking: "Jarvis กำลังตอบ แตะเพื่อพูดแทรก"
+  speaking: "ลูน่ากำลังตอบ แตะเพื่อพูดแทรก"
 };
 
 function OrbIcon({ phase }: { phase: Phase }) {
@@ -78,9 +78,9 @@ export function VoiceDock({
     phase === "thinking" && searching
       ? "กำลังค้นข้อมูลจากเว็บ…"
       : idle && alwaysOn
-        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว Javis จะฟังคำสั่งเสียงตลอดเวลา"
+        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว ลูน่าจะฟังคำสั่งเสียงตลอดเวลา"
         : CAPTION[phase];
-  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ Javis ฟังตลอดเวลา" : ORB_LABEL[phase];
+  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ ลูน่า ฟังตลอดเวลา" : ORB_LABEL[phase];
 
   return (
     <div className="dock-inner">
@@ -119,8 +119,8 @@ export function VoiceDock({
             className="dock-capture-btn"
             onClick={() => void onCaptureScreen()}
             disabled={capturingScreen}
-            aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ Javis อ่าน"
-            title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ Javis อ่าน"
+            aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ ลูน่า อ่าน"
+            title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ ลูน่า อ่าน"
           >
             <Monitor size={18} aria-hidden />
           </button>

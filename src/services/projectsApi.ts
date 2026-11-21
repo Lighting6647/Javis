@@ -73,7 +73,7 @@ export async function fetchProjects(): Promise<ProjectsListResponse> {
     throw new Error("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");
   }
   if (!response.ok) {
-    throw new Error("ไม่สามารถโหลดรายการโปรเจกต์ได้ครับ");
+    throw new Error("ไม่สามารถโหลดรายการโปรเจกต์ได้ค่ะ");
   }
   return (await response.json()) as ProjectsListResponse;
 }

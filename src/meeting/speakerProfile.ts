@@ -320,7 +320,7 @@ export const speakerProfileStore = {
     try {
       parsed = JSON.parse(rawJson);
     } catch {
-      throw new Error("รูปแบบไฟล์ JSON ไม่ถูกต้องครับ");
+      throw new Error("รูปแบบไฟล์ JSON ไม่ถูกต้องค่ะ");
     }
 
     let rawList: unknown[] = [];
@@ -347,7 +347,7 @@ export const speakerProfileStore = {
       });
 
     if (validIncoming.length === 0) {
-      throw new Error("ไม่พบข้อมูลโปรไฟล์เสียงที่ใช้งานได้ในไฟล์นี้ครับ");
+      throw new Error("ไม่พบข้อมูลโปรไฟล์เสียงที่ใช้งานได้ในไฟล์นี้ค่ะ");
     }
 
     const merged = [...currentState.profiles];

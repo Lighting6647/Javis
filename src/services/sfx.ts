@@ -64,10 +64,15 @@ export const sfx = {
   }
 };
 
+/** มีไฟล์เพลงตอนเปิดระบบในเครื่องนี้ไหม ไฟล์อยู่นอก git จึงอาจไม่มี (ดู vite.config.ts) */
+const bootMusicAvailable = typeof __BOOT_MUSIC__ !== "undefined" && __BOOT_MUSIC__;
+
+/** เปิดเพลงตอนเปิดระบบ ถ้าไม่มีไฟล์ ไม่ทำอะไรเลยและไม่ขอไฟล์ จึงไม่มีข้อผิดพลาดในคอนโซล */
 export function playBootMusic(): () => void {
-  if (typeof window === "undefined" || sfxMuted) return () => undefined;
+  if (typeof window === "undefined" || sfxMuted || !bootMusicAvailable) return () => undefined;
   const audio = new Audio("/audio/boot-music.mp3");
   audio.volume = 0.42;
+  audio.addEventListener("error", () => undefined);
   void audio.play().catch(() => undefined);
   return () => {
     audio.pause();

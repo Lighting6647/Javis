@@ -1,6 +1,7 @@
 import type { FillResult, FillValue, PageContext } from "../browser/types";
 import { thinkHardStore } from "../services/thinkHardStore";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
+import { matchWakePhrase, WAKE_WINDOW_MS, type WakeWordDetector } from "../speech/wakeWord";
 import { type FillDecision, interpretFillDecision } from "./fillDecision";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import { createSentenceChunker } from "./sentenceChunker";
@@ -16,7 +17,8 @@ import {
   type Notice,
   type PageLink,
   type SendTextOptions,
-  type StreamChat
+  type StreamChat,
+  type WakeState
 } from "./types";
 
 /** ต้องไม่เกินเพดานที่เซิร์ฟเวอร์ตรวจ (server/chat.ts) */
@@ -79,6 +81,22 @@ export interface ConversationDeps {
    * คืน true เมื่อแอปรับคำสั่งนั้นไปทำแล้ว ซึ่งบทสนทนาจะออกจากโหมดเสียง ให้โหมดนั้นใช้ไมโครโฟนต่อได้
    */
   onCommand?: (text: string) => boolean | "keep-listening";
+  /**
+   * คำเรียกชื่อ: มีผลเฉพาะโหมดฟังตลอดเวลา และเฉพาะคำพูด (ข้อความที่พิมพ์ไม่ต้องเรียกชื่อ)
+   * ระหว่างเปิดอยู่ คำพูดที่ไม่ได้เรียกชื่อถูกทิ้ง ไม่ส่งไปถาม AI
+   */
+  wake?: WakeOptions;
+}
+
+export interface WakeOptions {
+  /** คำเรียกชื่อมีผลอยู่ไหม ถูกถามทุกรอบที่ฟัง ผู้ใช้จึงเปิดปิดได้ระหว่างฟังอยู่ */
+  enabled: () => boolean;
+  /** คำเรียกชื่อที่ยอมรับ */
+  phrases: () => readonly string[];
+  /** ตัวตรวจคำเรียกชื่อจากเสียงโดยตรง (เช่น Porcupine) ถ้ามี ใช้แทนการตรวจจากข้อความ ล้มเหลวเมื่อไรกลับไปตรวจจากข้อความ */
+  detector?: WakeWordDetector;
+  /** เรียกชื่ออย่างเดียวแล้ว คำพูดถัดไปที่เริ่มภายในเวลานี้เป็นคำสั่ง (มิลลิวินาที) */
+  windowMs?: number;
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -92,6 +110,7 @@ export interface MemoryPort {
 
 const INITIAL_STATE: ConversationState = {
   phase: "idle",
+  wake: "off",
   active: false,
   messages: [],
   partial: "",
@@ -136,6 +155,12 @@ export class ConversationController {
   private quickListens = 0;
   private screenContextProvider?: () => string | null;
   private pendingImageProvider?: () => CapturedImage | null;
+  /** เรียกชื่อแล้ว คำพูดที่เริ่มก่อนเวลานี้ (นาฬิกาของตัวควบคุม) เป็นคำสั่ง */
+  private awakeUntil = 0;
+  /** ยกเลิกการรอคำเรียกชื่อจากตัวตรวจเสียง */
+  private wakeAbort: AbortController | null = null;
+  /** ตัวตรวจเสียงล้มเหลวไปแล้ว: รอบที่เหลือตรวจคำเรียกชื่อจากข้อความแทน */
+  private detectorFailed = false;
 
   constructor(private readonly deps: ConversationDeps) {}
 
@@ -331,6 +356,8 @@ export class ConversationController {
     this.epoch += 1;
     this.request?.abort();
     this.request = null;
+    this.wakeAbort?.abort();
+    this.wakeAbort = null;
     this.deps.recognizer.cancel();
     this.deps.synthesizer.cancel();
     // ผู้ใช้เปลี่ยนจังหวะก่อนถึงเวลาออกจากหน้า: ไม่พาไปแล้ว ลิงก์จึงกลับเป็นให้แตะเอง
@@ -415,23 +442,80 @@ export class ConversationController {
   private async listen(epoch: number, notice: Notice | null = null): Promise<void> {
     let pendingNotice = notice;
     for (;;) {
-      const heard = await this.listenOnce(epoch, pendingNotice);
+      if (this.wakeState() === "waiting" && !(await this.waitForWakeDetector(epoch, pendingNotice))) return;
+
+      const wake = this.wakeState();
+      const heard = await this.listenOnce(epoch, pendingNotice, wake);
       if (heard === null) return;
       if (heard) {
-        await this.handle(heard, epoch);
-        return;
+        const command = this.passWake(heard, wake);
+        if (command) {
+          this.awakeUntil = 0;
+          await this.handle(command, epoch);
+          return;
+        }
+        // เรียกชื่ออย่างเดียว: รอคำสั่งในคำพูดถัดไป
+        if (command === "") this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
+        // ไม่ได้เรียกชื่อ: ทิ้งคำพูดนั้นแล้วฟังต่อ
       }
       pendingNotice = null;
     }
+  }
+
+  /** สถานะคำเรียกชื่อของรอบฟังที่กำลังจะเริ่ม */
+  private wakeState(): WakeState {
+    const wake = this.deps.wake;
+    if (!this.deps.handsFree || !wake?.enabled()) return "off";
+    // รอคำยืนยันหรือยกเลิกอยู่: ไม่ต้องเรียกชื่อซ้ำก่อนพูดว่า "ยืนยัน"
+    if (this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch) return "awake";
+    return this.awakeUntil > this.clock() ? "awake" : "waiting";
+  }
+
+  /**
+   * ตัดสินคำพูดหนึ่งช่วงตามคำเรียกชื่อ คืนคำสั่งที่ต้องทำ, สตริงว่างเมื่อเรียกชื่ออย่างเดียว
+   * หรือ null เมื่อไม่ได้เรียกชื่อ (ทิ้งคำพูดนั้น)
+   * @param wake สถานะตอนเริ่มฟังรอบนั้น: ผู้ใช้ที่เริ่มพูดทันในช่วงเรียกชื่อแล้ว ยังนับเป็นคำสั่งแม้พูดจบหลังหมดเวลา
+   */
+  private passWake(heard: string, wake: WakeState): string | null {
+    if (wake === "off") return heard;
+    const match = matchWakePhrase(heard, this.deps.wake?.phrases() ?? []);
+    if (match) return match.command;
+    return wake === "awake" ? heard : null;
+  }
+
+  /**
+   * โหมดคำเรียกชื่อที่มีตัวตรวจเสียง: รอจนได้ยินคำเรียกชื่อก่อนเปิดระบบฟัง คืน false เมื่อรอบนี้จบไปแล้ว
+   * ไม่มีตัวตรวจ หรือตัวตรวจใช้ไม่ได้ คืน true ทันที แล้วตรวจคำเรียกชื่อจากข้อความที่ได้ยินแทน
+   */
+  private async waitForWakeDetector(epoch: number, notice: Notice | null): Promise<boolean> {
+    const detector = this.deps.wake?.detector;
+    if (!detector || this.detectorFailed) return true;
+
+    this.update({ phase: "listening", wake: "waiting", partial: "", notice });
+    const abort = new AbortController();
+    this.wakeAbort = abort;
+    try {
+      await detector.waitForWake(abort.signal);
+    } catch {
+      if (epoch !== this.epoch) return false;
+      this.detectorFailed = true;
+      return true;
+    } finally {
+      if (this.wakeAbort === abort) this.wakeAbort = null;
+    }
+    if (epoch !== this.epoch) return false;
+    this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
+    return true;
   }
 
   /**
    * ฟังหนึ่งรอบ คืนข้อความที่ได้ยิน สตริงว่างเมื่อควรฟังใหม่ (เกิดเฉพาะโหมดฟังตลอดเวลา)
    * หรือ null เมื่อการฟังจบลงแล้ว (ล้มเหลว ถูกปิด หรือผู้ใช้เปลี่ยนจังหวะไปแล้ว)
    */
-  private async listenOnce(epoch: number, notice: Notice | null): Promise<string | null> {
+  private async listenOnce(epoch: number, notice: Notice | null, wake: WakeState = "off"): Promise<string | null> {
     this.update({
       phase: "listening",
+      wake,
       partial: "",
       notice: notice ?? (this.voiceReplies ? null : { tone: "info", text: NOTICE_TEXT.noThaiVoice }),
       onDeviceListening: this.deps.recognizer.isOnDevice()
@@ -554,12 +638,12 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingProjectAction: null });
-      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วครับ` };
+      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วค่ะ` };
     }
 
     if (!this.deps.runProjectAction) {
       this.update({ pendingProjectAction: null });
-      return { tone: "error", text: "ระบบยังไม่พร้อมรันคำสั่งโปรเจกต์ครับ" };
+      return { tone: "error", text: "ระบบยังไม่พร้อมรันคำสั่งโปรเจกต์ค่ะ" };
     }
 
     this.filling = true;
@@ -579,7 +663,7 @@ export class ConversationController {
       void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
-      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
+      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จค่ะ` };
     } finally {
       this.filling = false;
     }
@@ -659,7 +743,7 @@ export class ConversationController {
     const skipped = result.missing.length > 0 ? ` อีก ${result.missing.length} ช่องกรอกไม่ได้` : "";
     return {
       tone: "info",
-      text: `กรอกให้แล้ว ${result.filled} ช่องครับ${skipped} กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง`
+      text: `กรอกให้แล้ว ${result.filled} ช่องค่ะ${skipped} กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง`
     };
   }
 

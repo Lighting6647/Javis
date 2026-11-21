@@ -448,7 +448,7 @@ describe("ทำงานร่วมกับตัวประมวลผล�
       completed("requires_action")
     ]);
     expect(sent).toEqual([
-      { type: "delta", text: "ได้เลยครับ นี่คือหน้า กรมอุตุนิยมวิทยา ครับ" },
+      { type: "delta", text: "เปิดให้แล้วค่ะ นี่คือหน้า กรมอุตุนิยมวิทยา ค่ะ" },
       { type: "open", url: "https://www.tmd.go.th/", title: "กรมอุตุนิยมวิทยา", auto: true }
     ]);
   });

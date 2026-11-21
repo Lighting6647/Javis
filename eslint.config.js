@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     // ไฟล์ที่สร้างอัตโนมัติและโปรเจกต์ native ไม่ต้องตรวจ
-    ignores: ["dist/", "node_modules/", "android/", "ios/", ".claude/", ".tmp/"]
+    ignores: ["dist/", "node_modules/", "android/", "ios/", ".claude/", ".tmp/", "jarvis-main/"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

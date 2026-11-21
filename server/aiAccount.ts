@@ -312,23 +312,23 @@ export function describeAccountCheck(
     reports.push({
       level: "error",
       message: settings.hasApiKey
-        ? `ตรวจบัญชี AI: ${keyVariable} ถูกปฏิเสธ Javis จะ${affected}ไม่ได้จนกว่าจะแก้ค่านี้`
+        ? `ตรวจบัญชี AI: ${keyVariable} ถูกปฏิเสธ ลูน่า จะ${affected}ไม่ได้จนกว่าจะแก้ค่านี้`
         : keyVariable === "OPENAI_API_KEY"
           ? // ไม่มีกุญแจของรายใดเลย: บอกทุกทาง เพราะผู้ดูแลอาจตั้งใจใช้รายอื่น เช่นรายที่มีโควตาฟรี
-            `ตรวจบัญชี AI: ยังไม่ได้ตั้งกุญแจของบริการ AI ให้ตั้ง ANTHROPIC_API_KEY (Claude), GEMINI_API_KEY (Google Gemini มีโควตาฟรี) หรือ OPENAI_API_KEY Javis จะ${affected}ไม่ได้จนกว่าจะตั้ง`
-          : `ตรวจบัญชี AI: ยังไม่ได้ตั้ง ${keyVariable} Javis จะ${affected}ไม่ได้จนกว่าจะตั้ง`
+            `ตรวจบัญชี AI: ยังไม่ได้ตั้งกุญแจของบริการ AI ให้ตั้ง ANTHROPIC_API_KEY (Claude), GEMINI_API_KEY (Google Gemini มีโควตาฟรี) หรือ OPENAI_API_KEY ลูน่า จะ${affected}ไม่ได้จนกว่าจะตั้ง`
+          : `ตรวจบัญชี AI: ยังไม่ได้ตั้ง ${keyVariable} ลูน่า จะ${affected}ไม่ได้จนกว่าจะตั้ง`
     });
   } else if (chat === "quota" || transcribe === "quota") {
     reports.push({
       level: "error",
-      message: `ตรวจบัญชี AI: เครดิตของบัญชีหมด Javis จะ${affected}ไม่ได้จนกว่าจะเติมเครดิต`
+      message: `ตรวจบัญชี AI: เครดิตของบัญชีหมด ลูน่า จะ${affected}ไม่ได้จนกว่าจะเติมเครดิต`
     });
   }
 
   if (chat === "model") {
     reports.push({
       level: "error",
-      message: `ตรวจบัญชี AI: ไม่พบโมเดลสนทนา "${settings.chatModel}" (${chatModelVariable}) Javis จะตอบไม่ได้`
+      message: `ตรวจบัญชี AI: ไม่พบโมเดลสนทนา "${settings.chatModel}" (${chatModelVariable}) ลูน่า จะตอบไม่ได้`
     });
   }
   if (transcribe === "model") {

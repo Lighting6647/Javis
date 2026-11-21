@@ -20,7 +20,7 @@ export type AssistantVoiceCommand =
   | { kind: "open-url"; url: string; reply: string }
   | { kind: "launch-custom-app"; app: CustomDesktopApp; reply: string };
 
-const WAKE_PREFIX = /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|delluna|จาวิส|javis|นีน่า|nina|โอเค\s*กูเกิล|ok\s*google|hey\s*google)\s*[,:]?\s*)?/i;
+const WAKE_PREFIX = /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|ลูนา|luna|delluna|จาวิส|javis|นีน่า|nina|โอเค\s*กูเกิล|ok\s*google|hey\s*google)\s*[,:]?\s*)?/i;
 const POLITE_SUFFIX = /(?:\s*(?:ให้หน่อย|หน่อย|ให้ฟังหน่อย|ให้ที|ด้วย|สิ|นะ|นะคะ|นะครับ|ค่ะ|ครับ))*$/i;
 
 function stripWakeAndPolite(rawText: string): string {
@@ -190,67 +190,67 @@ export function matchAssistantVoiceCommand(
     return { kind: "clear-chat", reply: "ล้างบทสนทนาและเริ่มใหม่ให้เรียบร้อยแล้วค่ะ" };
   }
   if (/^(?:เปิด|ใช้|เข้า)?(?:โหมด)?(?:คิดลึก|วิเคราะห์ละเอียด|think\s*hard)$/i.test(text)) {
-    return { kind: "think-hard", enabled: true, reply: "เปิดโหมดคิดลึกให้แล้วครับคุณไลท์" };
+    return { kind: "think-hard", enabled: true, reply: "เปิดโหมดคิดลึกให้แล้วค่ะคุณไลท์" };
   }
   if (/^(?:ปิด|ออก|เลิก)?(?:โหมด)?(?:คิดลึก|วิเคราะห์ละเอียด|think\s*hard)$|^โหมดปกติ$/i.test(text)) {
-    return { kind: "think-hard", enabled: false, reply: "สลับกลับเป็นโหมดตอบไวปกติแล้วครับคุณไลท์" };
+    return { kind: "think-hard", enabled: false, reply: "สลับกลับเป็นโหมดตอบไวปกติแล้วค่ะคุณไลท์" };
   }
 
   // เปลี่ยนสี, รูปทรงแกนพลังงาน 3 มิติ และเอฟเฟกต์หน้าจอด้วยเสียงภาษาไทย
   if (/^(?:เปลี่ยน)?(?:สี|แกน)?(?:เป็น)?สีแดง$/i.test(text)) {
-    return { kind: "hud-accent", accent: "red", reply: "เปลี่ยนสีแกนพลังงานเป็นสีแดงให้แล้วครับ" };
+    return { kind: "hud-accent", accent: "red", reply: "เปลี่ยนสีแกนพลังงานเป็นสีแดงให้แล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?(?:สี|แกน)?(?:เป็น)?สี(?:ทอง|เหลือง|ส้ม)$/i.test(text)) {
-    return { kind: "hud-accent", accent: "gold", reply: "เปลี่ยนสีแกนพลังงานเป็นสีทองให้แล้วครับ" };
+    return { kind: "hud-accent", accent: "gold", reply: "เปลี่ยนสีแกนพลังงานเป็นสีทองให้แล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?(?:สี|แกน)?(?:เป็น)?สีเขียว$/i.test(text)) {
-    return { kind: "hud-accent", accent: "emerald", reply: "เปลี่ยนสีแกนพลังงานเป็นสีเขียวให้แล้วครับ" };
+    return { kind: "hud-accent", accent: "emerald", reply: "เปลี่ยนสีแกนพลังงานเป็นสีเขียวให้แล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?(?:สี|แกน)?(?:เป็น)?สีม่วง$/i.test(text)) {
-    return { kind: "hud-accent", accent: "purple", reply: "เปลี่ยนสีแกนพลังงานเป็นสีม่วงให้แล้วครับ" };
+    return { kind: "hud-accent", accent: "purple", reply: "เปลี่ยนสีแกนพลังงานเป็นสีม่วงให้แล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?(?:สี|แกน)?(?:เป็น)?สี(?:ฟ้า|ปกติ|เดิม)$/i.test(text)) {
-    return { kind: "hud-accent", accent: "cyan", reply: "เปลี่ยนสีแกนพลังงานกลับเป็นสีฟ้ามาตรฐานแล้วครับ" };
+    return { kind: "hud-accent", accent: "cyan", reply: "เปลี่ยนสีแกนพลังงานกลับเป็นสีฟ้ามาตรฐานแล้วค่ะ" };
   }
 
   if (/^(?:เปลี่ยน)?แกน(?:แบบ)?ทรงกลม$/i.test(text)) {
-    return { kind: "hud-style", style: "sphere", reply: "เปลี่ยนแกนพลังงานเป็นแบบทรงกลม 3 มิติแล้วครับ" };
+    return { kind: "hud-style", style: "sphere", reply: "เปลี่ยนแกนพลังงานเป็นแบบทรงกลม 3 มิติแล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?แกน(?:แบบ)?เส้น$/i.test(text)) {
-    return { kind: "hud-style", style: "wire", reply: "เปลี่ยนแกนพลังงานเป็นแบบเส้นโครงสร้างแล้วครับ" };
+    return { kind: "hud-style", style: "wire", reply: "เปลี่ยนแกนพลังงานเป็นแบบเส้นโครงสร้างแล้วค่ะ" };
   }
   if (/^(?:เปลี่ยน)?แกน(?:แบบ)?(?:วงแหวน|ปกติ)$/i.test(text)) {
-    return { kind: "hud-style", style: "ring", reply: "เปลี่ยนแกนพลังงานเป็นแบบวงแหวนแล้วครับ" };
+    return { kind: "hud-style", style: "ring", reply: "เปลี่ยนแกนพลังงานเป็นแบบวงแหวนแล้วค่ะ" };
   }
 
   if (/^(?:เอฟเฟกต์)?สแกน(?:หน้าจอ)?$/i.test(text)) {
-    return { kind: "hud-effect", effect: "scan", reply: "เริ่มสแกนหน้าจอแล้วครับ" };
+    return { kind: "hud-effect", effect: "scan", reply: "เริ่มสแกนหน้าจอแล้วค่ะ" };
   }
   if (/^(?:เอฟเฟกต์)?(?:แฟลช|สว่างวาบ)$/i.test(text)) {
-    return { kind: "hud-effect", effect: "flash", reply: "ยิงเอฟเฟกต์แฟลชแล้วครับ" };
+    return { kind: "hud-effect", effect: "flash", reply: "ยิงเอฟเฟกต์แฟลชแล้วค่ะ" };
   }
   if (/^(?:เอฟเฟกต์)?พัลส์$/i.test(text)) {
-    return { kind: "hud-effect", effect: "pulse", reply: "ส่งคลื่นพัลส์แล้วครับ" };
+    return { kind: "hud-effect", effect: "pulse", reply: "ส่งคลื่นพัลส์แล้วค่ะ" };
   }
   if (/^(?:เอฟเฟกต์)?(?:กระตุก|กลิตช์|glitch)$/i.test(text)) {
-    return { kind: "hud-effect", effect: "glitch", reply: "เปิดเอฟเฟกต์กระตุกแล้วครับ" };
+    return { kind: "hud-effect", effect: "glitch", reply: "เปิดเอฟเฟกต์กระตุกแล้วค่ะ" };
   }
   if (/^(?:เอฟเฟกต์)?สั่น$/i.test(text)) {
-    return { kind: "hud-effect", effect: "shake", reply: "เปิดเอฟเฟกต์สั่นแล้วครับ" };
+    return { kind: "hud-effect", effect: "shake", reply: "เปิดเอฟเฟกต์สั่นแล้วค่ะ" };
   }
 
   if (/^(?:เปิด|ใช้)(?:โหมด)?(?:ท่ามือ|ควบคุมด้วยมือ|กล้องท่ามือ)$/i.test(text)) {
-    return { kind: "hand-control", enabled: true, reply: "เปิดโหมดควบคุมด้วยท่ามือผ่านกล้องให้แล้วครับ" };
+    return { kind: "hand-control", enabled: true, reply: "เปิดโหมดควบคุมด้วยท่ามือผ่านกล้องให้แล้วค่ะ" };
   }
   if (/^(?:ปิด|เลิก)(?:โหมด)?(?:ท่ามือ|ควบคุมด้วยมือ|กล้องท่ามือ)$/i.test(text)) {
-    return { kind: "hand-control", enabled: false, reply: "ปิดโหมดควบคุมด้วยท่ามือแล้วครับ" };
+    return { kind: "hand-control", enabled: false, reply: "ปิดโหมดควบคุมด้วยท่ามือแล้วค่ะ" };
   }
 
   if (/^(?:เปิด|ใช้)(?:โหมด)?ตบมือ(?:ปลุก)?$/i.test(text)) {
-    return { kind: "clap-wake", enabled: true, reply: "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสแล้วครับ" };
+    return { kind: "clap-wake", enabled: true, reply: "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกลูน่าแล้วค่ะ" };
   }
   if (/^(?:ปิด|เลิก)(?:โหมด)?ตบมือ(?:ปลุก)?$/i.test(text)) {
-    return { kind: "clap-wake", enabled: false, reply: "ปิดโหมดตบมือปลุกแล้วครับ" };
+    return { kind: "clap-wake", enabled: false, reply: "ปิดโหมดตบมือปลุกแล้วค่ะ" };
   }
 
   // 8. เปิดโปรแกรมเฉพาะทาง (Custom Desktop Apps) ที่ผู้ใช้เพิ่มเอง
