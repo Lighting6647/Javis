@@ -82,7 +82,15 @@ try {
     const { page, problems, chat } = await openPage(context);
 
     check("ทางเข้า: ปุ่มบนแถบบนมีชื่อกำกับ", (await page.locator(".meeting-entry").innerText()).trim() === "ประชุม");
+    const drawerToggle = page.locator(".studio-drawer-toggle");
+    if ((await drawerToggle.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) !== "true") {
+      await drawerToggle.click();
+    }
     check("ทางเข้า: หน้าเริ่มต้นมีคำสั่งเริ่มโหมดประชุมให้เลือก", (await page.locator(".suggestions button").allInnerTexts()).some((text) => text.includes(SUGGESTION)));
+    const drawerClose = page.locator(".studio-drawer .icon-button");
+    if ((await drawerClose.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) === "true") {
+      await drawerClose.click();
+    }
 
     const roundsBefore = await voice(page, "rounds");
     await page.locator(".meeting-entry").click();
@@ -268,6 +276,10 @@ try {
     const context = await openContext();
     const { page, problems, chat } = await openPage(context, { expected: ["status of 429"] });
 
+    const drawerToggle = page.locator(".studio-drawer-toggle");
+    if ((await drawerToggle.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) !== "true") {
+      await drawerToggle.click();
+    }
     await page.locator(".suggestions button", { hasText: SUGGESTION }).click();
     await recording(page);
     check("เลือกคำสั่งจากหน้าเริ่มต้น: เริ่มจดทันทีโดยไม่ถาม AI", chat.length === 0 && (await page.locator(".thread .message").count()) === 0);

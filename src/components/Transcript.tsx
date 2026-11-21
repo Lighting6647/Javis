@@ -7,9 +7,11 @@ import {
   Monitor,
   Newspaper,
   NotebookPen,
+  PanelRightOpen,
   RefreshCw,
   Sparkles,
-  Volume2
+  Volume2,
+  X
 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { safeHttpUrl } from "../conversation/richText";
@@ -130,6 +132,7 @@ export function Transcript({
   privacyNote
 }: TranscriptProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [category, setCategory] = useState<CommandCategory>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [readerOpen, setReaderOpen] = useState(false);
@@ -200,7 +203,41 @@ export function Transcript({
           </div>
         </div>
 
-        <div className="studio-controls" role="toolbar" aria-label="ตัวกรองคำสั่งและเครื่องมือ">
+        <button
+          type="button"
+          className="studio-drawer-toggle"
+          aria-expanded={drawerOpen}
+          aria-controls="studio-side-drawer"
+          onClick={() => setDrawerOpen((prev) => !prev)}
+          title={drawerOpen ? "ซ่อนแผงเครื่องมือและสถิติ" : "เปิดแผงเครื่องมือ คำสั่งแนะนำ และสถิติ"}
+        >
+          <PanelRightOpen size={15} aria-hidden />
+          <span>{drawerOpen ? "ซ่อนแผงข้าง" : "เครื่องมือ & สถิติ"}</span>
+        </button>
+
+        {drawerOpen && (
+          <div className="studio-drawer-backdrop" aria-hidden onClick={() => setDrawerOpen(false)} />
+        )}
+
+        <aside
+          id="studio-side-drawer"
+          className={`studio-drawer${drawerOpen ? " open" : ""}`}
+          aria-label="แผงเครื่องมือ คำสั่งแนะนำ และสถิติ"
+          aria-hidden={!drawerOpen}
+        >
+          <div className="studio-drawer-head">
+            <strong>เครื่องมือ &amp; สถิติ</strong>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="ซ่อนแผงเครื่องมือ"
+            >
+              <X size={16} aria-hidden />
+            </button>
+          </div>
+
+          <div className="studio-controls" role="toolbar" aria-label="ตัวกรองคำสั่งและเครื่องมือ">
           <div className="studio-tabs" role="group" aria-label="หมวดคำสั่ง">
             <button
               type="button"
@@ -353,6 +390,7 @@ export function Transcript({
           meetingAvailable={meetingAvailable}
           metricsHidden={metricsHidden}
         />
+        </aside>
 
         <small>{privacyNote}</small>
       </section>
