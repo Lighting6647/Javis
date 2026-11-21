@@ -34,17 +34,48 @@ function toEmbeddableFrameUrl(rawUrl: string): string {
 
     if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && parsed.pathname === "/watch") {
       const videoId = parsed.searchParams.get("v");
-      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+    }
+
+    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && parsed.pathname.startsWith("/shorts/")) {
+      const videoId = parsed.pathname.split("/")[2];
+      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+    }
+
+    if ((host === "www.youtube.com" || host === "youtube.com") && parsed.pathname === "/playlist") {
+      const listId = parsed.searchParams.get("list");
+      if (listId) return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(listId)}`;
     }
 
     if (host === "youtu.be" && parsed.pathname.length > 1) {
       const videoId = parsed.pathname.slice(1).split("/")[0];
-      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
     }
   } catch {
     return rawUrl;
   }
   return rawUrl;
+}
+
+/** เว็บยอดนิยมที่บล็อกการฝังใน iframe ด้วย X-Frame-Options: SAMEORIGIN หากไม่ใช่ URL แบบ embed */
+function isKnownFrameBlocked(frameSrc: string): boolean {
+  if (!frameSrc) return false;
+  try {
+    const parsed = new URL(frameSrc);
+    const host = parsed.hostname.toLowerCase();
+    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && !parsed.pathname.startsWith("/embed/")) {
+      return true;
+    }
+    if ((host === "www.google.com" || host === "google.com") && parsed.searchParams.get("output") !== "embed") {
+      return true;
+    }
+    if (host === "mail.google.com" || host === "calendar.google.com" || host === "line.me" || host === "open.spotify.com") {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 interface FrameViewProps {
@@ -65,6 +96,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
   const [slowFrame, setSlowFrame] = useState<string | null>(null);
   const url = browser.requestedUrl ?? "";
   const frameSrc = toEmbeddableFrameUrl(url);
+  const blockedInFrame = isKnownFrameBlocked(frameSrc);
   /** สร้างกรอบใหม่ทุกครั้งที่สั่งเปิดหรือโหลดใหม่ เพื่อไม่ให้หน้าเก่าค้างอยู่ระหว่างรอหน้าใหม่ */
   const frameKey = `${browser.requestId}:${reloads}`;
   const slow = browser.loading && slowFrame === frameKey;
@@ -113,21 +145,39 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
         </button>
       </div>
 
-      {slow && (
+      {slow && !blockedInFrame && (
         <p className="browser-note" role="status">
           หน้านี้โหลดนานกว่าปกติ ถ้ายังไม่ขึ้น กดปุ่มเปิดในแท็บใหม่ที่มุมขวาบนของกรอบได้
         </p>
       )}
 
-      <iframe
-        key={frameKey}
-        className="browser-frame"
-        src={frameSrc}
-        title={browser.title || hostOf(url)}
-        sandbox={FRAME_SANDBOX}
-        referrerPolicy="no-referrer"
-        onLoad={() => browserStore.update({ loading: false })}
-      />
+      {blockedInFrame ? (
+        <div className="browser-blocked-card" role="region" aria-label="เว็บนี้ไม่อนุญาตให้แสดงในกรอบ">
+          <Globe size={28} aria-hidden />
+          <strong>{hostOf(url)} ไม่อนุญาตให้แสดงในกรอบย่อย</strong>
+          <p>
+            เจ้าของเว็บไซต์ป้องกันการฝังหน้าหลักในกรอบเบราว์เซอร์ สามารถกดเปิดในหน้าต่างแยกด้านล่างได้เลย (หากเป็น YouTube สามารถสั่งชื่อเพลงหรือคลิปเจาะจงเพื่อเล่นในกรอบได้ครับ)
+          </p>
+          <div className="browser-blocked-actions">
+            <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={15} aria-hidden /> เปิดในหน้าต่างแยก
+            </a>
+            <button type="button" className="btn btn-quiet" onClick={browserStore.close}>
+              ปิดหน้าเว็บ
+            </button>
+          </div>
+        </div>
+      ) : (
+        <iframe
+          key={frameKey}
+          className="browser-frame"
+          src={frameSrc}
+          title={browser.title || hostOf(url)}
+          sandbox={FRAME_SANDBOX}
+          referrerPolicy="no-referrer"
+          onLoad={() => browserStore.update({ loading: false })}
+        />
+      )}
     </section>
   );
 }
