@@ -1803,7 +1803,7 @@ describe("ConversationController", () => {
 });
 
 describe("ConversationController: คำเรียกชื่อ", () => {
-  const PHRASES = ["hey jarvis", "จาร์วิส", "จาวิส", "jarvis"] as const;
+  const PHRASES = ["hey luna", "ลูน่า", "ลูนา", "luna"] as const;
   /** ระบบฟังของเบราว์เซอร์รอเสียงพูดราวนี้ก่อนจบเองเมื่อเงียบ */
   const SILENT_LISTEN_MS = 8000;
 
@@ -1834,7 +1834,7 @@ describe("ConversationController: คำเรียกชื่อ", () => {
   it("เรียกชื่อพร้อมคำสั่งในประโยคเดียว: ส่งเฉพาะคำสั่งที่ตามหลังคำเรียกชื่อ", async () => {
     const { recognizer, chat, controller } = await startWithWake();
 
-    recognizer.current.result.resolve("จาร์วิส ตอนนี้กี่โมงแล้ว");
+    recognizer.current.result.resolve("ลูน่า ตอนนี้กี่โมงแล้ว");
     await settle();
 
     expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
@@ -1845,7 +1845,7 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     const { recognizer, chat, clock, controller } = await startWithWake();
 
     clock.time += 1000;
-    recognizer.current.result.resolve("Hey Jarvis");
+    recognizer.current.result.resolve("Hey Luna");
     await settle();
     expect(chat.calls).toHaveLength(0);
     expect(controller.getState()).toMatchObject({ phase: "listening", wake: "awake" });
@@ -1863,7 +1863,7 @@ describe("ConversationController: คำเรียกชื่อ", () => {
   it("เรียกชื่ออย่างเดียวแล้วเลยเวลา: คำพูดถัดไปไม่ถูกส่ง", async () => {
     const { recognizer, chat, clock, controller } = await startWithWake();
 
-    recognizer.current.result.resolve("จาวิส");
+    recognizer.current.result.resolve("ลูนา");
     await settle();
     clock.time += SILENT_LISTEN_MS + 1000;
     recognizer.current.result.resolve("");
@@ -1935,7 +1935,7 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     const { recognizer, chat } = await startWithWake({ detector });
 
     expect(recognizer.listens).toHaveLength(1);
-    recognizer.current.result.resolve("จาร์วิส เปิดเพลง");
+    recognizer.current.result.resolve("ลูน่า เปิดเพลง");
     await settle();
     expect(chat.current.messages).toEqual([{ role: "user", content: "เปิดเพลง" }]);
   });

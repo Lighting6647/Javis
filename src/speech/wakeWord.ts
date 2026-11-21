@@ -4,7 +4,7 @@
  */
 
 /** คำเรียกชื่อเริ่มต้น เรียงจากยาวไปสั้นไม่จำเป็น ตัวจับคู่เลือกคำที่ยาวที่สุด ณ ตำแหน่งแรกที่พบเอง */
-export const DEFAULT_WAKE_PHRASES: readonly string[] = ["hey luna", "ลูน่า", "ลูนา", "luna", "hey jarvis", "จาร์วิส", "จาวิส", "jarvis"];
+export const DEFAULT_WAKE_PHRASES: readonly string[] = ["hey luna", "ลูน่า", "ลูนา", "luna"];
 
 /** หลังเรียกชื่อแล้วไม่ได้พูดคำสั่งต่อในประโยคเดียวกัน: คำพูดถัดไปที่เริ่มภายในเวลานี้ถือเป็นคำสั่ง */
 export const WAKE_WINDOW_MS = 8000;
@@ -14,7 +14,7 @@ export interface WakeMatch {
   command: string;
 }
 
-/** ตัวอักษรละตินหรือตัวเลข: คำเรียกชื่อภาษาอังกฤษต้องไม่ติดกับตัวอักษรเหล่านี้ เช่น "jarvisson" ไม่นับ */
+/** ตัวอักษรละตินหรือตัวเลข: คำเรียกชื่อภาษาอังกฤษต้องไม่ติดกับตัวอักษรเหล่านี้ เช่น "lunatic" ไม่นับ */
 const LATIN_WORD_CHAR = /[a-z0-9]/;
 
 /** เครื่องหมายและช่องว่างที่ตัดทิ้งระหว่างคำเรียกชื่อกับคำสั่ง */
@@ -27,7 +27,7 @@ export function normalizeWakeText(text: string): string {
 
 /**
  * แปลงรายการคำเรียกชื่อจากการตั้งค่า (คั่นด้วยจุลภาค) ค่าว่างหรือไม่มีคำที่ใช้ได้จะได้ค่าเริ่มต้น
- * @param raw เช่น "จาร์วิส, hey jarvis"
+ * @param raw เช่น "ลูน่า, hey luna"
  */
 export function parseWakePhrases(raw: string | undefined | null): readonly string[] {
   const phrases = (raw ?? "")
@@ -48,7 +48,7 @@ function touchesLatinWord(text: string, start: number, end: number, phrase: stri
 
 /**
  * หาคำเรียกชื่อในข้อความที่ได้ยิน คืนคำสั่งที่ตามหลังคำเรียกชื่อ หรือ null ถ้าไม่ได้เรียกชื่อ
- * เลือกคำเรียกชื่อที่พบก่อนสุด ถ้าพบที่ตำแหน่งเดียวกันหลายคำเลือกคำที่ยาวกว่า ("hey jarvis" ชนะ "jarvis")
+ * เลือกคำเรียกชื่อที่พบก่อนสุด ถ้าพบที่ตำแหน่งเดียวกันหลายคำเลือกคำที่ยาวกว่า ("hey luna" ชนะ "luna")
  * ข้อความก่อนคำเรียกชื่อถูกทิ้ง เพราะมักเป็นเสียงรอบข้างที่ไม่ได้พูดกับ Javis
  */
 export function matchWakePhrase(heard: string, phrases: readonly string[] = DEFAULT_WAKE_PHRASES): WakeMatch | null {
