@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
+
 /** ผู้ให้บริการโมเดล AI ที่ Javis รองรับ */
-export type AiProviderName = "openai" | "gemini" | "claude";
+export type AiProviderName = "openai" | "gemini" | "claude" | "claude-code";
 
 /** ระดับการคิดก่อนตอบที่ Claude รับ เรียงจากเร็วที่สุดไปละเอียดที่สุด */
 export const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -14,8 +16,9 @@ export interface AiProvider {
    * - responses: OpenAI Responses API (มีการค้นเว็บในตัว)
    * - chat: Chat Completions ซึ่งผู้ให้บริการรายอื่นรองรับ
    * - claude: Claude Messages API ของ Anthropic เรียกผ่าน SDK ทางการ (มีการค้นเว็บในตัว)
+   * - claude-code: Claude Code แบบไม่มีหน้าจอบนเครื่องนี้ ผ่าน @anthropic-ai/claude-agent-sdk (ใช้บัญชีที่ล็อกอิน claude ไว้ ไม่ต้องมีกุญแจ)
    */
-  apiStyle: "responses" | "chat" | "claude";
+  apiStyle: "responses" | "chat" | "claude" | "claude-code";
   apiKey: string | undefined;
   /** ชื่อตัวแปรที่ผู้ดูแลต้องตั้งกุญแจ ใช้ในข้อความแนะนำ */
   keyVariable: string;
@@ -62,6 +65,9 @@ const CLAUDE_CHAT_MODEL = "claude-haiku-5-5";
 /** ให้คิดก่อนตอบน้อยที่สุด เพราะคำตอบถูกอ่านออกเสียงทันที ความเร็วสำคัญกว่าการคิดลึก */
 const CLAUDE_EFFORT: ClaudeEffort = "low";
 
+/** โมเดลของ Claude Code ไม่ตั้ง = ให้ Claude Code เลือกตามบัญชีที่ล็อกอินไว้ */
+const CLAUDE_CODE_MODEL = "default";
+
 const read = (env: Env, name: string) => env[name]?.trim() || undefined;
 const isOff = (env: Env, name: string) => read(env, name)?.toLowerCase() === "false";
 const isOn = (env: Env, name: string) => read(env, name)?.toLowerCase() === "true";
@@ -101,12 +107,62 @@ function readModel(env: Env, name: string, fallback: string, keyVariable: string
   return value;
 }
 
-function chooseProvider(env: Env, warn: (message: string) => void): AiProviderName {
+/** สภาพของเครื่องที่เซิร์ฟเวอร์รันอยู่ ที่การเลือกผู้ให้บริการต้องรู้ แยกไว้เพื่อให้ทดสอบได้ */
+export interface ProviderRuntime {
+  /** รันอยู่ในคอนเทนเนอร์ Docker */
+  inDocker: boolean;
+}
+
+/** ตรวจสภาพของเครื่องจริง */
+export function detectProviderRuntime(): ProviderRuntime {
+  return { inDocker: existsSync("/.dockerenv") };
+}
+
+export interface ClaudeCodeAvailability {
+  /** ผู้ดูแลตั้ง CLAUDE_CODE_PROVIDER ไว้ */
+  requested: boolean;
+  /** ใช้ได้จริง: ตั้งไว้ และเซิร์ฟเวอร์รันบนเครื่องของผู้ใช้เอง */
+  allowed: boolean;
+  /** เหตุที่ตั้งไว้แต่ใช้ไม่ได้ */
+  reason?: string;
+}
+
+/**
+ * ผู้ให้บริการ claude-code ใช้ได้ไหม: ต้องตั้ง CLAUDE_CODE_PROVIDER=1 และต้องรันบนเครื่องของผู้ใช้เองเท่านั้น
+ * ไม่เปิดบน Vercel, Docker หรือ NODE_ENV=production เพราะ Claude Code ใช้บัญชีที่ล็อกอินไว้บนเครื่องนั้น
+ * และเรียกเครื่องมือบนเครื่องได้ ซึ่งไม่ควรเปิดให้ผู้ใช้จากอินเทอร์เน็ต
+ */
+export function claudeCodeAvailability(env: Env, runtime: ProviderRuntime): ClaudeCodeAvailability {
+  const flag = read(env, "CLAUDE_CODE_PROVIDER")?.toLowerCase();
+  const requested = flag === "1" || flag === "true" || flag === "on" || flag === "yes";
+  if (!requested) return { requested, allowed: false };
+  if (read(env, "VERCEL")) return { requested, allowed: false, reason: "รันอยู่บน Vercel" };
+  if (runtime.inDocker) return { requested, allowed: false, reason: "รันอยู่ใน Docker" };
+  if (read(env, "NODE_ENV")?.toLowerCase() === "production") return { requested, allowed: false, reason: "NODE_ENV=production" };
+  return { requested, allowed: true };
+}
+
+function chooseProvider(env: Env, warn: (message: string) => void, runtime: ProviderRuntime): AiProviderName {
+  const claudeCode = claudeCodeAvailability(env, runtime);
+  if (claudeCode.requested && !claudeCode.allowed) {
+    warn(`ตั้ง CLAUDE_CODE_PROVIDER ไว้แต่ใช้ไม่ได้ (${claudeCode.reason}) Claude Code เปิดได้เฉพาะเซิร์ฟเวอร์ที่รันบนเครื่องของผู้ใช้เอง จึงใช้ผู้ให้บริการที่มีกุญแจแทน`);
+  }
+
   const requested = read(env, "AI_PROVIDER")?.toLowerCase();
-  if (requested === "openai" || requested === "gemini" || requested === "claude") return requested;
-  // ชื่อบริษัทผู้ให้บริการก็หมายถึงรายเดียวกัน
-  if (requested === "anthropic") return "claude";
-  if (requested) warn(`ค่า AI_PROVIDER ไม่รู้จัก (ใช้ได้: openai, gemini, claude) จึงเลือกจากกุญแจที่ตั้งไว้แทน`);
+  if (requested === "claude-code") {
+    if (claudeCode.allowed) return "claude-code";
+    if (!claudeCode.requested) warn("AI_PROVIDER=claude-code ต้องตั้ง CLAUDE_CODE_PROVIDER=1 ด้วย จึงเลือกจากกุญแจที่ตั้งไว้แทน");
+  } else if (requested === "openai" || requested === "gemini" || requested === "claude") {
+    return requested;
+  } else if (requested === "anthropic") {
+    // ชื่อบริษัทผู้ให้บริการก็หมายถึงรายเดียวกัน
+    return "claude";
+  } else if (requested) {
+    warn(`ค่า AI_PROVIDER ไม่รู้จัก (ใช้ได้: openai, gemini, claude, claude-code) จึงเลือกจากกุญแจที่ตั้งไว้แทน`);
+  }
+
+  // เปิด Claude Code ไว้บนเครื่องนี้โดยไม่ได้ระบุรายอื่น คือเจตนาใช้เป็นหลัก รายที่มีกุญแจเป็นตัวสำรอง
+  if (claudeCode.allowed && !requested) return "claude-code";
 
   // ตั้งกุญแจของรายใดไว้คือเจตนาใช้รายนั้น แม้จะยังมีกุญแจของรายอื่นค้างอยู่
   // เรียงจากรายที่เพิ่มเข้ามาล่าสุด ถ้าต้องการรายอื่นให้ระบุด้วย AI_PROVIDER
@@ -130,8 +186,14 @@ function readClaudeEffort(env: Env, warn: (message: string) => void): ClaudeEffo
  * ตั้งกุญแจของรายใดไว้อย่างเดียวก็ใช้รายนั้นได้เลย (ANTHROPIC_API_KEY, GEMINI_API_KEY หรือ OPENAI_API_KEY)
  * หรือบังคับด้วย AI_PROVIDER
  */
-export function resolveAiProvider(env: Env, warn: (message: string) => void = console.warn): AiProvider {
-  const provider = chooseProvider(env, warn);
+export function resolveAiProvider(
+  env: Env,
+  warn: (message: string) => void = console.warn,
+  runtime: ProviderRuntime = detectProviderRuntime()
+): AiProvider {
+  const provider = chooseProvider(env, warn, runtime);
+
+  if (provider === "claude-code") return resolveClaudeCodeProvider(env, warn);
 
   // ใส่กุญแจของ Gemini ไว้ในช่องชื่อโมเดล โดยยังไม่ได้ตั้งกุญแจ: บอกให้ชัดว่าต้องย้ายไปไว้ที่ใด
   // (ถ้าใช้ Gemini อยู่แล้ว การอ่านชื่อโมเดลด้านล่างจะเตือนเอง) ไม่นำค่านั้นมาใช้เป็นกุญแจ และไม่แสดงค่า
@@ -205,25 +267,50 @@ export function resolveAiProvider(env: Env, warn: (message: string) => void = co
   };
 }
 
+/** Claude Code บนเครื่องนี้: ไม่มีกุญแจ ใช้บัญชีที่ล็อกอิน claude ไว้ ค้นเว็บด้วยเครื่องมือของ Claude Code เอง */
+function resolveClaudeCodeProvider(env: Env, warn: (message: string) => void): AiProvider {
+  return {
+    name: "claude-code",
+    label: "Claude Code (บนเครื่องนี้)",
+    apiStyle: "claude-code",
+    apiKey: undefined,
+    keyVariable: "CLAUDE_CODE_PROVIDER",
+    baseUrl: "",
+    chatModel: readModel(env, "CLAUDE_CODE_MODEL", CLAUDE_CODE_MODEL, "CLAUDE_CODE_PROVIDER", warn),
+    chatModelVariable: "CLAUDE_CODE_MODEL",
+    transcribeModel: null,
+    webSearch: !isOff(env, "WEB_SEARCH_ENABLED"),
+    // ไม่มีเครดิตให้ตรวจ บัญชีของ Claude Code คิดตามแพ็กเกจที่ล็อกอินไว้
+    creditCheck: false,
+    reasoningEffort: readClaudeEffort(env, warn)
+  };
+}
+
 /**
- * สร้างรายการผู้ให้บริการ AI สำรองที่มีกุญแจ API ตั้งไว้ เพื่อสลับอัตโนมัติเมื่อผู้ให้บริการหลักติดปัญหาเครดิต/โควตา
+ * สร้างรายการผู้ให้บริการ AI สำรอง เพื่อสลับอัตโนมัติเมื่อผู้ให้บริการหลักติดปัญหาเครดิต/โควตา
+ * รายที่มีกุญแจ API ตั้งไว้ และ Claude Code เมื่อเปิดไว้บนเครื่องนี้ (ไม่ต้องมีกุญแจ)
  */
 export function resolveFallbackAiProviders(
   env: Env,
   primaryName?: AiProviderName,
-  warn: (message: string) => void = () => undefined
+  warn: (message: string) => void = () => undefined,
+  runtime: ProviderRuntime = detectProviderRuntime()
 ): AiProvider[] {
-  const primary = primaryName ?? chooseProvider(env, warn);
-  const candidates: ReadonlyArray<{ name: AiProviderName; keyVar: string }> = [
-    { name: "gemini", keyVar: "GEMINI_API_KEY" },
-    { name: "claude", keyVar: "ANTHROPIC_API_KEY" },
-    { name: "openai", keyVar: "OPENAI_API_KEY" }
+  const primary = primaryName ?? chooseProvider(env, warn, runtime);
+  const candidates: ReadonlyArray<{ name: AiProviderName; usable: boolean }> = [
+    { name: "gemini", usable: Boolean(read(env, "GEMINI_API_KEY")) },
+    { name: "claude", usable: Boolean(read(env, "ANTHROPIC_API_KEY")) },
+    { name: "openai", usable: Boolean(read(env, "OPENAI_API_KEY")) },
+    { name: "claude-code", usable: claudeCodeAvailability(env, runtime).allowed }
   ];
   const fallbacks: AiProvider[] = [];
   for (const candidate of candidates) {
-    if (candidate.name === primary) continue;
-    if (!read(env, candidate.keyVar)) continue;
-    fallbacks.push(resolveAiProvider({ ...env, AI_PROVIDER: candidate.name }, warn));
+    if (candidate.name === primary || !candidate.usable) continue;
+    fallbacks.push(
+      candidate.name === "claude-code"
+        ? resolveClaudeCodeProvider(env, warn)
+        : resolveAiProvider({ ...env, AI_PROVIDER: candidate.name }, warn, runtime)
+    );
   }
   return fallbacks;
 }
