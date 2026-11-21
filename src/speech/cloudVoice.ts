@@ -67,7 +67,7 @@ export type CloudVoiceStatus =
  */
 export function resolveAssistantIdentity(_status: CloudVoiceStatus | null): "delluna" | "javis" {
   void _status;
-  return "delluna";
+  return "javis";
 }
 
 /** เวลาที่พักเสียงของ Gemini หลังล้มเหลวแต่ละแบบ (มิลลิวินาที) ระหว่างพัก Javis ใช้เสียงในอุปกรณ์ */
@@ -177,8 +177,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   }
 
   private speakWithFallback(text: string): Promise<void> {
-    const gender = resolveAssistantIdentity(this.status()) === "javis" ? "male" : "female";
-    this.deps.fallback.setFallbackGender?.(gender);
+    this.deps.fallback.setFallbackGender?.("female");
     return this.deps.fallback.speak(text);
   }
 
