@@ -105,8 +105,8 @@ export function matchAssistantVoiceCommand(
     const dest = mapMatch[1].trim();
     return {
       kind: "open-url",
-      url: `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(dest)}`,
-      reply: `เปิดแผนที่ไป ${dest} บน Google Maps ให้แล้วค่ะ`
+      url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`,
+      reply: `เปิดเส้นทางไป ${dest} บน Google Maps ให้แล้วค่ะ`
     };
   }
 
