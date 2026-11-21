@@ -2,7 +2,7 @@ import { parseWakePhrases } from "../speech/wakeWord";
 import { createFlagStore } from "./flagStore";
 
 /**
- * สวิตช์คำเรียกชื่อของโหมดฟังตลอดเวลา: เปิด = ส่งไปถาม AI เฉพาะคำพูดที่เรียก "จาร์วิส" ก่อน
+ * สวิตช์คำเรียกชื่อของโหมดฟังตลอดเวลา: เปิด = ส่งไปถาม AI เฉพาะคำพูดที่เรียก "ลูน่า" ก่อน
  * ปิด = ทุกประโยคที่ได้ยินถือเป็นคำสั่ง (แบบเดิม) เปิดเป็นค่าเริ่มต้นและเก็บไว้ในเครื่อง
  */
 export const wakeGateStore = createFlagStore("javis.wakeGate");

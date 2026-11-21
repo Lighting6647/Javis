@@ -299,7 +299,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
     }
     synthesizer.cancel();
     void synthesizer.speak(`สวัสดีค่ะ ตอนนี้กำลังพูดด้วย${voice.displayName}แล้วนะคะ`);
-    setNotice(`ตั้งค่า "${voice.displayName}" เป็นเสียงพูดของเดลลูน่าเรียบร้อยแล้ว`);
+    setNotice(`ตั้งค่า "${voice.displayName}" เป็นเสียงพูดของลูน่าเรียบร้อยแล้ว`);
   };
 
   const handleSaveAndClone = async () => {
@@ -373,7 +373,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
         </header>
 
         <p className="recorder-intro">
-          อัดเสียงพูดธรรมชาติและคำยืนยัน 2 ขั้นตอนเพื่อให้ Gemini 3.8 จดจำเอกลักษณ์เสียงของคุณไลท์สำหรับอ่านคำตอบของเดลลูน่า
+          อัดเสียงพูดธรรมชาติและคำยืนยัน 2 ขั้นตอนเพื่อให้ Gemini 3.8 จดจำเอกลักษณ์เสียงของคุณไลท์สำหรับอ่านคำตอบของลูน่า
         </p>
 
         {error && (
@@ -411,7 +411,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
             </span>
           </div>
           <p className="recorder-script">
-            ตัวอย่างบทพูด: &ldquo;สวัสดีเดลลูน่า นี่คือเสียงของไลท์เองนะ วันนี้ฝากช่วยดูสรุปงาน โปรเจกต์ทั้งหมด แล้วก็ช่วยเตือนนัดสำคัญให้ด้วย พูดแบบเป็นธรรมชาติสบาย ๆ ได้เลย&rdquo;
+            ตัวอย่างบทพูด: &ldquo;สวัสดีลูน่า นี่คือเสียงของไลท์เองนะ วันนี้ฝากช่วยดูสรุปงาน โปรเจกต์ทั้งหมด แล้วก็ช่วยเตือนนัดสำคัญให้ด้วย พูดแบบเป็นธรรมชาติสบาย ๆ ได้เลย&rdquo;
           </p>
           {recordingSlot === "source" && (
             <div className="recorder-meter" aria-hidden>

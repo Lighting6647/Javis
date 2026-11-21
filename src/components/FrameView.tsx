@@ -77,7 +77,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
             className="browser-read-btn"
             onClick={onReadPage}
             aria-label="อ่านหน้านี้ให้ฟัง"
-            title="ให้จาร์วิสดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
+            title="ให้ลูน่าดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
           >
             <Volume2 size={15} aria-hidden />
             <span>อ่านหน้านี้</span>
@@ -101,13 +101,13 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
         <div className="browser-blocked-card" role="region" aria-label="เว็บนี้ไม่อนุญาตให้แสดงในกรอบ">
           <Globe size={28} aria-hidden />
           <strong>
-            {autoOpenStatus === "opened" ? `เปิด ${hostOf(url)} ในแท็บใหม่ให้แล้วค่ะ` : `${hostOf(url)} เปิดในจาร์วิสไม่ได้ค่ะ`}
+            {autoOpenStatus === "opened" ? `เปิด ${hostOf(url)} ในแท็บใหม่ให้แล้วค่ะ` : `${hostOf(url)} แสดงในหน้าของลูน่าไม่ได้ค่ะ`}
           </strong>
           <p>
             {autoOpenStatus === "opened"
-              ? "เว็บนี้ไม่ยอมให้แสดงในจาร์วิส เลยเปิดแยกให้นะคะ ถ้าแท็บใหม่ไม่ขึ้น กดปุ่มด้านล่างได้เลยค่ะ"
+              ? "เว็บนี้ไม่ยอมให้แสดงในหน้าของลูน่า ลูน่าเลยเปิดแยกให้นะคะ ถ้าแท็บใหม่ไม่ขึ้น กดปุ่มด้านล่างได้เลยค่ะ"
               : autoOpenStatus === "blocked"
-                ? "เบราว์เซอร์กันหน้าต่างเด้งไว้ค่ะ กดปุ่มด้านล่างเพื่อเปิดในแท็บใหม่นะคะ (ถ้าเป็น YouTube สั่งชื่อเพลงหรือคลิปเจาะจง จะเล่นในจาร์วิสได้เลยค่ะ)"
+                ? "เบราว์เซอร์กันหน้าต่างเด้งไว้ค่ะ กดปุ่มด้านล่างเพื่อเปิดในแท็บใหม่นะคะ (ถ้าเป็น YouTube สั่งชื่อเพลงหรือคลิปเจาะจง จะเล่นในหน้าของลูน่าได้เลยค่ะ)"
                 : "เจ้าของเว็บไม่ยอมให้แสดงในกรอบค่ะ กดปุ่มด้านล่างเพื่อเปิดในแท็บใหม่นะคะ"}
           </p>
           <div className="browser-blocked-actions">

@@ -28,7 +28,7 @@ interface VoiceDockProps {
 }
 
 const ORB_LABEL: Record<Phase, string> = {
-  idle: "เริ่มพูดสั่งงาน Jarvis",
+  idle: "เริ่มพูดสั่งงานลูน่า",
   starting: "กำลังเตรียมไมโครโฟน",
   listening: "พูดจบแล้ว ส่งคำสั่งเสียง",
   thinking: "หยุดคำตอบแล้วพูดใหม่",
@@ -36,11 +36,11 @@ const ORB_LABEL: Record<Phase, string> = {
 };
 
 const CAPTION: Record<Phase, string> = {
-  idle: "แตะไมโครโฟนเพื่อพูดสั่งงาน Jarvis",
+  idle: "แตะไมโครโฟนเพื่อพูดสั่งงานลูน่า",
   starting: "กำลังเตรียมไมโครโฟน…",
   listening: "กำลังฟังคำสั่งเสียงอยู่…",
   thinking: "กำลังคิดคำตอบ…",
-  speaking: "Jarvis กำลังตอบ แตะเพื่อพูดแทรก"
+  speaking: "ลูน่ากำลังตอบ แตะเพื่อพูดแทรก"
 };
 
 function OrbIcon({ phase }: { phase: Phase }) {

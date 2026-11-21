@@ -2,7 +2,7 @@ import type { SpeechErrorCode } from "../speech/types";
 import type { Phase } from "./types";
 
 /** ป้ายสถานะระหว่างฟังเพื่อรอคำเรียกชื่อ: คำพูดที่ไม่ได้เรียกชื่อยังไม่ถูกส่งไปถาม AI */
-export const WAITING_FOR_WAKE_LABEL = "รอคำเรียก \"จาร์วิส\"";
+export const WAITING_FOR_WAKE_LABEL = "รอคำเรียก \"ลูน่า\"";
 
 export const PHASE_LABEL: Record<Phase, string> = {
   idle: "พร้อมใช้งาน",
@@ -25,7 +25,7 @@ export const SPEECH_ERROR_TEXT: Record<Exclude<SpeechErrorCode, "aborted">, stri
 export const NOTICE_TEXT = {
   noSpeech: "ไม่ได้ยินเสียงพูด แตะปุ่มเพื่อเริ่มใหม่ได้เลย",
   /** โหมดฟังตลอดเวลา: ระบบฟังสะดุดชั่วคราว และกำลังรอเพื่อลองใหม่เอง */
-  listenRetrying: "ระบบฟังเสียงสะดุด เดลลูน่ากำลังลองใหม่ให้เองค่ะ",
+  listenRetrying: "ระบบฟังเสียงสะดุด ลูน่ากำลังลองใหม่ให้เองค่ะ",
   /** โหมดฟังตลอดเวลา: ระบบฟังเริ่มแล้วจบเองทันทีซ้ำ ๆ จึงหยุดไว้ */
   listenUnstable: "ระบบฟังเสียงเริ่มแล้วหยุดเองซ้ำหลายครั้ง จึงปิดไมโครโฟนไว้ก่อน แตะปุ่มไมโครโฟนเพื่อเปิดอีกครั้ง",
   /** โหมดฟังตลอดเวลา: เบราว์เซอร์ยกเลิกการฟังซ้ำ ๆ เช่นมีแท็บหรือโปรแกรมอื่นแย่งไมโครโฟน */

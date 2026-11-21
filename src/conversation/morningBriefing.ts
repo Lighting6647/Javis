@@ -1,7 +1,7 @@
 import type { MorningBriefingResponse } from "../services/workspaceApi";
 
 const BRIEFING_PATTERN =
-  /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|delluna|จาวิส|javis|นีน่า|nina)\s*)?(?:ช่วย)?(?:สรุปเช้านี้|สรุปงานเช้านี้|เช็คงานเช้านี้|เช็กงานเช้านี้|มอร์นิ่ง\s*บรีฟ(?:ฟิ่ง|ฟิง)?|morning\s*briefing)(?:\s*(?:ให้หน่อย|หน่อย|ให้ฟังหน่อย|ด้วย|ค่ะ|ครับ|นะคะ|นะ))?$/i;
+  /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|ลูนา|luna|delluna|จาวิส|javis|นีน่า|nina)\s*)?(?:ช่วย)?(?:สรุปเช้านี้|สรุปงานเช้านี้|เช็คงานเช้านี้|เช็กงานเช้านี้|มอร์นิ่ง\s*บรีฟ(?:ฟิ่ง|ฟิง)?|morning\s*briefing)(?:\s*(?:ให้หน่อย|หน่อย|ให้ฟังหน่อย|ด้วย|ค่ะ|ครับ|นะคะ|นะ))?$/i;
 
 /** ตรวจว่าคำพูดเป็นคำสั่ง Morning Briefing อัตโนมัติหรือไม่ */
 export function isMorningBriefingCommand(text: string): boolean {

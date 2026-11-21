@@ -6,10 +6,10 @@ interface BootSequenceProps {
 }
 
 const BOOT_STEPS = [
-  { progress: 25, title: "กำลังเริ่มต้นระบบจาร์วิส", log: "ตรวจสอบแกนประมวลผลและหน่วยความจำ…" },
+  { progress: 25, title: "กำลังเริ่มต้นระบบลูน่า", log: "ตรวจสอบแกนประมวลผลและหน่วยความจำ…" },
   { progress: 55, title: "เชื่อมต่อระบบเสียงภาษาไทย", log: "ปรับเทียบไมโครโฟนและตัวสังเคราะห์เสียง…" },
   { progress: 82, title: "เปิดใช้งานแกนพลังงาน 3 มิติ", log: "โหลดโมดูลโฮโลแกรมและระบบสั่งการ…" },
-  { progress: 100, title: "ระบบจาร์วิสพร้อมใช้งาน", log: "สวัสดีค่ะคุณไลท์ พร้อมรับคำสั่งเสียงแล้วค่ะ" }
+  { progress: 100, title: "ระบบลูน่าพร้อมใช้งาน", log: "สวัสดีค่ะคุณไลท์ พร้อมรับคำสั่งเสียงแล้วค่ะ" }
 ] as const;
 
 /**
@@ -40,7 +40,7 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
   const current = BOOT_STEPS[stepIndex] ?? BOOT_STEPS[0];
 
   return (
-    <div className="boot-overlay" role="dialog" aria-modal="true" aria-label="เริ่มต้นระบบจาวิส">
+    <div className="boot-overlay" role="dialog" aria-modal="true" aria-label="เริ่มต้นระบบลูน่า">
       {!started ? (
         <div className="ignition-card">
           <div className="ignition-ring" aria-hidden />

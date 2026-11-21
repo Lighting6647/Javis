@@ -4,7 +4,7 @@
  */
 
 /** คำเรียกชื่อเริ่มต้น เรียงจากยาวไปสั้นไม่จำเป็น ตัวจับคู่เลือกคำที่ยาวที่สุด ณ ตำแหน่งแรกที่พบเอง */
-export const DEFAULT_WAKE_PHRASES: readonly string[] = ["hey jarvis", "จาร์วิส", "จาวิส", "jarvis"];
+export const DEFAULT_WAKE_PHRASES: readonly string[] = ["hey luna", "ลูน่า", "ลูนา", "luna", "hey jarvis", "จาร์วิส", "จาวิส", "jarvis"];
 
 /** หลังเรียกชื่อแล้วไม่ได้พูดคำสั่งต่อในประโยคเดียวกัน: คำพูดถัดไปที่เริ่มภายในเวลานี้ถือเป็นคำสั่ง */
 export const WAKE_WINDOW_MS = 8000;

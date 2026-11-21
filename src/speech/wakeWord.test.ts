@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_WAKE_PHRASES, matchWakePhrase, normalizeWakeText, parseWakePhrases } from "./wakeWord";
 
 describe("matchWakePhrase", () => {
+  it("ชื่อใหม่ ลูน่า (Luna): เรียกได้ทั้งภาษาไทยและอังกฤษ และชื่อเดิมยังใช้ได้", () => {
+    expect(matchWakePhrase("ลูน่า เปิดเว็บข่าว")).toEqual({ command: "เปิดเว็บข่าว" });
+    expect(matchWakePhrase("ลูนาเปิดเพลง")).toEqual({ command: "เปิดเพลง" });
+    expect(matchWakePhrase("Hey Luna, what time is it")).toEqual({ command: "what time is it" });
+    expect(matchWakePhrase("luna")).toEqual({ command: "" });
+    expect(matchWakePhrase("lunatic fringe")).toBeNull();
+    expect(matchWakePhrase("จาร์วิส เปิดไฟ")).toEqual({ command: "เปิดไฟ" });
+  });
+
   it("ไม่ได้เรียกชื่อ: คืน null", () => {
     expect(matchWakePhrase("ตอนนี้กี่โมงแล้ว")).toBeNull();
     expect(matchWakePhrase("")).toBeNull();

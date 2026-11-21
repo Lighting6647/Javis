@@ -388,7 +388,7 @@ function WakeGateSection() {
         <span>
           ต้องเรียกชื่อก่อนสั่ง ({wakePhrases.map((phrase) => `"${phrase}"`).join(", ")})
           <small>
-            เช่น "จาร์วิส เปิดเว็บข่าว" คำพูดที่ไม่ได้เรียกชื่อจะไม่ถูกส่งไปถาม AI ปิดไว้ = ทุกประโยคที่ได้ยินเป็นคำสั่งและใช้โควตา
+            เช่น "ลูน่า เปิดเว็บข่าว" คำพูดที่ไม่ได้เรียกชื่อจะไม่ถูกส่งไปถาม AI ปิดไว้ = ทุกประโยคที่ได้ยินเป็นคำสั่งและใช้โควตา
           </small>
         </span>
       </label>
@@ -406,9 +406,9 @@ function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
         <p className="settings-note"><Check size={15} aria-hidden /> ติดตั้งเป็นแอปบนอุปกรณ์นี้แล้ว</p>
       ) : canInstall ? (
         <>
-          <p className="settings-note">ติดตั้ง เดลลูน่า เป็นแอปแยกหน้าต่าง เปิดได้จากหน้าจอหลักโดยไม่ต้องเข้าเบราว์เซอร์</p>
+          <p className="settings-note">ติดตั้ง ลูน่า เป็นแอปแยกหน้าต่าง เปิดได้จากหน้าจอหลักโดยไม่ต้องเข้าเบราว์เซอร์</p>
           <button type="button" className="btn btn-secondary" onClick={() => void install()}>
-            <Download size={16} aria-hidden /> ติดตั้งแอป เดลลูน่า
+            <Download size={16} aria-hidden /> ติดตั้งแอป ลูน่า
           </button>
         </>
       ) : (

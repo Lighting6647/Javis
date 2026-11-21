@@ -20,7 +20,7 @@ export type AssistantVoiceCommand =
   | { kind: "open-url"; url: string; reply: string }
   | { kind: "launch-custom-app"; app: CustomDesktopApp; reply: string };
 
-const WAKE_PREFIX = /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|delluna|จาวิส|javis|นีน่า|nina|โอเค\s*กูเกิล|ok\s*google|hey\s*google)\s*[,:]?\s*)?/i;
+const WAKE_PREFIX = /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|ลูนา|luna|delluna|จาวิส|javis|นีน่า|nina|โอเค\s*กูเกิล|ok\s*google|hey\s*google)\s*[,:]?\s*)?/i;
 const POLITE_SUFFIX = /(?:\s*(?:ให้หน่อย|หน่อย|ให้ฟังหน่อย|ให้ที|ด้วย|สิ|นะ|นะคะ|นะครับ|ค่ะ|ครับ))*$/i;
 
 function stripWakeAndPolite(rawText: string): string {
@@ -247,7 +247,7 @@ export function matchAssistantVoiceCommand(
   }
 
   if (/^(?:เปิด|ใช้)(?:โหมด)?ตบมือ(?:ปลุก)?$/i.test(text)) {
-    return { kind: "clap-wake", enabled: true, reply: "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสแล้วค่ะ" };
+    return { kind: "clap-wake", enabled: true, reply: "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกลูน่าแล้วค่ะ" };
   }
   if (/^(?:ปิด|เลิก)(?:โหมด)?ตบมือ(?:ปลุก)?$/i.test(text)) {
     return { kind: "clap-wake", enabled: false, reply: "ปิดโหมดตบมือปลุกแล้วค่ะ" };

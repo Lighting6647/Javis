@@ -279,7 +279,7 @@ export function WorkspacePanel({ onClose, onRunBriefing }: WorkspacePanelProps) 
     if (!desktopPicker) {
       setFeedback({
         tone: "error",
-        text: "ปุ่มเลือกไฟล์จากเครื่องใช้งานได้บนแอปเดลลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ"
+        text: "ปุ่มเลือกไฟล์จากเครื่องใช้งานได้บนแอปลูน่าบนคอมพิวเตอร์ (Electron) ค่ะ"
       });
       return;
     }
