@@ -430,19 +430,22 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
 }
 
 /* ---------- 3D Holographic Reactor & Dynamic Accent ---------- */
-.app > .reactor-3d-wrap {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
+html[data-theme="plain"] .reactor-3d-wrap {
+  display: none !important;
 }
-html[data-theme="plain"] .app > .reactor-3d-wrap {
+html[data-theme="holo"] .app.has-stage:not(.show-main) {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+html[data-theme="holo"]:has(.reactor-3d-wrap) .app.has-stage:not(.show-main) > .stage .core.hero,
+html[data-theme="holo"]:has(.reactor-3d-wrap) .app.has-stage:not(.show-main) > .stage .stage-status {
   display: none;
 }
-html[data-theme="holo"] .app.has-stage:not(.show-main):has(> .reactor-3d-wrap) > .stage .core.hero {
-  display: none;
+html[data-theme="holo"] .app.has-stage:not(.show-main) .app-header,
+html[data-theme="holo"] .app.has-stage:not(.show-main) .dock {
+  position: relative;
+  z-index: 10;
 }
 html[data-theme="holo"] .app.has-stage:not(.show-main) .app-header {
   background: transparent;

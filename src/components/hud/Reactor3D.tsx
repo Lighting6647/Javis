@@ -1,4 +1,5 @@
 import { Component, type ReactNode, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
@@ -340,12 +341,25 @@ function canUseWebGL(): boolean {
 export function Reactor3D(props: Reactor3DProps) {
   const webglReady = useMemo(() => canUseWebGL(), []);
 
-  if (!webglReady) return <>{props.fallback}</>;
+  if (!webglReady || typeof document === "undefined") return <>{props.fallback}</>;
 
-  return (
+  return createPortal(
     <WebGlErrorBoundary fallback={props.fallback}>
-      <div className="reactor-3d-wrap" aria-hidden>
+      <div
+        className="reactor-3d-wrap"
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          zIndex: 0,
+          pointerEvents: "none"
+        }}
+        aria-hidden
+      >
         <Canvas
+          style={{ width: "100%", height: "100%", display: "block" }}
           camera={{ position: [0, 0, 6.2], fov: 42 }}
           gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
           dpr={[1, 1.75]}
@@ -363,6 +377,7 @@ export function Reactor3D(props: Reactor3DProps) {
           </EffectComposer>
         </Canvas>
       </div>
-    </WebGlErrorBoundary>
+    </WebGlErrorBoundary>,
+    document.body
   );
 }
