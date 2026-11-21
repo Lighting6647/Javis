@@ -91,7 +91,7 @@ export default function App() {
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
+  const { phase, wake, wakeHeard, wakeQuiet, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -928,6 +928,7 @@ export default function App() {
           platformLabel={platformLabel}
           thinkHard={thinkHard}
           waitingForWake={!meetingStatus && phase === "listening" && wake === "waiting"}
+          wakeHint={{ partial, heard: wakeHeard, quiet: wakeQuiet }}
         />
       )}
 

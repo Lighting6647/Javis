@@ -8,7 +8,8 @@ import {
   type MemoryPort,
   QUICK_LISTEN_LIMIT,
   type WakeOptions,
-  QUICK_LISTEN_PAUSE_MS
+  QUICK_LISTEN_PAUSE_MS,
+  WAKE_QUIET_ROUNDS
 } from "./controller";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
 import {
@@ -467,6 +468,8 @@ describe("ConversationController", () => {
     expect(controller.getState()).toEqual({
       phase: "idle",
       wake: "off",
+      wakeHeard: "",
+      wakeQuiet: false,
       active: false,
       messages: [],
       partial: "",
@@ -1817,6 +1820,43 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     await settle();
     return { ...context, flag };
   }
+
+  it("คำพูดที่ไม่ได้เรียกชื่อ: จำไว้แสดงให้ผู้ใช้เห็น และล้างเมื่อเรียกชื่อแล้ว", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+
+    clock.time += 3000;
+    recognizer.current.result.resolve("ลูกน้ำ เปิดไฟ");
+    await settle();
+    expect(controller.getState()).toMatchObject({ wake: "waiting", wakeHeard: "ลูกน้ำ เปิดไฟ" });
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining("[wake]"), "ลูกน้ำ เปิดไฟ");
+
+    clock.time += 3000;
+    recognizer.current.result.resolve("ลู น่า เปิดไฟ");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "เปิดไฟ" }]);
+    expect(controller.getState().wakeHeard).toBe("");
+    debug.mockRestore();
+  });
+
+  it("รอคำเรียกชื่อแล้วเงียบติดกันหลายรอบ: บอกให้ตรวจไมโครโฟน และหายเมื่อได้ยินเสียงพูด", async () => {
+    const { recognizer, clock, controller } = await startWithWake();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+
+    for (let round = 0; round < WAKE_QUIET_ROUNDS; round += 1) {
+      expect(controller.getState().wakeQuiet).toBe(false);
+      clock.time += SILENT_LISTEN_MS;
+      recognizer.current.result.resolve("");
+      await settle();
+    }
+    expect(controller.getState().wakeQuiet).toBe(true);
+
+    clock.time += 3000;
+    recognizer.current.result.resolve("สวัสดี");
+    await settle();
+    expect(controller.getState().wakeQuiet).toBe(false);
+    debug.mockRestore();
+  });
 
   it("ระหว่างรอคำเรียกชื่อ: คำพูดที่ไม่ได้เรียกชื่อถูกทิ้ง ไม่ส่งไปถาม AI และฟังต่อ", async () => {
     const { recognizer, chat, clock, controller } = await startWithWake();

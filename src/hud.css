@@ -694,3 +694,33 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .voice-waveform {
     display: none;
   }
 }
+
+/* ใต้ "รอคำเรียก": ให้เห็นว่าระบบฟังได้ยินอะไร คำที่ไม่ได้เรียกชื่อจางหายเองใน 4 วินาที */
+.wake-hint {
+  position: fixed;
+  left: 50%;
+  /* เหนือแถบคลื่นเสียงที่ตรึงไว้ bottom: 24px (สูงราว 70px) จึงไม่ทับป้าย รอคำเรียก */
+  bottom: 108px;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--muted, #94a3b8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.wake-hint.live { color: var(--accent); opacity: 0.85; }
+.wake-hint.heard { animation: wake-hint-fade 4s ease-in forwards; }
+.wake-hint.quiet { color: #fbbf24; white-space: normal; }
+@keyframes wake-hint-fade {
+  0%, 70% { opacity: 0.8; }
+  100% { opacity: 0; visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wake-hint.heard { animation-duration: 4s; animation-timing-function: steps(1, end); }
+}

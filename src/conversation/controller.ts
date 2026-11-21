@@ -21,6 +21,9 @@ import {
   type WakeState
 } from "./types";
 
+/** รอคำเรียกชื่อแล้วไม่ได้ยินเสียงพูดเลยติดกันกี่รอบ (รอบละราว 8 วินาที) จึงบอกผู้ใช้ให้ตรวจไมโครโฟน */
+export const WAKE_QUIET_ROUNDS = 3;
+
 /** ต้องไม่เกินเพดานที่เซิร์ฟเวอร์ตรวจ (server/chat.ts) */
 export const HISTORY_LIMIT = 20;
 export const MESSAGE_LENGTH_LIMIT = 2000;
@@ -111,6 +114,8 @@ export interface MemoryPort {
 const INITIAL_STATE: ConversationState = {
   phase: "idle",
   wake: "off",
+  wakeHeard: "",
+  wakeQuiet: false,
   active: false,
   messages: [],
   partial: "",
@@ -161,6 +166,8 @@ export class ConversationController {
   private wakeAbort: AbortController | null = null;
   /** ตัวตรวจเสียงล้มเหลวไปแล้ว: รอบที่เหลือตรวจคำเรียกชื่อจากข้อความแทน */
   private detectorFailed = false;
+  /** จำนวนรอบติดกันที่รอคำเรียกชื่อแล้วไม่ได้ยินเสียงพูดเลย */
+  private silentWakeRounds = 0;
 
   constructor(private readonly deps: ConversationDeps) {}
 
@@ -191,7 +198,8 @@ export class ConversationController {
     const epoch = this.halt();
     this.listenFailures = 0;
     this.quickListens = 0;
-    this.update({ active: true, phase: "starting", notice: null });
+    this.silentWakeRounds = 0;
+    this.update({ active: true, phase: "starting", notice: null, wakeHeard: "", wakeQuiet: false });
 
     // สั่งเตรียมตัวพูดก่อน await ใด ๆ เพื่อให้ยังอยู่ในจังหวะแตะของผู้ใช้
     const voiceReady = this.deps.synthesizer.prepare().catch(() => false);
@@ -448,15 +456,28 @@ export class ConversationController {
       const heard = await this.listenOnce(epoch, pendingNotice, wake);
       if (heard === null) return;
       if (heard) {
+        this.silentWakeRounds = 0;
         const command = this.passWake(heard, wake);
         if (command) {
           this.awakeUntil = 0;
+          this.update({ wakeHeard: "", wakeQuiet: false });
           await this.handle(command, epoch);
           return;
         }
-        // เรียกชื่ออย่างเดียว: รอคำสั่งในคำพูดถัดไป
-        if (command === "") this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
-        // ไม่ได้เรียกชื่อ: ทิ้งคำพูดนั้นแล้วฟังต่อ
+        if (command === "") {
+          // เรียกชื่ออย่างเดียว: รอคำสั่งในคำพูดถัดไป
+          this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
+          this.update({ wakeHeard: "", wakeQuiet: false });
+        } else {
+          // ไม่ได้เรียกชื่อ: ทิ้งคำพูดนั้นแล้วฟังต่อ แต่แสดงให้ผู้ใช้เห็นว่าได้ยินอะไร เผื่อระบบฟังถอดชื่อผิด
+          // log ระดับ debug (ซ่อนไว้ในคอนโซลตามค่าเริ่มต้น) ไว้ตรวจว่าระบบฟังถอดชื่อเป็นคำว่าอะไร
+          // eslint-disable-next-line no-console
+          console.debug("[wake] ไม่ได้เรียกชื่อ จึงไม่ส่งไปถาม AI:", heard);
+          this.update({ wakeHeard: heard, wakeQuiet: false });
+        }
+      } else if (wake === "waiting") {
+        this.silentWakeRounds += 1;
+        if (this.silentWakeRounds >= WAKE_QUIET_ROUNDS && !this.state.wakeQuiet) this.update({ wakeQuiet: true });
       }
       pendingNotice = null;
     }

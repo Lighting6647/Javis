@@ -8,6 +8,7 @@ import { HudClock } from "./HudClock";
 import { NeuralSphere } from "./NeuralSphere";
 import { OrbitalEnergyCore } from "./OrbitalEnergyCore";
 import { VoiceWaveform } from "./VoiceWaveform";
+import { WakeHint } from "./WakeHint";
 
 interface StageProps {
   /** จังหวะปัจจุบัน ขับการเคลื่อนไหวและสีของแกนกลาง */
@@ -26,6 +27,8 @@ interface StageProps {
   thinkHard?: boolean;
   /** กำลังฟังเพื่อรอคำเรียกชื่อ (ยังไม่ส่งคำพูดไปถาม AI) */
   waitingForWake?: boolean;
+  /** ระหว่างรอคำเรียกชื่อ: คำที่กำลังได้ยิน คำล่าสุดที่ไม่ได้เรียกชื่อ และไมโครโฟนเงียบมานาน */
+  wakeHint?: { partial: string; heard: string; quiet: boolean };
 }
 
 /**
@@ -42,7 +45,8 @@ export function Stage({
   metricsHidden: _metricsHidden = false,
   platformLabel,
   thinkHard = false,
-  waitingForWake = false
+  waitingForWake = false,
+  wakeHint
 }: StageProps) {
   void _readouts;
   void _metricsHidden;
@@ -71,6 +75,7 @@ export function Stage({
       </div>
 
       <VoiceWaveform phase={phase} offline={offline} thinkHard={thinkHard} waitingForWake={waitingForWake} />
+      {waitingForWake && wakeHint && <WakeHint {...wakeHint} />}
 
       {/* แผงสถานะมินิมอลขอบซ้ายและแถบระดับเสียงขอบขวา (แสดงเฉพาะโหมดเต็มจอแบบเดียวกับ localhost:5173) */}
       {!compact && (

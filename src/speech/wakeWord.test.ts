@@ -2,12 +2,38 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_WAKE_PHRASES, matchWakePhrase, normalizeWakeText, parseWakePhrases } from "./wakeWord";
 
 describe("matchWakePhrase", () => {
-  it("คำเรียกชื่อเริ่มต้นมีเฉพาะ ลูน่า (Luna) ชื่อเดิม จาร์วิส ไม่ปลุกแล้ว", () => {
-    expect(DEFAULT_WAKE_PHRASES).toEqual(["hey luna", "ลูน่า", "ลูนา", "luna"]);
+  it("คำเรียกชื่อเริ่มต้นมีเฉพาะ ลูน่า (Luna) และตัวสะกดที่ระบบฟังถอดผิด ชื่อเดิม จาร์วิส ไม่ปลุกแล้ว", () => {
+    expect(DEFAULT_WAKE_PHRASES).toEqual(["hey luna", "ลูน่า", "ลูนา", "luna", "รูน่า", "ลูหน่า", "หลูน่า", "ลูนาร์"]);
     expect(matchWakePhrase("จาร์วิส เปิดไฟ")).toBeNull();
     expect(matchWakePhrase("จาวิส เปิดไฟ")).toBeNull();
     expect(matchWakePhrase("hey jarvis open the news")).toBeNull();
   });
+
+  it.each([
+    ["ลูน่า เปิดไฟ", "เปิดไฟ"],
+    ["ลูนา เปิดไฟ", "เปิดไฟ"],
+    ["ลูน้า เปิดไฟ", "เปิดไฟ"],
+    ["ลู่น่า เปิดไฟ", "เปิดไฟ"],
+    ["ลู น่า เปิดไฟ", "เปิดไฟ"],
+    ["รูน่า เปิดไฟ", "เปิดไฟ"],
+    ["ลูหน่า เปิดไฟ", "เปิดไฟ"],
+    ["หลูน่า เปิดไฟ", "เปิดไฟ"],
+    ["ลูนาร์ เปิดไฟ", "เปิดไฟ"],
+    ["ลูนาร์เปิดไฟ", "เปิดไฟ"],
+    ["Luna เปิดไฟ", "เปิดไฟ"],
+    ["lu na เปิดไฟ", "เปิดไฟ"],
+    ["Hey Lu Na, turn on", "turn on"],
+    ["ลู​น่า เปิดไฟ", "เปิดไฟ"]
+  ])("ระบบฟังถอดชื่อต่างกัน (%s): ยังปลุกได้และได้คำสั่งครบ", (heard, command) => {
+    expect(matchWakePhrase(heard)).toEqual({ command });
+  });
+
+  it.each(["ลูกหมา เปิดไฟ", "ลูกน้ำ", "หนูนา", "lunatic fringe", "plu na", "ตอนนี้กี่โมง", "ลุงนา"])(
+    "คำอื่นที่คล้ายแต่ไม่ใช่ชื่อ (%s): ไม่ปลุก",
+    (heard) => {
+      expect(matchWakePhrase(heard)).toBeNull();
+    }
+  );
 
   it("ไม่ได้เรียกชื่อ: คืน null", () => {
     expect(matchWakePhrase("ตอนนี้กี่โมงแล้ว")).toBeNull();
