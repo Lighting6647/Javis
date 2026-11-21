@@ -6,7 +6,9 @@ import { themeStore } from "../../services/themeStore";
 import { ArcCore } from "./ArcCore";
 import { HudClock } from "./HudClock";
 import { NeuralSphere } from "./NeuralSphere";
+import { OrbitalEnergyCore } from "./OrbitalEnergyCore";
 import { Telemetry } from "./Telemetry";
+import { VoiceWaveform } from "./VoiceWaveform";
 
 interface StageProps {
   /** จังหวะปัจจุบัน ขับการเคลื่อนไหวและสีของแกนกลาง */
@@ -21,6 +23,8 @@ interface StageProps {
   metricsHidden?: boolean;
   /** ชื่อแพลตฟอร์มที่กำลังทำงาน เช่น เว็บ แอปเดสก์ท็อป */
   platformLabel?: string;
+  /** โหมดคิดลึก: ใช้ reasoning ระดับสูงในการวิเคราะห์ */
+  thinkHard?: boolean;
 }
 
 /**
@@ -35,7 +39,8 @@ export function Stage({
   compact,
   offline,
   metricsHidden = false,
-  platformLabel
+  platformLabel,
+  thinkHard = false
 }: StageProps) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
@@ -43,25 +48,28 @@ export function Stage({
 
   return (
     <aside
-      className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}`}
+      className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}${thinkHard ? " think-hard" : ""}`}
       data-phase={phase}
       aria-label="แผงสถานะของจาวิส"
     >
       <div className="stage-identity" aria-hidden>
         <span className="stage-id-code">JV-CORE-01</span>
-        <span className="stage-id-sub">{platformLabel ? `System · ${platformLabel}` : "System overview"}</span>
+        <span className="stage-id-sub">{platformLabel ? `ระบบ · ${platformLabel}` : "ระบบผู้ช่วยเสียงภาษาไทย"}</span>
       </div>
 
       <div className={`core hero ${phase}`} aria-hidden>
+        <OrbitalEnergyCore phase={phase} offline={offline} thinkHard={thinkHard} />
         <NeuralSphere phase={phase} offline={offline} compact={compact} />
         <ArcCore drawing={drawing} />
         <span className="core-sweep" />
         <span className="core-heart" />
       </div>
 
+      <VoiceWaveform phase={phase} offline={offline} thinkHard={thinkHard} />
+
       {/* สถานะเดียวกับป้ายบนแถบบนซึ่งโปรแกรมอ่านหน้าจออ่านอยู่แล้ว ตรงนี้จึงเป็นภาพอย่างเดียว */}
       <div className="stage-status" aria-hidden>
-        <span className="stage-kicker">Javis · Central Voice Studio</span>
+        <span className="stage-kicker">จาวิส · ศูนย์สั่งการด้วยเสียง</span>
         <strong>{statusLabel}</strong>
         <HudClock />
       </div>

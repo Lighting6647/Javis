@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { AudioLines, Briefcase, FolderKanban, GitBranch, Globe, LogOut, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, Brain, Briefcase, FolderKanban, GitBranch, Globe, LogOut, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
@@ -50,6 +50,7 @@ import { customVoicesStore } from "./services/customVoicesStore";
 import { openExternalPage } from "./services/openPage";
 import { startWorkspacePreferencesSync } from "./services/preferencesSync";
 import { themeStore } from "./services/themeStore";
+import { thinkHardStore } from "./services/thinkHardStore";
 import { voiceSettingsStore } from "./services/voiceSettingsStore";
 import { resolveAssistantIdentity } from "./speech/cloudVoice";
 import { memoryStore } from "./memory/memoryStore";
@@ -102,6 +103,7 @@ export default function App() {
   const pendingCaptureRef = useRef<CapturedScreenImage | null>(null);
   const captureHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const memories = useSyncExternalStore(memoryStore.subscribe, memoryStore.get);
+  const thinkHard = useSyncExternalStore(thinkHardStore.subscribe, thinkHardStore.get);
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
   const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
@@ -506,6 +508,11 @@ export default function App() {
             speakInstant(command.reply);
             return "keep-listening";
 
+          case "think-hard":
+            thinkHardStore.set(command.enabled);
+            speakInstant(command.reply);
+            return "keep-listening";
+
           case "open-url":
             if (command.url.startsWith("tel:") || command.url.startsWith("mailto:")) {
               window.location.href = command.url;
@@ -641,6 +648,19 @@ export default function App() {
           {ready && !inMeeting && (
             <button
               type="button"
+              className={`voice-enroll-entry${thinkHard ? " active" : ""}`}
+              onClick={() => thinkHardStore.set(!thinkHard)}
+              aria-pressed={thinkHard}
+              aria-label="โหมดคิดลึก"
+              title={thinkHard ? "กำลังเปิดโหมดคิดลึก (วิเคราะห์เชิงลึก) แตะเพื่อสลับกลับโหมดปกติ" : "เปิดโหมดคิดลึกสำหรับการวิเคราะห์ปัญหาซับซ้อน"}
+            >
+              <Brain size={16} aria-hidden />
+              <span>คิดลึก</span>
+            </button>
+          )}
+          {ready && !inMeeting && (
+            <button
+              type="button"
               className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
@@ -693,6 +713,7 @@ export default function App() {
           offline={aiDown}
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
+          thinkHard={thinkHard}
         />
       )}
 

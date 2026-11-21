@@ -13,7 +13,6 @@ const app = await startApp({ port: 8961 });
 const browser = await launchBrowser({ args: MIC_GRANTED });
 
 const DRAFT_KEY = "javis.meetingDraft";
-const SUGGESTION = "เริ่มโหมดสรุปการประชุม";
 const RATE_LIMITED = "ส่งข้อความถี่เกินไป กรุณารอสักครู่แล้วลองใหม่";
 const LINES = ["วันนี้คุยเรื่องเปิดตัวสินค้าใหม่", "สมชายรับไปทำใบเสนอราคา ส่งภายในวันศุกร์"];
 

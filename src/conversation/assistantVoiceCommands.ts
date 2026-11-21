@@ -10,6 +10,7 @@ export type AssistantVoiceCommand =
   | { kind: "speech-rate"; delta: "faster" | "slower" | "normal"; reply: string }
   | { kind: "theme"; theme: "holo" | "plain"; reply: string }
   | { kind: "clear-chat"; reply: string }
+  | { kind: "think-hard"; enabled: boolean; reply: string }
   | { kind: "open-url"; url: string; reply: string }
   | { kind: "launch-custom-app"; app: CustomDesktopApp; reply: string };
 
@@ -174,6 +175,12 @@ export function matchAssistantVoiceCommand(
   }
   if (/^(?:ล้างแชท|ลบแชท|เริ่มคุยใหม่|เริ่มสนทนาใหม่)$/i.test(text)) {
     return { kind: "clear-chat", reply: "ล้างบทสนทนาและเริ่มใหม่ให้เรียบร้อยแล้วค่ะ" };
+  }
+  if (/^(?:เปิด|ใช้|เข้า)?(?:โหมด)?(?:คิดลึก|วิเคราะห์ละเอียด|think\s*hard)$/i.test(text)) {
+    return { kind: "think-hard", enabled: true, reply: "เปิดโหมดคิดลึกให้แล้วครับคุณไลท์" };
+  }
+  if (/^(?:ปิด|ออก|เลิก)?(?:โหมด)?(?:คิดลึก|วิเคราะห์ละเอียด|think\s*hard)$|^โหมดปกติ$/i.test(text)) {
+    return { kind: "think-hard", enabled: false, reply: "สลับกลับเป็นโหมดตอบไวปกติแล้วครับคุณไลท์" };
   }
 
   // 8. เปิดโปรแกรมเฉพาะทาง (Custom Desktop Apps) ที่ผู้ใช้เพิ่มเอง

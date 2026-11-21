@@ -1,4 +1,5 @@
 import type { FillResult, FillValue, PageContext } from "../browser/types";
+import { thinkHardStore } from "../services/thinkHardStore";
 import { SpeechError, type SpeechRecognizer, type SpeechSynthesizer } from "../speech/types";
 import { type FillDecision, interpretFillDecision } from "./fillDecision";
 import { NOTICE_TEXT, SPEECH_ERROR_TEXT } from "./messages";
@@ -719,6 +720,7 @@ export class ConversationController {
         ...(attachedImage ? { image: attachedImage } : {}),
         memories: this.deps.memory?.list().map(({ id, text }) => ({ id, text })),
         frames: Boolean(this.deps.showPage),
+        ...(thinkHardStore.get() ? { thinkHard: true } : {}),
         onEvent: (event) => {
           if (epoch !== this.epoch) return;
 

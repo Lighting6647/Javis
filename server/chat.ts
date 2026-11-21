@@ -217,7 +217,9 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   const clientGone = new AbortController();
   response.on("close", () => clientGone.abort());
 
-  const { messages, page, screen, image, memories: allMemories, diagnose, meeting } = parsed.data;
+  const { messages, page, screen, image, memories: allMemories, diagnose, meeting, thinkHard: rawThinkHard } = parsed.data;
+  const thinkHard = rawThinkHard === true && !meeting;
+  const effectiveReasoningEffort = thinkHard ? "high" : ai.reasoningEffort;
   // ความจำเกิน 20 เรื่อง: ส่งให้ AI เฉพาะเรื่องที่เกี่ยวกับคำถาม (เลือกในเครื่อง ไม่มีค่าใช้จ่าย) ส่วนการจำ/ลืมยังตรวจกับทุกเรื่อง
   const userTurns = messages.filter((message) => message.role === "user");
   const memories = selectRelevantMemories(allMemories, userTurns.slice(-2).map((message) => message.content).join(" "));
@@ -337,7 +339,8 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
         })
       );
 
-    const thinkingLevel = request.extras && searchThinkingLevelUsable ? geminiThinkingLevel(request.model, ai.reasoningEffort) : undefined;
+    const thinkingLevel =
+      request.extras && (searchThinkingLevelUsable || thinkHard) ? geminiThinkingLevel(request.model, effectiveReasoningEffort) : undefined;
     const first = await post(thinkingLevel);
     if (!thinkingLevel || !isRejectedShape(first)) return first;
 
@@ -380,7 +383,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
           // รอบตอบต่อไม่ต้องใช้เครื่องมือ จึงไม่ส่งรายการเครื่องมือไปเลย
           tools: options.tools ? tools : [],
           maxTokens: MAX_CLAUDE_TOKENS,
-          effort: CLAUDE_EFFORTS.find((effort) => effort === ai.reasoningEffort),
+          effort: CLAUDE_EFFORTS.find((effort) => effort === effectiveReasoningEffort),
           extras: options.extras,
           // รอบตอบต่อมีประโยคสำรองของตัวเองอยู่แล้ว
           speakRefusal: options.tools
@@ -424,7 +427,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
               image: options.image,
               tools: options.tools ? tools : [],
               maxTokens: options.maxTokens ?? MAX_CHAT_STYLE_TOKENS,
-              reasoningEffort: options.extras ? ai.reasoningEffort : undefined
+              reasoningEffort: options.extras ? effectiveReasoningEffort : undefined
             })
           }),
         stream
@@ -478,7 +481,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
   };
 
   /** ผู้ให้บริการรายนี้มีตัวเลือกเสริมที่โมเดลบางรุ่นอาจไม่รับ */
-  const hasOptionalSettings = ai.apiStyle === "claude" || (ai.apiStyle === "chat" && Boolean(ai.reasoningEffort));
+  const hasOptionalSettings = ai.apiStyle === "claude" || (ai.apiStyle === "chat" && Boolean(effectiveReasoningEffort));
 
   /**
    * คำขอแรกของรอบนี้: การสนทนาปกติ หรือการสรุปการประชุม
