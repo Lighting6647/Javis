@@ -17,11 +17,11 @@ export const MAX_SPEECH_TEXT_LENGTH = 400;
 /** โมเดลสร้างเสียงหลักและโมเดลสำรองที่พูดภาษาไทยได้ */
 export const DEFAULT_TTS_MODEL = "gemini-3.8-flash-tts";
 export const DEFAULT_TTS_FALLBACK_MODELS = ["gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"] as const;
-/** เสียงหลักเริ่มต้นของระบบ: Leda (สาวน้อย Gen Z สดใส) */
-export const DEFAULT_TTS_VOICE = "Leda";
+/** เสียงหลักเริ่มต้นของระบบ: Fenrir (เสียงผู้ชาย Javis สุภาพ ชัดเจน) */
+export const DEFAULT_TTS_VOICE = "Fenrir";
 /** ลีลาการพูดเริ่มต้นที่ส่งไปกับทุกข้อความ */
 const DEFAULT_TTS_STYLE =
-  "Speak in Thai as a cheerful, bright young Thai Gen Z woman, energetic, playful, friendly, and natural.";
+  "Speak in Thai as a polite, calm, intelligent, natural male personal assistant named Javis.";
 
 /** เสียงสำเร็จรูปทั้งหมดที่ Gemini มีให้เลือก */
 export const TTS_VOICES = [
@@ -84,14 +84,15 @@ export type TtsPersonaId = (typeof TTS_PERSONAS)[number];
 
 const TTS_PERSONA_CONFIG: Record<TtsPersonaId, { defaultVoice?: (typeof TTS_VOICES)[number]; style?: string; openAiVoice: string }> = {
   assistant: {
-    defaultVoice: "Kore",
+    defaultVoice: "Fenrir",
     style:
-      "Speak in Thai as a polite, warm, natural female personal assistant with a clear feminine voice, at a natural conversational pace.",
-    openAiVoice: "nova"
+      "Speak in Thai as a polite, warm, natural male personal assistant named Javis with a clear masculine voice, at a natural conversational pace.",
+    openAiVoice: "onyx"
   },
   "genz-girl": {
     defaultVoice: "Leda",
-    style: DEFAULT_TTS_STYLE,
+    style:
+      "Speak in Thai as a cheerful, bright young Thai Gen Z woman, energetic, playful, friendly, and natural.",
     openAiVoice: "nova"
   },
   "upbeat-buddy": {

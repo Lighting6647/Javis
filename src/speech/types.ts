@@ -78,8 +78,8 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   voiceId: null,
   rate: DEFAULT_SPEECH_RATE,
   cloud: true,
-  cloudVoice: "Leda",
-  persona: "genz-girl"
+  cloudVoice: "Fenrir",
+  persona: "assistant"
 };
 
 /** ตัวพูด: อ่านข้อความออกเสียงด้วยเสียงของอุปกรณ์ */

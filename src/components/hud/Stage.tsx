@@ -45,10 +45,10 @@ export function Stage({
     <aside
       className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}`}
       data-phase={phase}
-      aria-label="แผงสถานะของนีน่า"
+      aria-label="แผงสถานะของจาวิส"
     >
       <div className="stage-identity" aria-hidden>
-        <span className="stage-id-code">NN-CORE-01</span>
+        <span className="stage-id-code">JV-CORE-01</span>
         <span className="stage-id-sub">{platformLabel ? `System · ${platformLabel}` : "System overview"}</span>
       </div>
 
@@ -61,7 +61,7 @@ export function Stage({
 
       {/* สถานะเดียวกับป้ายบนแถบบนซึ่งโปรแกรมอ่านหน้าจออ่านอยู่แล้ว ตรงนี้จึงเป็นภาพอย่างเดียว */}
       <div className="stage-status" aria-hidden>
-        <span className="stage-kicker">Nina · Central Voice Studio</span>
+        <span className="stage-kicker">Javis · Central Voice Studio</span>
         <strong>{statusLabel}</strong>
         <HudClock />
       </div>

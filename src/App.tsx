@@ -559,12 +559,10 @@ export default function App() {
       <HudFrame />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>{assistantIdentity === "javis" ? "JV" : "DL"}</span>
+          <span className="brand-mark" aria-hidden>JV</span>
           <div className="brand-title">
-            <strong>{assistantIdentity === "javis" ? "จาวิส" : "เดลลูน่า"}</strong>
-            <span className="brand-sub">
-              {assistantIdentity === "javis" ? "JAVIS · เสียงสำรอง" : "CENTRAL VOICE STUDIO"}
-            </span>
+            <strong>Javis</strong>
+            <span className="brand-sub">CENTRAL VOICE STUDIO</span>
           </div>
           {ready && !aiDown && (
             <span className="live-tag" aria-hidden>
