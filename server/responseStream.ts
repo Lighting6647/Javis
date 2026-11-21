@@ -76,7 +76,7 @@ export function safeHttpUrl(value: unknown): string | null {
 /** ชื่อพารามิเตอร์คำค้นของหน้าค้นหาที่ใช้กันทั่วไป (Google, Bing, DuckDuckGo และ YouTube) */
 const SEARCH_QUERY_PARAMS = ["q", "query", "search_query"];
 /** ประโยคที่ใช้ถามเมื่อ AI สั่งเปิดหน้าค้นหาโดยไม่มีคำค้น */
-const ASK_SEARCH_TOPIC_TEXT = "ต้องการให้ค้นหาเรื่องอะไรดีครับ";
+const ASK_SEARCH_TOPIC_TEXT = "อยากให้ค้นหาเรื่องอะไรดีคะ";
 
 /**
  * ลิงก์เป็นหน้าค้นหาที่ไม่มีคำค้น เช่น https://www.google.com/search?q=
@@ -477,7 +477,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
 
       if (page) {
         // AI สั่งเปิดหน้าเว็บโดยไม่พูดอะไร: เติมประโยคให้ผู้ใช้ได้ยินว่าเกิดอะไรขึ้น
-        if (!text.trim()) events.push({ type: "delta", text: `ได้เลยครับ นี่คือหน้า ${page.title} ครับ` });
+        if (!text.trim()) events.push({ type: "delta", text: `เปิดให้แล้วค่ะ นี่คือหน้า ${page.title} ค่ะ` });
         // ถ้ารอบนี้อ่านเนื้อหาจากเว็บมาก่อน ลิงก์อาจถูกเนื้อหานั้นชักนำ จึงให้ผู้ใช้กดเปิดเอง
         events.push({ type: "open", url: page.url, title: page.title, auto: !searched });
       } else if (suggested) {
@@ -488,7 +488,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       }
       if (fill) {
         if (!text.trim() && !page) {
-          events.push({ type: "delta", text: "เตรียมข้อมูลไว้ให้แล้วครับ ตรวจรายการแล้วกดยืนยันเพื่อกรอกได้เลย" });
+          events.push({ type: "delta", text: "เตรียมข้อมูลไว้ให้แล้วค่ะ ตรวจรายการแล้วกดยืนยันเพื่อกรอกได้เลยนะคะ" });
         }
         events.push({ type: "fill", fields: fill });
       }

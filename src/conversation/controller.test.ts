@@ -845,7 +845,7 @@ describe("ConversationController", () => {
 
   describe("เบราว์เซอร์บล็อกแท็บใหม่", () => {
     const OPEN = { type: "open", url: "https://www.google.com/search?q=%E0%B8%81", title: "ผลค้นหา ก", auto: true } as const;
-    const SAID = "ได้เลยครับ นี่คือหน้า ผลค้นหา ก ครับ";
+    const SAID = "เปิดให้แล้วค่ะ นี่คือหน้า ผลค้นหา ก ค่ะ";
 
     it("พิมพ์สั่ง: ลิงก์ถูกทำเครื่องหมายว่าถูกบล็อก ให้ผู้ใช้แตะเปิดเอง", async () => {
       const { synthesizer, chat, browser, controller } = setup();
@@ -930,7 +930,7 @@ describe("ConversationController", () => {
 
   describe("เปิดแท็บใหม่ไม่ได้ แต่พาแท็บนี้ไปยังหน้านั้นได้", () => {
     const OPEN = { type: "open", url: "https://pantip.com/", title: "Pantip", auto: true } as const;
-    const SAID = "ได้เลยครับ นี่คือหน้า Pantip ครับ";
+    const SAID = "เปิดให้แล้วค่ะ นี่คือหน้า Pantip ค่ะ";
     const ANSWER = "ราคาทองคำแท่งวันนี้ขายออก 62,350 บาทครับ\n";
     const SOURCES = [{ title: "สมาคมค้าทองคำ", url: "https://www.goldtraders.or.th/" }];
 
@@ -1101,7 +1101,7 @@ describe("ConversationController", () => {
       {
         id: "message-8",
         role: "assistant",
-        text: "ได้เลยครับ นี่คือหน้า Pantip ครับ",
+        text: "เปิดให้แล้วค่ะ นี่คือหน้า Pantip ค่ะ",
         link: { title: "Pantip", url: "https://pantip.com/", opened: true, blocked: false, inPlace: true }
       }
     ];
@@ -1119,7 +1119,7 @@ describe("ConversationController", () => {
       await settle();
       expect(chat.current.messages).toEqual([
         { role: "user", content: "เข้าเว็บไซต์ pantip" },
-        { role: "assistant", content: "ได้เลยครับ นี่คือหน้า Pantip ครับ" },
+        { role: "assistant", content: "เปิดให้แล้วค่ะ นี่คือหน้า Pantip ค่ะ" },
         { role: "user", content: "ขอบคุณ" }
       ]);
     });
@@ -1369,7 +1369,7 @@ describe("ConversationController", () => {
       controller.sendText("เข้าเว็บพันทิป");
       await settle();
       chat.current.options.onEvent({ ...PANTIP, embed: true });
-      chat.reply("ได้เลยครับ นี่คือหน้า พันทิป ครับ");
+      chat.reply("เปิดให้แล้วค่ะ นี่คือหน้า พันทิป ค่ะ");
       await settle();
 
       expect(browser.framed).toEqual([{ url: "https://pantip.com/", title: "พันทิป" }]);
@@ -1449,12 +1449,12 @@ describe("ConversationController", () => {
       recognizer.current.result.resolve("เข้าเว็บพันทิป");
       await settle();
       chat.current.options.onEvent({ ...PANTIP, embed: true });
-      chat.reply("ได้เลยครับ นี่คือหน้า พันทิป ครับ");
+      chat.reply("เปิดให้แล้วค่ะ นี่คือหน้า พันทิป ค่ะ");
       await settle();
 
       expect(browser.framed).toHaveLength(1);
       expect(browser.left).toEqual([]);
-      expect(synthesizer.spoken).toEqual(["ได้เลยครับ นี่คือหน้า พันทิป ครับ"]);
+      expect(synthesizer.spoken).toEqual(["เปิดให้แล้วค่ะ นี่คือหน้า พันทิป ค่ะ"]);
       expect(controller.getState()).toMatchObject({ phase: "listening", active: true });
     });
   });

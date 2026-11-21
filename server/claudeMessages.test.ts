@@ -513,7 +513,7 @@ describe("ทำงานร่วมกับตัวประมวลผล�
     ]);
     expect(reducer.done).toBe(true);
     expect(sent).toEqual([
-      { type: "delta", text: "ได้เลยครับ นี่คือหน้า ผลค้นหากาแฟ ครับ" },
+      { type: "delta", text: "เปิดให้แล้วค่ะ นี่คือหน้า ผลค้นหากาแฟ ค่ะ" },
       { type: "open", url: "https://www.google.com/search?q=%E0%B8%81%E0%B8%B2%E0%B9%81%E0%B8%9F", title: "ผลค้นหากาแฟ", auto: true }
     ]);
   });
