@@ -92,14 +92,21 @@ export function matchAssistantVoiceCommand(
     }
   }
 
-  // 3. นำทาง Google Maps
-  const mapMatch = text.match(/^(?:นำทาง|ขอเส้นทาง|พา|เปิดแผนที่)\s*(?:ไป|ไปยัง)?\s*(.+)$/i);
+  // 3. เปิด Google Maps / นำทาง
+  if (/^(?:เปิด|ดู)?\s*(?:google\s*maps?|กูเกิล\s*แมพ|แผนที่)$/i.test(text)) {
+    return {
+      kind: "open-url",
+      url: "https://maps.google.com/maps?output=embed&q=Thailand",
+      reply: "เปิดแผนที่ Google Maps ให้แล้วค่ะ"
+    };
+  }
+  const mapMatch = text.match(/^(?:นำทาง|ขอเส้นทาง|พา|เปิดแผนที่|เปิด\s*google\s*maps?|เปิด\s*กูเกิล\s*แมพ)\s*(?:ไป|ไปยัง)?\s*(.+)$/i);
   if (mapMatch && mapMatch[1]?.trim()) {
     const dest = mapMatch[1].trim();
     return {
       kind: "open-url",
-      url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`,
-      reply: `เปิดเส้นทางไป ${dest} บน Google Maps ให้แล้วค่ะ`
+      url: `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(dest)}`,
+      reply: `เปิดแผนที่ไป ${dest} บน Google Maps ให้แล้วค่ะ`
     };
   }
 

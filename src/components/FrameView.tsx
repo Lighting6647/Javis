@@ -25,7 +25,10 @@ function toEmbeddableFrameUrl(rawUrl: string): string {
     if (host === "maps.google.com" || ((host === "www.google.com" || host === "google.com") && parsed.pathname.startsWith("/maps"))) {
       if (parsed.searchParams.get("output") === "embed") return rawUrl;
       const searchMatch = parsed.pathname.match(/\/maps\/(?:search|place)\/([^/]+)/);
-      const query = parsed.searchParams.get("q") || (searchMatch ? decodeURIComponent(searchMatch[1] ?? "").replace(/\+/g, " ") : "Thailand");
+      const query =
+        parsed.searchParams.get("q") ||
+        parsed.searchParams.get("destination") ||
+        (searchMatch ? decodeURIComponent(searchMatch[1] ?? "").replace(/\+/g, " ") : "Thailand");
       return `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(query)}`;
     }
 
