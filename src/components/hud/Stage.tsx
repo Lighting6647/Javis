@@ -1,14 +1,12 @@
 import { useSyncExternalStore } from "react";
 import type { Phase } from "../../conversation/types";
 import type { Readout } from "../../hooks/useHudTelemetry";
-import { hudEffectsStore } from "../../services/hudEffectsStore";
 import { micLevelStore } from "../../services/micLevelStore";
 import { themeStore } from "../../services/themeStore";
 import { ArcCore } from "./ArcCore";
 import { HudClock } from "./HudClock";
 import { NeuralSphere } from "./NeuralSphere";
 import { OrbitalEnergyCore } from "./OrbitalEnergyCore";
-import { Reactor3D } from "./Reactor3D";
 import { Telemetry } from "./Telemetry";
 import { VoiceWaveform } from "./VoiceWaveform";
 
@@ -46,7 +44,6 @@ export function Stage({
 }: StageProps) {
   const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
   const micLevels = useSyncExternalStore(micLevelStore.subscribe, micLevelStore.get);
-  const hudVisual = useSyncExternalStore(hudEffectsStore.subscribe, hudEffectsStore.get);
   const drawing = phase === "listening" && theme === "holo" && micLevels;
 
   return (
@@ -61,14 +58,7 @@ export function Stage({
       </div>
 
       <div className={`core hero ${phase}`} aria-hidden>
-        <Reactor3D
-          phase={phase}
-          offline={offline}
-          thinkHard={thinkHard}
-          accent={hudVisual.accent}
-          style={hudVisual.style}
-          fallback={<OrbitalEnergyCore phase={phase} offline={offline} thinkHard={thinkHard} />}
-        />
+        <OrbitalEnergyCore phase={phase} offline={offline} thinkHard={thinkHard} />
         <NeuralSphere phase={phase} offline={offline} compact={compact} />
         <ArcCore drawing={drawing} />
         <span className="core-sweep" />

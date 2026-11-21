@@ -12,6 +12,38 @@ const SLOW_LOAD_MS = 8000;
  */
 const FRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
 
+/**
+ * แปลงลิงก์ของบริการยอดนิยมที่บล็อก iframe ปกติ (เช่น Google Maps, YouTube)
+ * ให้เป็นรูปแบบ embed ที่เปิดแสดงภายใน J.A.R.V.I.S. ได้โดยไม่ขึ้น refused to connect
+ */
+function toEmbeddableFrameUrl(rawUrl: string): string {
+  if (!rawUrl) return rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+
+    if (host === "maps.google.com" || ((host === "www.google.com" || host === "google.com") && parsed.pathname.startsWith("/maps"))) {
+      if (parsed.searchParams.get("output") === "embed") return rawUrl;
+      const searchMatch = parsed.pathname.match(/\/maps\/(?:search|place)\/([^/]+)/);
+      const query = parsed.searchParams.get("q") || (searchMatch ? decodeURIComponent(searchMatch[1] ?? "").replace(/\+/g, " ") : "Thailand");
+      return `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(query)}`;
+    }
+
+    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && parsed.pathname === "/watch") {
+      const videoId = parsed.searchParams.get("v");
+      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+    }
+
+    if (host === "youtu.be" && parsed.pathname.length > 1) {
+      const videoId = parsed.pathname.slice(1).split("/")[0];
+      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+    }
+  } catch {
+    return rawUrl;
+  }
+  return rawUrl;
+}
+
 interface FrameViewProps {
   browser: BrowserState;
   /** สั่งให้ Javis ดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง */
@@ -29,6 +61,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
   /** กรอบที่โหลดนานเกินกำหนด จำเป็นรายกรอบ จึงหายเองเมื่อเปิดหน้าใหม่หรือโหลดเสร็จ */
   const [slowFrame, setSlowFrame] = useState<string | null>(null);
   const url = browser.requestedUrl ?? "";
+  const frameSrc = toEmbeddableFrameUrl(url);
   /** สร้างกรอบใหม่ทุกครั้งที่สั่งเปิดหรือโหลดใหม่ เพื่อไม่ให้หน้าเก่าค้างอยู่ระหว่างรอหน้าใหม่ */
   const frameKey = `${browser.requestId}:${reloads}`;
   const slow = browser.loading && slowFrame === frameKey;
@@ -86,7 +119,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
       <iframe
         key={frameKey}
         className="browser-frame"
-        src={url}
+        src={frameSrc}
         title={browser.title || hostOf(url)}
         sandbox={FRAME_SANDBOX}
         referrerPolicy="no-referrer"

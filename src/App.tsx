@@ -13,6 +13,7 @@ import { VoiceDock } from "./components/VoiceDock";
 import { BootSequence } from "./components/hud/BootSequence";
 import { HandPointer } from "./components/hud/HandPointer";
 import { HudFrame } from "./components/hud/HudFrame";
+import { Reactor3D } from "./components/hud/Reactor3D";
 import { LazyBoundary } from "./components/lazy/LazyBoundary";
 import {
   BrowserView,
@@ -683,6 +684,16 @@ export default function App() {
       data-hud-accent={hudVisual.accent}
     >
       <HudFrame />
+      {stageShown && !showMainContent && (
+        <Reactor3D
+          phase={shownPhase}
+          offline={aiDown}
+          thinkHard={thinkHard}
+          accent={hudVisual.accent}
+          style={hudVisual.style}
+          fallback={null}
+        />
+      )}
       <header className="app-header">
         <div className="brand">
           <span className="brand-mark" aria-hidden>JR</span>

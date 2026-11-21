@@ -430,27 +430,19 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
 }
 
 /* ---------- 3D Holographic Reactor & Dynamic Accent ---------- */
-.core.hero .reactor-3d-wrap {
-  position: absolute;
-  inset: -14%;
-  width: 128%;
-  height: 128%;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  z-index: 1;
-}
-.core.hero:has(.reactor-3d-wrap) > .neural-sphere,
-.core.hero:has(.reactor-3d-wrap) > .arc,
-.core.hero:has(.reactor-3d-wrap) > .core-sweep,
-.core.hero:has(.reactor-3d-wrap) > .core-heart {
-  display: none;
-}
-html[data-theme="holo"] .app.has-stage:not(.show-main) .core.hero .reactor-3d-wrap {
+.app > .reactor-3d-wrap {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
   z-index: 0;
+}
+html[data-theme="plain"] .app > .reactor-3d-wrap {
+  display: none;
+}
+html[data-theme="holo"] .app.has-stage:not(.show-main):has(> .reactor-3d-wrap) > .stage .core.hero {
+  display: none;
 }
 html[data-theme="holo"] .app.has-stage:not(.show-main) .app-header {
   background: transparent;
@@ -463,7 +455,6 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .voice-waveform {
   transform: translateX(-50%);
   z-index: 6;
 }
-.stage.compact .reactor-3d-wrap { display: none; }
 
 /* ---------- Minimal Peripheral HUD (ซ้าย/ขวา แบบ localhost:5173) ---------- */
 .hud-side-systems,
