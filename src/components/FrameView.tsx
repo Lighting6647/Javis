@@ -1,7 +1,9 @@
 import { ExternalLink, Globe, LoaderCircle, RotateCw, Volume2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { type BrowserState, browserStore } from "../browser/browserStore";
+import { createExternalAutoOpener, isKnownFrameBlocked, toEmbeddableFrameUrl } from "../browser/frameEmbed";
 import { hostOf } from "../conversation/richText";
+import { openExternalPage } from "../services/openPage";
 
 /** หน้าในกรอบยังไม่แจ้งว่าโหลดเสร็จภายในเวลานี้: บอกทางออกให้ผู้ใช้ เพราะหน้า Javis มองไม่เห็นว่าข้างในเกิดอะไรขึ้น */
 const SLOW_LOAD_MS = 8000;
@@ -11,72 +13,6 @@ const SLOW_LOAD_MS = 8000;
  * แต่พาแท็บของ Javis ไปที่อื่นไม่ได้ ดาวน์โหลดไฟล์ไม่ได้ และใช้ไมโครโฟน กล้อง หรือตำแหน่งไม่ได้ (ไม่ได้มอบสิทธิ์ผ่าน allow)
  */
 const FRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
-
-/**
- * แปลงลิงก์ของบริการยอดนิยมที่บล็อก iframe ปกติ (เช่น Google Maps, YouTube)
- * ให้เป็นรูปแบบ embed ที่เปิดแสดงภายใน J.A.R.V.I.S. ได้โดยไม่ขึ้น refused to connect
- */
-function toEmbeddableFrameUrl(rawUrl: string): string {
-  if (!rawUrl) return rawUrl;
-  try {
-    const parsed = new URL(rawUrl);
-    const host = parsed.hostname.toLowerCase();
-
-    if (host === "maps.google.com" || ((host === "www.google.com" || host === "google.com") && parsed.pathname.startsWith("/maps"))) {
-      if (parsed.searchParams.get("output") === "embed") return rawUrl;
-      const searchMatch = parsed.pathname.match(/\/maps\/(?:search|place)\/([^/]+)/);
-      const query =
-        parsed.searchParams.get("q") ||
-        parsed.searchParams.get("destination") ||
-        (searchMatch ? decodeURIComponent(searchMatch[1] ?? "").replace(/\+/g, " ") : "Thailand");
-      return `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(query)}`;
-    }
-
-    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && parsed.pathname === "/watch") {
-      const videoId = parsed.searchParams.get("v");
-      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
-    }
-
-    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && parsed.pathname.startsWith("/shorts/")) {
-      const videoId = parsed.pathname.split("/")[2];
-      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
-    }
-
-    if ((host === "www.youtube.com" || host === "youtube.com") && parsed.pathname === "/playlist") {
-      const listId = parsed.searchParams.get("list");
-      if (listId) return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(listId)}`;
-    }
-
-    if (host === "youtu.be" && parsed.pathname.length > 1) {
-      const videoId = parsed.pathname.slice(1).split("/")[0];
-      if (videoId) return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
-    }
-  } catch {
-    return rawUrl;
-  }
-  return rawUrl;
-}
-
-/** เว็บยอดนิยมที่บล็อกการฝังใน iframe ด้วย X-Frame-Options: SAMEORIGIN หากไม่ใช่ URL แบบ embed */
-function isKnownFrameBlocked(frameSrc: string): boolean {
-  if (!frameSrc) return false;
-  try {
-    const parsed = new URL(frameSrc);
-    const host = parsed.hostname.toLowerCase();
-    if ((host === "www.youtube.com" || host === "youtube.com" || host === "m.youtube.com") && !parsed.pathname.startsWith("/embed/")) {
-      return true;
-    }
-    if ((host === "www.google.com" || host === "google.com") && parsed.searchParams.get("output") !== "embed") {
-      return true;
-    }
-    if (host === "mail.google.com" || host === "calendar.google.com" || host === "line.me" || host === "open.spotify.com") {
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
 
 interface FrameViewProps {
   browser: BrowserState;
@@ -94,18 +30,28 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
   const [reloads, setReloads] = useState(0);
   /** กรอบที่โหลดนานเกินกำหนด จำเป็นรายกรอบ จึงหายเองเมื่อเปิดหน้าใหม่หรือโหลดเสร็จ */
   const [slowFrame, setSlowFrame] = useState<string | null>(null);
+  /** เปิดหน้าที่แสดงในกรอบไม่ได้ในแท็บใหม่ให้เอง ครั้งเดียวต่อหนึ่งคำสั่ง */
+  const [autoOpener] = useState(() => createExternalAutoOpener(openExternalPage));
   const url = browser.requestedUrl ?? "";
   const frameSrc = toEmbeddableFrameUrl(url);
   const blockedInFrame = isKnownFrameBlocked(frameSrc);
   /** สร้างกรอบใหม่ทุกครั้งที่สั่งเปิดหรือโหลดใหม่ เพื่อไม่ให้หน้าเก่าค้างอยู่ระหว่างรอหน้าใหม่ */
   const frameKey = `${browser.requestId}:${reloads}`;
   const slow = browser.loading && slowFrame === frameKey;
+  /** null = ยังไม่ได้ลองเปิดแยกสำหรับคำสั่งนี้ (เช่นกรอบยังซ่อนอยู่) */
+  const autoOpenStatus = useSyncExternalStore(autoOpener.subscribe, () => autoOpener.statusOf(browser.requestId));
+
+  // หน้าที่แสดงในกรอบไม่ได้: ลองเปิดในแท็บใหม่ให้เองหนึ่งครั้ง ถ้าเบราว์เซอร์กันไว้ การ์ดจะบอกให้ผู้ใช้กดปุ่มเปิดเอง
+  useEffect(() => {
+    if (!browser.visible || !blockedInFrame || !url) return;
+    if (autoOpener.attempt(browser.requestId, url)) browserStore.update({ loading: false });
+  }, [autoOpener, browser.requestId, browser.visible, blockedInFrame, url]);
 
   useEffect(() => {
-    if (!browser.loading) return;
+    if (!browser.loading || blockedInFrame) return;
     const timer = window.setTimeout(() => setSlowFrame(frameKey), SLOW_LOAD_MS);
     return () => window.clearTimeout(timer);
-  }, [browser.loading, frameKey]);
+  }, [browser.loading, blockedInFrame, frameKey]);
 
   const reload = () => {
     browserStore.update({ loading: true });
@@ -131,7 +77,7 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
             className="browser-read-btn"
             onClick={onReadPage}
             aria-label="อ่านหน้านี้ให้ฟัง"
-            title="ให้เดลลูน่าดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
+            title="ให้จาร์วิสดึงเนื้อหาหน้าเว็บนี้มาสรุปและอ่านให้ฟัง"
           >
             <Volume2 size={15} aria-hidden />
             <span>อ่านหน้านี้</span>
@@ -154,13 +100,19 @@ export function FrameView({ browser, onReadPage }: FrameViewProps) {
       {blockedInFrame ? (
         <div className="browser-blocked-card" role="region" aria-label="เว็บนี้ไม่อนุญาตให้แสดงในกรอบ">
           <Globe size={28} aria-hidden />
-          <strong>{hostOf(url)} ไม่อนุญาตให้แสดงในกรอบย่อย</strong>
+          <strong>
+            {autoOpenStatus === "opened" ? `เปิด ${hostOf(url)} ในแท็บใหม่ให้แล้วค่ะ` : `${hostOf(url)} เปิดในจาร์วิสไม่ได้ค่ะ`}
+          </strong>
           <p>
-            เจ้าของเว็บไซต์ป้องกันการฝังหน้าหลักในกรอบเบราว์เซอร์ สามารถกดเปิดในหน้าต่างแยกด้านล่างได้เลย (หากเป็น YouTube สามารถสั่งชื่อเพลงหรือคลิปเจาะจงเพื่อเล่นในกรอบได้ครับ)
+            {autoOpenStatus === "opened"
+              ? "เว็บนี้ไม่ยอมให้แสดงในจาร์วิส เลยเปิดแยกให้นะคะ ถ้าแท็บใหม่ไม่ขึ้น กดปุ่มด้านล่างได้เลยค่ะ"
+              : autoOpenStatus === "blocked"
+                ? "เบราว์เซอร์กันหน้าต่างเด้งไว้ค่ะ กดปุ่มด้านล่างเพื่อเปิดในแท็บใหม่นะคะ (ถ้าเป็น YouTube สั่งชื่อเพลงหรือคลิปเจาะจง จะเล่นในจาร์วิสได้เลยค่ะ)"
+                : "เจ้าของเว็บไม่ยอมให้แสดงในกรอบค่ะ กดปุ่มด้านล่างเพื่อเปิดในแท็บใหม่นะคะ"}
           </p>
           <div className="browser-blocked-actions">
             <a className="btn btn-primary" href={url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={15} aria-hidden /> เปิดในหน้าต่างแยก
+              <ExternalLink size={15} aria-hidden /> {autoOpenStatus === "opened" ? "เปิดอีกครั้ง" : "เปิดในแท็บใหม่"}
             </a>
             <button type="button" className="btn btn-quiet" onClick={browserStore.close}>
               ปิดหน้าเว็บ
