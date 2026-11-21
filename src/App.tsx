@@ -121,6 +121,7 @@ export default function App() {
   });
   const [clapEnabled, setClapEnabled] = useState(false);
   const [handControlEnabled, setHandControlEnabled] = useState(false);
+  const [sensorNotice, setSensorNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [handPointer, setHandPointer] = useState<HandPointerState>({
     active: false,
     x: 0,
@@ -243,7 +244,7 @@ export default function App() {
     !inMeeting &&
     (dockShown ||
       Boolean(
-        pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint || heard
+        pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || sensorNotice || notice || meetingNotice || speechHint || heard
       ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
@@ -605,7 +606,14 @@ export default function App() {
         if (cancelled) handle.stop();
         else stopClap = handle.stop;
       })
-      .catch(() => setClapEnabled(false));
+      .catch((error) => {
+        if (cancelled) return;
+        setClapEnabled(false);
+        setSensorNotice({
+          tone: "error",
+          text: error instanceof Error ? error.message : "เปิดไมโครโฟนตรวจจับเสียงตบมือไม่ได้"
+        });
+      });
     return () => {
       cancelled = true;
       stopClap?.();
@@ -630,18 +638,35 @@ export default function App() {
           btn.click();
         }
       },
-      () => {
-        if (!cancelled) setHandControlEnabled(false);
+      (message) => {
+        if (cancelled) return;
+        setHandControlEnabled(false);
+        setSensorNotice({ tone: "error", text: message });
       }
-    ).then((handle) => {
-      if (cancelled) handle.stop();
-      else stopHands = handle.stop;
-    });
+    )
+      .then((handle) => {
+        if (cancelled) handle.stop();
+        else stopHands = handle.stop;
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setHandControlEnabled(false);
+        setSensorNotice({
+          tone: "error",
+          text: error instanceof Error ? error.message : "เปิดกล้องควบคุมท่ามือไม่ได้"
+        });
+      });
     return () => {
       cancelled = true;
       stopHands?.();
     };
   }, [ready, handControlEnabled, inMeeting]);
+
+  useEffect(() => {
+    if (!sensorNotice) return;
+    const timer = window.setTimeout(() => setSensorNotice(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [sensorNotice]);
 
   // เสียงตอบรับสั้นๆ ระหว่างรอ AI คิดคำตอบ (Filler)
   useEffect(() => {
@@ -787,7 +812,16 @@ export default function App() {
               className={`voice-enroll-entry${handControlEnabled ? " active" : ""}`}
               onClick={() => {
                 sfx.click();
-                setHandControlEnabled((prev) => !prev);
+                setHandControlEnabled((prev) => {
+                  const next = !prev;
+                  setSensorNotice({
+                    tone: "info",
+                    text: next
+                      ? "กำลังเปิดกล้องจับท่ามือ: ชี้นิ้วเพื่อเลื่อน และจีบนิ้วเพื่อคลิก"
+                      : "ปิดโหมดควบคุมด้วยท่ามือแล้ว"
+                  });
+                  return next;
+                });
               }}
               aria-pressed={handControlEnabled}
               aria-label="ควบคุมด้วยท่ามือ"
@@ -803,7 +837,18 @@ export default function App() {
               className={`voice-enroll-entry${clapEnabled ? " active" : ""}`}
               onClick={() => {
                 sfx.click();
-                setClapEnabled((prev) => !prev);
+                setClapEnabled((prev) => {
+                  const next = !prev;
+                  setSensorNotice({
+                    tone: "info",
+                    text: next
+                      ? active
+                        ? "เปิดโหมดตบมือแล้ว (จะทำงานเมื่อปิดไมโครโฟนพักอยู่)"
+                        : "เปิดโหมดตบมือ 2 ครั้งเพื่อปลุกจาวิสแล้ว"
+                      : "ปิดโหมดตบมือปลุกแล้ว"
+                  });
+                  return next;
+                });
               }}
               aria-pressed={clapEnabled}
               aria-label="ตบมือปลุก"
@@ -1023,6 +1068,11 @@ export default function App() {
           {captureError && (
             <div className="toast error" role="alert">
               {captureError}
+            </div>
+          )}
+          {sensorNotice && (
+            <div className={`toast ${sensorNotice.tone}`} role={sensorNotice.tone === "error" ? "alert" : "status"}>
+              {sensorNotice.text}
             </div>
           )}
           {notice && (

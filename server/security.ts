@@ -39,14 +39,15 @@ export const securityHeaders: RequestHandler = helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'"],
+      "script-src": ["'self'", "'wasm-unsafe-eval'", "blob:"],
+      "worker-src": ["'self'", "blob:"],
       // ฟอนต์อยู่ในแอปเอง (src/fonts.ts) จึงไม่ต้องเปิดให้โหลดสไตล์หรือฟอนต์จากที่อื่น
       "style-src": ["'self'", ELECTRON_WEBVIEW_STYLE_HASH],
       "font-src": ["'self'"],
       "img-src": ["'self'", "data:"],
       // blob: คือเสียงพูดของ Gemini ที่หน้าเว็บรับมาจากเซิร์ฟเวอร์นี้แล้วเล่นจากหน่วยความจำ (src/speech/audioPlayer.ts)
       "media-src": ["'self'", "blob:"],
-      "connect-src": ["'self'"],
+      "connect-src": ["'self'", "https://storage.googleapis.com"],
       // หน้าเว็บแสดงหน้าที่ผู้ใช้สั่งเปิดไว้ในกรอบของตัวเองได้ เฉพาะหน้า https และเฉพาะหน้าที่เจ้าของเว็บยอม (ดู server/frameCheck.ts)
       "frame-src": ["https:"],
       "object-src": ["'none'"],
@@ -57,7 +58,7 @@ export const securityHeaders: RequestHandler = helmet({
 });
 
 export const permissionsPolicy: RequestHandler = (_request, response, next) => {
-  response.setHeader("Permissions-Policy", "microphone=(self), camera=(), geolocation=()");
+  response.setHeader("Permissions-Policy", "microphone=(self), camera=(self), geolocation=()");
   next();
 };
 

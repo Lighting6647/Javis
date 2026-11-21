@@ -436,6 +436,7 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
   width: 128%;
   height: 128%;
   pointer-events: none;
+  mix-blend-mode: screen;
   z-index: 1;
 }
 .stage.compact .reactor-3d-wrap { display: none; }

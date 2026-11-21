@@ -12,7 +12,7 @@ export interface HandControlHandle {
   stop: () => void;
 }
 
-const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
+const WASM_ROOT = "/mediapipe/wasm";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 
