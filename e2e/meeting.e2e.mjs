@@ -82,15 +82,7 @@ try {
     const { page, problems, chat } = await openPage(context);
 
     check("ทางเข้า: ปุ่มบนแถบบนมีชื่อกำกับ", (await page.locator(".meeting-entry").innerText()).trim() === "ประชุม");
-    const drawerToggle = page.locator(".studio-drawer-toggle");
-    if ((await drawerToggle.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) !== "true") {
-      await drawerToggle.click();
-    }
-    check("ทางเข้า: หน้าเริ่มต้นมีคำสั่งเริ่มโหมดประชุมให้เลือก", (await page.locator(".suggestions button").allInnerTexts()).some((text) => text.includes(SUGGESTION)));
-    const drawerClose = page.locator(".studio-drawer .icon-button");
-    if ((await drawerClose.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) === "true") {
-      await drawerClose.click();
-    }
+    check("หน้าเริ่มต้น: ไม่มีช่องแชทและช่องพิมพ์ข้อความ", (await page.locator(".thread, .composer").count()) === 0);
 
     const roundsBefore = await voice(page, "rounds");
     await page.locator(".meeting-entry").click();
@@ -120,7 +112,7 @@ try {
     check("คำพูดที่ฟังเหมือนคำสั่ง: ถูกจดเป็นคำพูด ไม่ถูกทำตาม", (await lines(page)).at(-1) === "เปิดเว็บกรมอุตุนิยมวิทยาให้หน่อย");
     check("ระหว่างจดไม่มีคำขอไปหา AI เลย", chat.length === 0, `คำขอ ${chat.length}`);
     check("ระหว่างจด Javis ไม่พูดอะไร", (await page.evaluate(() => window.__tts.calls.length)) === 0);
-    check("ระหว่างจดไม่มีข้อความเข้าบทสนทนา", (await page.locator(".thread .message").count()) === 0);
+    check("ระหว่างจดไม่มีช่องแชทหรือช่องพิมพ์ข้อความ", (await page.locator(".thread, .composer").count()) === 0);
 
     const clockBefore = await page.locator(".meeting-clock").innerText();
     await sleep(1300);
@@ -200,14 +192,14 @@ try {
     check("กำลังสรุป: ปิดระบบฟังแล้ว", !(await voice(page, "listening")));
     check("กำลังสรุป: มีที่รอคำสรุปและปุ่มยกเลิกการสรุป", (await page.locator(".meeting-summary").count()) === 1 && (await button(page, "ยกเลิกการสรุป").count()) === 1);
     await shot(page, "summarizing-1280");
-    await page.waitForSelector(".thread .message.assistant .meeting-export", { timeout: 20000 });
+    await page.waitForSelector(".meeting-summary-card .meeting-export", { timeout: 20000 });
     check("สรุปเสร็จ: แผงการประชุมปิด", (await page.locator(".meeting").count()) === 0);
     check("ขอ AI ครั้งเดียวต่อการประชุม", chat.length === 1, `คำขอ ${chat.length}`);
     const sent = chat[0]?.meeting?.transcript?.split("\n") ?? [];
     check("ส่งบันทึกทั้งหมด บรรทัดละช่วง พร้อมเวลา", sent.length === 46 && /^\[\d{2}:\d{2}\] วันนี้คุยเรื่องเปิดตัวสินค้าใหม่$/.test(sent[0] ?? ""), `${sent.length} บรรทัด | ${sent[0]}`);
     check("ส่งความยาวการประชุมเป็นนาที และไม่ส่งประวัติบทสนทนา", Number.isInteger(chat[0]?.meeting?.minutes) && chat[0]?.messages?.length === 1);
-    const messages = await page.locator(".thread .message").evaluateAll((nodes) => nodes.map((node) => ({ role: node.classList.contains("user") ? "user" : "assistant", text: node.querySelector("p")?.textContent ?? "" })));
-    check("คำสรุปเข้าบทสนทนา พร้อมคำขอของผู้ใช้", messages.length === 2 && /^สรุปการประชุม \(.+\)$/.test(messages[0].text) && messages[1].text === MEETING_SUMMARY, JSON.stringify(messages[0]));
+    const summaryBody = (await page.locator(".meeting-summary-card .meeting-summary-body").textContent()) ?? "";
+    check("คำสรุปแสดงในการ์ดสรุปการประชุมโดยไม่มีช่องแชท", summaryBody === MEETING_SUMMARY && (await page.locator(".thread, .composer").count()) === 0, summaryBody);
     check("คำสรุปไม่ถูกอ่านออกเสียง", (await page.evaluate(() => window.__tts.calls.length)) === ttsBefore);
     check("บันทึกที่ค้างในเครื่องถูกล้างหลังสรุป", (await draft(page)) === null);
     await listeningAgain(page);
@@ -222,12 +214,12 @@ try {
     }
 
     // นำบันทึกออก
-    const exportButton = (name) => page.locator(".thread .meeting-export button", { hasText: name });
+    const exportButton = (name) => page.locator(".meeting-summary-card .meeting-export button", { hasText: name });
     await page.bringToFront();
     // Windows เก็บข้อความในคลิปบอร์ดด้วยการขึ้นบรรทัดแบบ CRLF จึงเทียบโดยไม่สนรูปแบบการขึ้นบรรทัด
     const clipboard = async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n");
     await exportButton("คัดลอกคำสรุป").click();
-    await page.waitForSelector(".thread .meeting-export button.done");
+    await page.waitForSelector(".meeting-summary-card .meeting-export button.done");
     const copiedSummary = await clipboard();
     check("คัดลอกคำสรุป: ได้คำสรุปในคลิปบอร์ด และปุ่มบอกว่าคัดลอกแล้ว", copiedSummary === MEETING_SUMMARY, JSON.stringify(copiedSummary.slice(0, 80)));
     await exportButton("คัดลอกบันทึกคำพูด").click();
@@ -239,33 +231,32 @@ try {
     const text = file.toString("utf8");
     check("ดาวน์โหลด: ชื่อไฟล์บอกวันและเวลา", /^(?:delluna|javis)-meeting-\d{8}-\d{4}\.txt$/.test(download.suggestedFilename()), download.suggestedFilename());
     check("ดาวน์โหลด: มีเครื่องหมาย UTF-8 คำสรุป และบันทึกคำพูด", file[0] === 0xef && file[1] === 0xbb && file[2] === 0xbf && text.includes("\r\nคำสรุป\r\n") && text.includes("- สมชายทำใบเสนอราคา กำหนดเสร็จวันศุกร์\r\n") && text.includes(`\r\n${sent[0]}\r\n`));
-    await page.waitForFunction(() => !document.querySelector(".thread .meeting-export button.done"), null, { timeout: 5000 });
+    await page.waitForFunction(() => !document.querySelector(".meeting-summary-card .meeting-export button.done"), null, { timeout: 5000 });
     check("ปุ่มคัดลอกกลับเป็นปกติเอง", (await exportButton("คัดลอกคำสรุป").count()) === 1);
 
-    // ถามต่อจากคำสรุป
+    // ถามต่อจากคำสรุปด้วยเสียงล้วน
     await voice(page, "say", "งานของสมชายคืออะไร");
-    await page.waitForFunction(() => document.querySelectorAll(".thread .message").length === 4 && document.querySelector(".thread article.message:last-of-type p:not(.typing)"));
+    await page.waitForFunction((count) => window.__tts.calls.length > count, ttsBefore, { timeout: 10000 });
     const followUp = chat[1];
     check(
-      "ถามต่อ: AI เห็นคำสรุปเป็นประวัติ และคำขอนี้ไม่ใช่คำขอสรุป",
+      "ถามต่อด้วยเสียง: AI เห็นคำสรุปเป็นประวัติ และคำขอนี้ไม่ใช่คำขอสรุป",
       chat.length === 2 && followUp?.meeting === undefined && followUp?.messages?.length === 3 && followUp.messages[1].content.includes("ภาพรวม"),
       JSON.stringify(followUp?.messages?.map((message) => message.role))
     );
-    await page.waitForFunction((count) => window.__tts.calls.length > count, ttsBefore, { timeout: 8000 }).catch(() => null);
-    check("ถามต่อ: คำตอบปกติถูกอ่านออกเสียง (ตัวตรวจการพูดทำงาน)", (await page.evaluate(() => window.__tts.calls.length)) > ttsBefore);
+    check("ถามต่อด้วยเสียง: คำตอบปกติถูกอ่านออกเสียง (ตัวตรวจการพูดทำงาน)", (await page.evaluate(() => window.__tts.calls.length)) > ttsBefore);
 
     // สั่งด้วยเสียง
     await listeningAgain(page);
-    const before = { tts: await page.evaluate(() => window.__tts.calls.length), messages: await page.locator(".thread .message").count() };
+    const before = { tts: await page.evaluate(() => window.__tts.calls.length) };
     await voice(page, "say", "จาวิส เริ่มโหมดประชุม");
     await recording(page);
     await sleep(500);
     check("สั่งด้วยเสียงว่าเริ่มโหมดประชุม: เริ่มจดทันที", (await pill(page)) === "กำลังจดการประชุม");
-    check("สั่งด้วยเสียง: ไม่ถาม AI ไม่เพิ่มข้อความ และไม่พูดตอบ", chat.length === 2 && (await page.locator(".thread .message").count()) === before.messages && (await page.evaluate(() => window.__tts.calls.length)) === before.tts);
+    check("สั่งด้วยเสียง: ไม่ถาม AI และไม่พูดตอบ", chat.length === 2 && (await page.evaluate(() => window.__tts.calls.length)) === before.tts);
     await page.evaluate(() => window.__seen.reset());
     await button(page, "ยกเลิก").click();
     await listeningAgain(page);
-    check("ยกเลิกตอนยังไม่ได้จดอะไร: ออกทันทีไม่ต้องยืนยัน และกลับไปฟังคำสั่ง", (await page.locator(".meeting").count()) === 0 && (await page.locator(".thread .message").count()) === before.messages);
+    check("ยกเลิกตอนยังไม่ได้จดอะไร: ออกทันทีไม่ต้องยืนยัน และกลับไปฟังคำสั่ง", (await page.locator(".meeting").count()) === 0 && (await page.locator(".thread, .composer").count()) === 0);
     check("ออกจากโหมดประชุม: แถบสั่งงานไม่โผล่มาแวบเดียว", !(await page.evaluate(() => window.__seen.composer())));
     check("กรณีที่ 1: คอนโซลไม่มีข้อผิดพลาดหรือคำเตือน", problems.length === 0, describeProblems(problems));
     await context.close();
@@ -276,13 +267,9 @@ try {
     const context = await openContext();
     const { page, problems, chat } = await openPage(context, { expected: ["status of 429"] });
 
-    const drawerToggle = page.locator(".studio-drawer-toggle");
-    if ((await drawerToggle.count()) > 0 && (await drawerToggle.getAttribute("aria-expanded")) !== "true") {
-      await drawerToggle.click();
-    }
-    await page.locator(".suggestions button", { hasText: SUGGESTION }).click();
+    await page.locator(".meeting-entry").click();
     await recording(page);
-    check("เลือกคำสั่งจากหน้าเริ่มต้น: เริ่มจดทันทีโดยไม่ถาม AI", chat.length === 0 && (await page.locator(".thread .message").count()) === 0);
+    check("กดเริ่มโหมดประชุมจากแถบบน: เริ่มจดทันทีโดยไม่ถาม AI และไม่มีช่องแชท", chat.length === 0 && (await page.locator(".thread, .composer").count()) === 0);
 
     await voice(page, "say", LINES[0]);
     await voice(page, "say", LINES[1]);
@@ -293,7 +280,7 @@ try {
     await button(page, "ยกเลิก").click();
     await button(page, "ทิ้งบันทึก").click();
     await listeningAgain(page);
-    check("ทิ้งบันทึก: ออกจากโหมด ล้างบันทึกในเครื่อง และไม่มีอะไรเข้าบทสนทนา", (await page.locator(".meeting").count()) === 0 && (await draft(page)) === null && (await page.locator(".thread .message").count()) === 0 && chat.length === 0);
+    check("ทิ้งบันทึก: ออกจากโหมด ล้างบันทึกในเครื่อง และไม่มีช่องแชท", (await page.locator(".meeting").count()) === 0 && (await draft(page)) === null && (await page.locator(".thread, .composer").count()) === 0 && chat.length === 0);
 
     // สรุปไม่สำเร็จ: บันทึกยังอยู่ และสรุปซ้ำได้
     await page.locator(".meeting-entry").click();
@@ -308,8 +295,8 @@ try {
     check("สรุปไม่สำเร็จ: ยังนำบันทึกคำพูดออกได้", (await page.locator(".meeting-foot .meeting-export button").count()) === 2);
     await shot(page, "failed-1280");
     await button(page, "จบและสรุป").click();
-    await page.waitForSelector(".thread .message.assistant .meeting-export", { timeout: 20000 });
-    check("กดสรุปซ้ำ: ได้คำสรุป", (await page.locator(".thread .message.assistant p").first().textContent()) === MEETING_SUMMARY);
+    await page.waitForSelector(".meeting-summary-card .meeting-export", { timeout: 20000 });
+    check("กดสรุปซ้ำ: ได้คำสรุป", (await page.locator(".meeting-summary-card .meeting-summary-body").textContent()) === MEETING_SUMMARY);
     await listeningAgain(page);
 
     // หน้าเว็บถูกโหลดใหม่กลางประชุม
@@ -329,7 +316,7 @@ try {
     await voice(page, "say", "ประชุมต่อหลังโหลดหน้าใหม่");
     const requestsBefore = chat.length;
     await button(page, "จบและสรุป").click();
-    await page.waitForSelector(".thread .message.assistant .meeting-export", { timeout: 20000 });
+    await page.waitForSelector(".meeting-summary-card .meeting-export", { timeout: 20000 });
     check("บันทึกที่กลับมา: จดต่อและสรุปได้ครบทุกช่วง", chat.length === requestsBefore + 1 && chat.at(-1)?.meeting?.transcript?.split("\n").length === 3);
     check("กรณีที่ 2: คอนโซลไม่มีข้อผิดพลาดหรือคำเตือนอื่น", problems.length === 0, describeProblems(problems));
     await context.close();
@@ -497,23 +484,11 @@ try {
       check(`${label} ยืนยันการทิ้ง: ไม่ล้นจอแนวนอน และปุ่มอยู่ในจอ`, confirmSize.page <= 0 && confirmSize.buttonsPast <= 0, JSON.stringify(confirmSize));
       await button(page, "เก็บไว้").click();
       await button(page, "จบและสรุป").click();
-      await page.waitForSelector(".thread .message.assistant .meeting-export", { timeout: 20000 });
+      await page.waitForSelector(".meeting-summary-card .meeting-export", { timeout: 20000 });
       const summarySize = await overflow(page);
-      check(`${label} คำสรุปในบทสนทนา: ไม่ล้นจอแนวนอน`, summarySize.page <= 0 && summarySize.header <= 0, JSON.stringify(summarySize));
+      check(`${label} การ์ดสรุปการประชุม: ไม่ล้นจอแนวนอน`, summarySize.page <= 0 && summarySize.header <= 0, JSON.stringify(summarySize));
       await shot(page, `summary-${theme}-${viewport.width}`);
-      // ปุ่ม 👍/👎 ใต้คำตอบ: กด 👎 แล้วช่องหมายเหตุต้องไม่ล้นจอ ส่งแล้วเห็นข้อความขอบคุณ
-      const summary = page.locator(".thread .message.assistant").last();
-      check(`${label} มีปุ่ม 👍/👎 ใต้คำตอบ`, (await summary.locator(".feedback-buttons button").count()) === 2);
-      await summary.getByRole("button", { name: "คำตอบนี้ไม่ดี" }).click();
-      await summary.locator(".feedback-note input").fill("สรุปยาวเกินไป อยากได้เป็นข้อ ๆ สั้นกว่านี้ ".repeat(4));
-      const noteSize = await overflow(page);
-      const noteRight = await summary.locator(".feedback-note").evaluate((node) => Math.round(node.getBoundingClientRect().right - window.innerWidth));
-      check(`${label} ช่องหมายเหตุ 👎: ไม่ล้นจอแนวนอน`, noteSize.page <= 0 && noteRight <= 0, JSON.stringify({ ...noteSize, noteRight }));
-      await shot(page, `feedback-${theme}-${viewport.width}`);
-      await summary.getByRole("button", { name: "ส่งคำติชม" }).click();
-      await summary.locator(".feedback-status").waitFor({ timeout: 5000 });
-      check(`${label} ส่งคำติชมแล้วเห็นข้อความรับทราบ`, (await summary.locator(".feedback-status").textContent())?.includes("รับทราบ") === true);
-      check(`${label}: คอนโซลไม่มีข้อผิดพลาดหรือคำเตือน`, problems.length === 0, describeProblems(problems));
+      check(`${label}: ไม่มีช่องแชทและไม่มีข้อผิดพลาด`, (await page.locator(".thread, .composer").count()) === 0 && problems.length === 0, describeProblems(problems));
       await context.close();
     }
   }

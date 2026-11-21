@@ -1,6 +1,4 @@
-import { AudioLines, LoaderCircle, Mic, Monitor, SendHorizontal, ShieldCheck, Square } from "lucide-react";
-import { type FormEvent, useState } from "react";
-import { MESSAGE_LENGTH_LIMIT } from "../conversation/controller";
+import { AudioLines, LoaderCircle, Mic, Monitor, ShieldCheck, Square } from "lucide-react";
 import type { Phase } from "../conversation/types";
 import { HoloRings } from "./HoloCore";
 
@@ -14,38 +12,35 @@ interface VoiceDockProps {
   onDeviceListening: boolean;
   /**
    * ที่นี่ฟังตลอดเวลาได้: ปุ่มไมโครโฟนเปิดการฟังค้างไว้ และแถบนี้จะหายไประหว่างที่ฟังอยู่
-   * จึงแสดงเฉพาะตอนไมโครโฟนปิดหรือใช้ไม่ได้ เพื่อให้ผู้ใช้เปิดไมโครโฟนหรือพิมพ์แทนได้
+   * จึงแสดงเฉพาะตอนไมโครโฟนปิดหรือใช้ไม่ได้ เพื่อให้ผู้ใช้เปิดไมโครโฟนสั่งงานด้วยเสียง
    */
   alwaysOn: boolean;
   onStart: () => void;
   onStop: () => void;
   onInterrupt: () => void;
   onFinishListening: () => void;
-  onSend: (text: string) => void;
   /** อุปกรณ์นี้จับภาพหน้าจอ/หน้าต่างอื่นได้ */
   canCaptureScreen?: boolean;
   /** จับภาพหน้าจอหรือโปรแกรมอื่นให้ AI ช่วยอ่าน */
   onCaptureScreen?: () => Promise<void> | void;
   /** กำลังจับภาพหน้าจออยู่ */
   capturingScreen?: boolean;
-  /** มีภาพหน้าจอแนบอยู่และพร้อมส่งกับข้อความถัดไป */
-  hasAttachment?: boolean;
 }
 
 const ORB_LABEL: Record<Phase, string> = {
-  idle: "เริ่มพูดกับเดลลูน่า",
+  idle: "เริ่มพูดสั่งงาน Javis",
   starting: "กำลังเตรียมไมโครโฟน",
-  listening: "พูดจบแล้ว ส่งคำถาม",
+  listening: "พูดจบแล้ว ส่งคำสั่งเสียง",
   thinking: "หยุดคำตอบแล้วพูดใหม่",
   speaking: "หยุดคำตอบแล้วพูดใหม่"
 };
 
 const CAPTION: Record<Phase, string> = {
-  idle: "แตะไมโครโฟนเพื่อพูด หรือพิมพ์ข้อความ",
+  idle: "แตะไมโครโฟนเพื่อพูดสั่งงาน Javis",
   starting: "กำลังเตรียมไมโครโฟน…",
-  listening: "กำลังฟังคุณอยู่…",
+  listening: "กำลังฟังคำสั่งเสียงอยู่…",
   thinking: "กำลังคิดคำตอบ…",
-  speaking: "เดลลูน่ากำลังตอบ แตะเพื่อพูดแทรก"
+  speaking: "Javis กำลังตอบ แตะเพื่อพูดแทรก"
 };
 
 function OrbIcon({ phase }: { phase: Phase }) {
@@ -55,7 +50,7 @@ function OrbIcon({ phase }: { phase: Phase }) {
   return <Mic size={24} aria-hidden />;
 }
 
-/** แถบควบคุมด้านล่าง: ปุ่มเสียงหนึ่งปุ่มทำทุกจังหวะ (เริ่ม ส่ง พูดแทรก) คู่กับช่องพิมพ์ */
+/** แถบควบคุมเสียงด้านล่าง (Pure Voice-First ไม่มีช่องพิมพ์แชท) */
 export function VoiceDock({
   phase,
   active,
@@ -67,26 +62,14 @@ export function VoiceDock({
   onStop,
   onInterrupt,
   onFinishListening,
-  onSend,
   canCaptureScreen,
   onCaptureScreen,
-  capturingScreen,
-  hasAttachment
+  capturingScreen
 }: VoiceDockProps) {
-  const [input, setInput] = useState("");
-
   const handleOrb = () => {
     if (phase === "idle") onStart();
     else if (phase === "listening") onFinishListening();
     else if (phase === "thinking" || phase === "speaking") onInterrupt();
-  };
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const text = input.trim() || (hasAttachment ? "ช่วยอ่านและอธิบายสิ่งที่เห็นในภาพหน้าจอนี้ให้ฟังหน่อย" : "");
-    if (!text) return;
-    onSend(text);
-    setInput("");
   };
 
   const heard = phase === "listening" && partial;
@@ -95,9 +78,9 @@ export function VoiceDock({
     phase === "thinking" && searching
       ? "กำลังค้นข้อมูลจากเว็บ…"
       : idle && alwaysOn
-        ? "แตะไมโครโฟนหนึ่งครั้ง แล้วเดลลูน่าจะฟังตลอดเวลา หรือพิมพ์ข้อความ"
+        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว Javis จะฟังคำสั่งเสียงตลอดเวลา"
         : CAPTION[phase];
-  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้เดลลูน่าฟังตลอดเวลา" : ORB_LABEL[phase];
+  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ Javis ฟังตลอดเวลา" : ORB_LABEL[phase];
 
   return (
     <div className="dock-inner">
@@ -117,7 +100,7 @@ export function VoiceDock({
         )}
       </div>
 
-      <div className="dock-row">
+      <div className="dock-row voice-only">
         <div className={`core small ${phase}`}>
           <HoloRings />
           <button
@@ -130,32 +113,18 @@ export function VoiceDock({
             <OrbIcon phase={phase} />
           </button>
         </div>
-
-        <form className="composer" onSubmit={handleSubmit}>
-          <input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder={hasAttachment ? "พิมพ์คำถามเกี่ยวกับภาพ หรือกดส่งเพื่อให้เดลลูน่าอ่านเลย…" : "พิมพ์ข้อความถึงเดลลูน่า…"}
-            aria-label="ข้อความถึงเดลลูน่า"
-            maxLength={MESSAGE_LENGTH_LIMIT}
-            enterKeyHint="send"
-          />
-          {canCaptureScreen && onCaptureScreen && (
-            <button
-              type="button"
-              className="dock-capture-btn"
-              onClick={() => void onCaptureScreen()}
-              disabled={capturingScreen}
-              aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้เดลลูน่าอ่าน"
-              title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้เดลลูน่าอ่าน"
-            >
-              <Monitor size={17} aria-hidden />
-            </button>
-          )}
-          <button type="submit" disabled={!input.trim() && !hasAttachment} aria-label="ส่งข้อความ">
-            <SendHorizontal size={18} aria-hidden />
+        {canCaptureScreen && onCaptureScreen && (
+          <button
+            type="button"
+            className="dock-capture-btn"
+            onClick={() => void onCaptureScreen()}
+            disabled={capturingScreen}
+            aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ Javis อ่าน"
+            title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ Javis อ่าน"
+          >
+            <Monitor size={18} aria-hidden />
           </button>
-        </form>
+        )}
       </div>
     </div>
   );

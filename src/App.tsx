@@ -1,14 +1,14 @@
 import { Capacitor } from "@capacitor/core";
-import { AudioLines, Briefcase, FolderKanban, GitBranch, Globe, LogOut, MessageSquare, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
+import { AudioLines, Briefcase, FolderKanban, GitBranch, Globe, LogOut, Mic, MicOff, NotebookPen, Settings2, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
 import { AppLaunchCard } from "./components/AppLaunchCard";
+import { MeetingSummaryCard } from "./components/MeetingSummaryCard";
 import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
-import { Transcript } from "./components/Transcript";
 import { VoiceDock } from "./components/VoiceDock";
 import { HudFrame } from "./components/hud/HudFrame";
 import { LazyBoundary } from "./components/lazy/LazyBoundary";
@@ -60,12 +60,6 @@ import {
   isScreenCaptureVoiceCommand
 } from "./services/screenCapture";
 
-const PRIVACY_NOTE = "เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของอุปกรณ์หรือเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
-const HANDS_FREE_PRIVACY_NOTE =
-  "ไมโครโฟนเปิดฟังตลอดเวลาที่เปิดหน้านี้ไว้ ปิดได้ที่ปุ่มไมโครโฟนด้านบน เสียงถูกแปลงเป็นข้อความด้วยระบบเสียงของเบราว์เซอร์ และส่งเฉพาะข้อความไปยัง AI";
-const DESKTOP_PRIVACY_NOTE =
-  "ในแอปเดสก์ท็อป เสียงที่อัดจะถูกส่งผ่านเซิร์ฟเวอร์ เดลลูน่า ไปแปลงเป็นข้อความ และเมื่อเปิดหน้าเว็บ เดลลูน่าจะส่งเฉพาะชื่อช่องกรอกข้อมูลของหน้านั้นให้ AI";
-
 export default function App() {
   const session = useSession();
   const ready = session.phase === "signed-in" || session.phase === "open";
@@ -85,9 +79,7 @@ export default function App() {
     confirmProjectAction,
     cancelProjectAction,
     confirmAppLaunch,
-    cancelAppLaunch,
-    undoMemory,
-    markLinkOpened
+    cancelAppLaunch
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
@@ -97,11 +89,11 @@ export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [routerOpen, setRouterOpen] = useState(false);
+  const [dismissedMeetingId, setDismissedMeetingId] = useState<string | null>(null);
   // หน้าตั้งค่าแยกไฟล์โหลด จึงสร้างเมื่อเปิดครั้งแรก แล้วคงไว้ให้ <dialog> คืนโฟกัสให้ปุ่มที่กดเปิดตอนปิด
   const [settingsUsed, setSettingsUsed] = useState(false);
   const [recorderUsed, setRecorderUsed] = useState(false);
-  const [metricsHidden, setMetricsHidden] = useState(false);
-  const [latenciesMs, setLatenciesMs] = useState<number[]>([]);
+  const [metricsHidden] = useState(false);
   const [desktop] = useState(isDesktopApp);
   const [screenCaptureAvailable] = useState(canCaptureScreen);
   const [capturingScreen, setCapturingScreen] = useState(false);
@@ -201,9 +193,10 @@ export default function App() {
   });
   // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป ส่วนบนเว็บ หน้าที่เปิดแสดงในพื้นที่หลักข้างแผงสถานะ
   const stageShown = ready && !(showingWeb && desktop);
-  const hasMeetingSummary = messages.some((message) => Boolean(message.meeting));
+  const latestMeetingMessage = [...messages].reverse().find((message) => Boolean(message.meeting && message.text));
+  const shownMeeting =
+    latestMeetingMessage && latestMeetingMessage.id !== dismissedMeetingId ? latestMeetingMessage : null;
 
-  const replyStrip = showingWeb && !pendingFill ? lastReply : undefined;
   // คำที่กำลังได้ยิน: แถบสั่งงานเคยแสดงให้ เมื่อไม่มีแถบจึงแสดงเป็นบรรทัดเดียวเฉพาะตอนผู้ใช้กำลังพูด
   const heard = alwaysListening && phase === "listening" ? partial : "";
   const speechHint = alwaysListening && speechBlocked;
@@ -212,19 +205,19 @@ export default function App() {
   const meetingNotice = inMeeting ? null : meeting.state.notice;
   const shownCapture = ready && !inMeeting ? pendingCapture : null;
   const showMainContent =
+    !ready ||
     showingWeb ||
     showingProjects ||
     showingWorkspace ||
     showingRouter ||
     inMeeting ||
-    hasMeetingSummary ||
-    Boolean(pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint);
+    Boolean(shownMeeting || pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint);
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
   const footerShown =
     !inMeeting &&
     (dockShown ||
       Boolean(
-        replyStrip || pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint || heard
+        pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint || heard
       ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
@@ -254,7 +247,7 @@ export default function App() {
       lines.push(`ความจำที่บันทึกไว้: ${memories.slice(-3).map((m) => m.text).join(" / ")}`);
     }
     if (lastReply) {
-      lines.push(`ข้อความล่าสุดจากเดลลูน่า: ${lastReply.slice(0, 400)}`);
+      lines.push(`คำตอบล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
   }, [ready, showingWeb, showingProjects, showingRouter, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
@@ -269,25 +262,6 @@ export default function App() {
     if (!ready) return;
     return preloadViews({ desktop, meeting: meeting.capable });
   }, [ready, desktop, meeting.capable]);
-
-  // เก็บประวัติเวลาตอบสนองจริงของแต่ละรอบในเซสชัน เพื่อวาดกราฟแนวโน้มในโหมด Studio
-  useEffect(() => {
-    if (!ready) return;
-    let lastRecorded: number | null = controller.getState().lastReplyMs;
-    let lastMsgCount = controller.getState().messages.length;
-    return controller.subscribe(() => {
-      const next = controller.getState();
-      if (next.messages.length === 0 && lastMsgCount > 0) {
-        setLatenciesMs([]);
-        lastRecorded = null;
-      } else if (next.lastReplyMs !== null && next.lastReplyMs !== lastRecorded) {
-        lastRecorded = next.lastReplyMs;
-        const recorded = next.lastReplyMs;
-        setLatenciesMs((prev) => [...prev.slice(-11), recorded]);
-      }
-      lastMsgCount = next.messages.length;
-    });
-  }, [controller, ready]);
 
   // โหมดฟังตลอดเวลาไม่มีปุ่มไมโครโฟนให้แตะพูดแทรก: กด Esc เพื่อหยุดคำตอบแล้วกลับไปฟัง
   useEffect(() => {
@@ -576,7 +550,7 @@ export default function App() {
           <div className="view-switch" role="group" aria-label="สลับมุมมอง">
             <button
               type="button"
-              aria-label="สนทนา"
+              aria-label="หน้าหลักเสียง"
               aria-pressed={!showingWeb && !showingProjects && !showingWorkspace && !showingRouter}
               onClick={() => {
                 setProjectsOpen(false);
@@ -585,7 +559,7 @@ export default function App() {
                 browserStore.hide();
               }}
             >
-              <MessageSquare size={15} aria-hidden /> สนทนา
+              <AudioLines size={15} aria-hidden /> หน้าหลัก
             </button>
             <button
               type="button"
@@ -593,7 +567,7 @@ export default function App() {
               aria-pressed={showingWorkspace}
               onClick={() => {
                 setProjectsOpen(false);
-                setWorkspaceOpen(true);
+                setWorkspaceOpen((prev) => !prev);
                 setRouterOpen(false);
                 browserStore.hide();
               }}
@@ -605,7 +579,7 @@ export default function App() {
               aria-label="โปรเจกต์"
               aria-pressed={showingProjects}
               onClick={() => {
-                setProjectsOpen(true);
+                setProjectsOpen((prev) => !prev);
                 setWorkspaceOpen(false);
                 setRouterOpen(false);
                 browserStore.hide();
@@ -620,7 +594,7 @@ export default function App() {
               onClick={() => {
                 setProjectsOpen(false);
                 setWorkspaceOpen(false);
-                setRouterOpen(true);
+                setRouterOpen((prev) => !prev);
                 browserStore.hide();
               }}
             >
@@ -635,7 +609,8 @@ export default function App() {
                   setProjectsOpen(false);
                   setWorkspaceOpen(false);
                   setRouterOpen(false);
-                  browserStore.show();
+                  if (showingWeb) browserStore.hide();
+                  else browserStore.show();
                 }}
               >
                 <Globe size={15} aria-hidden /> หน้าเว็บ
@@ -657,7 +632,7 @@ export default function App() {
               className="meeting-entry"
               onClick={meeting.begin}
               aria-label="เริ่มโหมดสรุปการประชุม"
-              title="โหมดสรุปการประชุม: เดลลูน่าฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
+              title="โหมดสรุปการประชุม: Javis ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
             >
               <NotebookPen size={16} aria-hidden />
               <span>ประชุม</span>
@@ -669,7 +644,7 @@ export default function App() {
               className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
-              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้เดลลูน่าจดจำและใช้เสียงนี้พูดตอบกลับ"
+              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ Javis จดจำและใช้เสียงนี้พูดตอบกลับ"
             >
               <AudioLines size={16} aria-hidden />
               <span>บันทึกเสียง</span>
@@ -687,7 +662,7 @@ export default function App() {
               onClick={micOn ? handsFree.disable : handsFree.enable}
               aria-pressed={micOn}
               aria-label="ไมโครโฟนฟังตลอดเวลา"
-              title={micOn ? "ไมโครโฟนเปิดอยู่ เดลลูน่าฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้เดลลูน่าฟังตลอดเวลา"}
+              title={micOn ? "ไมโครโฟนเปิดอยู่ Javis ฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้ Javis ฟังตลอดเวลา"}
             >
               {micOn ? <Mic size={17} aria-hidden /> : <MicOff size={17} aria-hidden />}
             </button>
@@ -714,7 +689,7 @@ export default function App() {
           phase={shownPhase}
           statusLabel={statusLabel}
           readouts={readouts}
-          compact={messages.length > 0 || showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting}
+          compact={showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting || Boolean(shownMeeting)}
           offline={aiDown}
           metricsHidden={metricsHidden}
           platformLabel={platformLabel}
@@ -725,32 +700,15 @@ export default function App() {
         {ai.problem && (
           <ServiceBanner key={`${ai.problem.scope}:${ai.problem.reason}`} problem={ai.problem} onRecheck={ai.recheck} />
         )}
-        <div className="scroll-area" hidden={showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting}>
+        <div className="scroll-area" hidden={showingWeb || showingProjects || showingWorkspace || showingRouter || inMeeting || (ready && !shownMeeting)}>
           {session.phase === "checking" && <SessionSkeleton />}
           {session.phase === "unreachable" && <ServerUnreachable onRetry={session.retry} />}
           {session.phase === "signed-out" && <AccessGate onSignIn={session.signIn} />}
-          {ready && (
-            <Transcript
-              messages={messages}
-              listening={alwaysListening}
-              meetingAvailable={meeting.capable}
-              aiReady={!aiDown}
-              latenciesMs={latenciesMs}
-              lastReplyMs={lastReplyMs}
-              memories={memories}
-              metricsHidden={metricsHidden}
-              onToggleMetricsHidden={() => setMetricsHidden((prev) => !prev)}
-              onRecheckAi={ai.recheck}
-              onSendAndSpeak={(text) => sendMessage(text, { speak: true })}
-              canCaptureScreen={screenCaptureAvailable}
-              onCaptureScreen={handleCaptureScreen}
-              capturingScreen={capturingScreen}
-              onSuggest={sendMessage}
-              onOpenLink={desktop ? browserStore.open : undefined}
-              onShowFramed={desktop ? undefined : browserStore.showFramed}
-              onLinkOpened={markLinkOpened}
-              onUndoMemory={undoMemory}
-              privacyNote={desktop ? DESKTOP_PRIVACY_NOTE : handsFree.capable ? HANDS_FREE_PRIVACY_NOTE : PRIVACY_NOTE}
+          {ready && shownMeeting?.meeting && (
+            <MeetingSummaryCard
+              summary={shownMeeting.text}
+              meeting={shownMeeting.meeting}
+              onDismiss={() => setDismissedMeetingId(shownMeeting.id)}
             />
           )}
         </div>
@@ -836,9 +794,6 @@ export default function App() {
 
       {ready && footerShown && (
         <footer className={`dock${dockShown ? "" : " bare"}`}>
-          {replyStrip && (
-            <p className="reply-strip"><strong>เดลลูน่า</strong> {replyStrip}</p>
-          )}
           {pendingFill && <FillCard request={pendingFill} onConfirm={confirmFill} onCancel={cancelFill} />}
           {pendingProjectAction && (
             <ProjectActionCard
@@ -858,13 +813,13 @@ export default function App() {
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img
                 src={`data:${shownCapture.mimeType};base64,${shownCapture.data}`}
-                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้เดลลูน่าวิเคราะห์"
+                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ Javis วิเคราะห์"
                 className="capture-preview-thumb"
               />
               <div className="capture-preview-meta">
                 <strong>พร้อมวิเคราะห์ภาพหน้าจอ</strong>
                 <span>
-                  {shownCapture.width}×{shownCapture.height} — พิมพ์ พูดถาม หรือกดอ่านภาพทันที
+                  {shownCapture.width}×{shownCapture.height} — พูดถามหรือกดอ่านภาพทันที
                 </span>
               </div>
               <div className="capture-preview-actions">
@@ -906,12 +861,12 @@ export default function App() {
           )}
           {elsewhereHint && (
             <div className="toast info" role="status">
-              เดลลูน่ากำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
+              Javis กำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
             </div>
           )}
           {speechHint && (
             <div className="toast info" role="status">
-              เบราว์เซอร์ยังไม่ให้เดลลูน่าพูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
+              เบราว์เซอร์ยังไม่ให้ Javis พูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
             </div>
           )}
           {heard && (
@@ -929,11 +884,9 @@ export default function App() {
               onStop={handsFree.capable ? handsFree.disable : stop}
               onInterrupt={interrupt}
               onFinishListening={finishListening}
-              onSend={sendMessage}
               canCaptureScreen={screenCaptureAvailable}
               onCaptureScreen={handleCaptureScreen}
               capturingScreen={capturingScreen}
-              hasAttachment={Boolean(shownCapture)}
             />
           )}
         </footer>

@@ -307,6 +307,42 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .welcome > .core.large {
 .caption.heard { color: var(--text); font-size: 16px; font-weight: 500; }
 .chip { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 9px; border-radius: var(--radius-full); color: var(--accent); background: var(--accent-soft); font-size: 11px; font-weight: 600; }
 .dock-row { display: flex; align-items: center; gap: var(--space-3); }
+.dock-row.voice-only { justify-content: center; gap: var(--space-4); }
+.dock-row.voice-only .dock-capture-btn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: var(--surface);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.dock-row.voice-only .dock-capture-btn:hover:not(:disabled) {
+  color: var(--accent-hover);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.dock-row.voice-only .dock-capture-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.meeting-summary-card {
+  width: min(720px, 100%);
+  margin: var(--space-4) auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.meeting-summary-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.meeting-summary-title { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
+.meeting-summary-title strong { color: var(--text); font-size: 15px; }
+.meeting-summary-title span { color: var(--text-muted); font-size: 12px; }
+.meeting-summary-body { margin: 0; white-space: pre-wrap; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
 
 .orb { position: relative; width: 52px; height: 52px; display: grid; place-items: center; flex: none; border: 0; border-radius: 50%; color: var(--accent-contrast); background: var(--accent); transition: background .15s, transform .15s var(--ease), box-shadow .3s; }
 .orb:hover:not(:disabled) { background: var(--accent-hover); }
