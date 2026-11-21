@@ -150,9 +150,9 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
       if (clip.samples24k) {
         const saved = speakerProfileStore.saveFromPcm(speakerName.trim() || "ไลท์", clip.samples24k, TARGET_WAV_SAMPLE_RATE);
         if (saved) {
-          setNotice(`บันทึกโปรไฟล์เสียง "${saved.label}" สำหรับแยกผู้พูดในโหมดประชุมเรียบร้อยครับ`);
+          setNotice(`บันทึกโปรไฟล์เสียง "${saved.label}" สำหรับแยกผู้พูดในโหมดประชุมเรียบร้อยค่ะ`);
         } else {
-          setError("ไม่พบเนื้อเสียงพูดที่ชัดเจนพอ ลองพูดใกล้ไมค์ขึ้นอีกนิดครับ");
+          setError("ไม่พบเนื้อเสียงพูดที่ชัดเจนพอ ลองพูดใกล้ไมค์ขึ้นอีกนิดค่ะ");
         }
       }
     } else {
@@ -170,7 +170,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
       const clip = await readUploadedAudioClip(file, slot === "source" ? 25 : 15);
       storeClip(slot, clip);
       if (slot === "source") {
-        setNotice("นำเข้าไฟล์เสียง ตัดความเงียบ และจดจำเอกลักษณ์เสียงสำหรับแยกผู้พูดแล้วครับ");
+        setNotice("นำเข้าไฟล์เสียง ตัดความเงียบ และจดจำเอกลักษณ์เสียงสำหรับแยกผู้พูดแล้วค่ะ");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "อ่านไฟล์เสียงที่เลือกไม่สำเร็จ");
@@ -305,11 +305,11 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
   const handleSaveAndClone = async () => {
     if (!sourceClip || !consentClip || saving) return;
     if (sourceClip.durationSeconds < 8) {
-      setError("คลิปเสียงตัวอย่างสั้นเกินไป กรุณาอัดใหม่อย่างน้อย 10 วินาทีเพื่อให้จำลองโทนเสียงได้แม่นยำครับ");
+      setError("คลิปเสียงตัวอย่างสั้นเกินไป กรุณาอัดใหม่อย่างน้อย 10 วินาทีเพื่อให้จำลองโทนเสียงได้แม่นยำค่ะ");
       return;
     }
     if (consentClip.durationSeconds < 3) {
-      setError("คลิปเสียงยืนยันสิทธิ์สั้นเกินไป กรุณาอ่านประโยคยืนยันให้ครบชัดเจนครับ");
+      setError("คลิปเสียงยืนยันสิทธิ์สั้นเกินไป กรุณาอ่านประโยคยืนยันให้ครบชัดเจนค่ะ");
       return;
     }
 
@@ -577,7 +577,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
                         sourceClip.samples24k!,
                         TARGET_WAV_SAMPLE_RATE
                       );
-                      if (saved) setNotice(`เพิ่มโปรไฟล์เสียง "${saved.label}" จากคลิปข้อ 1 แล้วครับ`);
+                      if (saved) setNotice(`เพิ่มโปรไฟล์เสียง "${saved.label}" จากคลิปข้อ 1 แล้วค่ะ`);
                     }}
                   >
                     ใช้คลิปข้อ 1
@@ -716,7 +716,7 @@ export function VoiceRecorderDialog({ open, onClose, synthesizer, activeCloudVoi
         <section className="recorder-saved">
           <h3>เสียงที่จดจำไว้ในระบบ {loadingList ? "(กำลังซิงก์…)" : ""}</h3>
           {customVoices.length === 0 ? (
-            <p className="settings-note">ยังไม่มีเสียงที่บันทึกไว้ในโปรเจกต์ Gemini นี้ อัด 2 ขั้นตอนด้านบนเพื่อสร้างได้เลยครับ</p>
+            <p className="settings-note">ยังไม่มีเสียงที่บันทึกไว้ในโปรเจกต์ Gemini นี้ อัด 2 ขั้นตอนด้านบนเพื่อสร้างได้เลยค่ะ</p>
           ) : (
             <ul className="recorder-voice-list">
               {customVoices.map((voice) => {

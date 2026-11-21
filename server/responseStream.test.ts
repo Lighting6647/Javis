@@ -406,7 +406,7 @@ describe("createResponseReducer", () => {
       expect(events).toEqual([{ type: "memory", added: ["ทำงานที่คลินิก เฟิร์น"], removed: [] }]);
       expect(reducer.needsFollowUp).toBe(true);
       expect(reducer.memoryCalls).toMatchObject([{ name: REMEMBER_TOOL, output: "บันทึกแล้ว" }]);
-      expect(reducer.memoryFallbackText).toBe("จำไว้แล้วครับ");
+      expect(reducer.memoryFallbackText).toBe("จำไว้แล้วค่ะ");
     });
 
     it("ไม่ต้องขอตอบต่อเมื่อ AI พูดไปแล้ว", () => {
@@ -427,7 +427,7 @@ describe("createResponseReducer", () => {
 
       expect(events).toEqual([]);
       expect(reducer.memoryCalls[0]?.output).toContain("ข้อมูลอ่อนไหว");
-      expect(reducer.memoryFallbackText).toBe("เรื่องนี้ผมไม่ได้บันทึกไว้ครับ");
+      expect(reducer.memoryFallbackText).toBe("เรื่องนี้ลูน่าไม่ได้บันทึกไว้ค่ะ");
     });
 
     it("จำเบอร์โทรศัพท์ได้ เพราะไม่ใช่เลขบัตรหรือเลขประจำตัว", () => {
@@ -484,7 +484,7 @@ describe("createResponseReducer", () => {
 
       expect(events).toEqual([{ type: "memory", added: [], removed: ["m2"] }]);
       expect(reducer.memoryCalls.map((call) => call.output)).toEqual(["ลบแล้ว", "ลบแล้ว", "ไม่พบความจำนี้", "ไม่พบความจำนี้"]);
-      expect(reducer.memoryFallbackText).toBe("ลืมเรื่องนั้นให้แล้วครับ");
+      expect(reducer.memoryFallbackText).toBe("ลืมเรื่องนั้นให้แล้วค่ะ");
     });
 
     it("ไม่นับการเรียกเดิมซ้ำเมื่อมาอีกครั้งในเหตุการณ์จบ", () => {

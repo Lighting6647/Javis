@@ -49,7 +49,7 @@ export function ProjectsPanel({ onClose, onAskJavis, onOpenWeb }: ProjectsPanelP
       setData(response);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "โหลดรายการโปรเจกต์ไม่สำเร็จครับ");
+      setError(cause instanceof Error ? cause.message : "โหลดรายการโปรเจกต์ไม่สำเร็จค่ะ");
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ export function ProjectsPanel({ onClose, onAskJavis, onOpenWeb }: ProjectsPanelP
         }
       })
       .catch((cause) => {
-        if (active) setError(cause instanceof Error ? cause.message : "โหลดรายการโปรเจกต์ไม่สำเร็จครับ");
+        if (active) setError(cause instanceof Error ? cause.message : "โหลดรายการโปรเจกต์ไม่สำเร็จค่ะ");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -90,7 +90,7 @@ export function ProjectsPanel({ onClose, onAskJavis, onOpenWeb }: ProjectsPanelP
         projectId: project.id,
         projectName: project.name,
         durationMs: 0,
-        summary: cause instanceof Error ? cause.message : "ดำเนินคำสั่งไม่สำเร็จครับ"
+        summary: cause instanceof Error ? cause.message : "ดำเนินคำสั่งไม่สำเร็จค่ะ"
       });
     } finally {
       setBusyKey(null);

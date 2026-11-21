@@ -141,7 +141,7 @@ const hasAnswerText = (event: unknown): boolean =>
 const textDelta = (text: string) => ({ type: "response.output_text.delta", delta: text });
 
 /** บอกผู้ใช้เมื่อขั้นค้นเว็บไม่ได้คำตอบกลับมาเลย แทนการส่งคำตอบว่าง */
-const SEARCH_FAILED_TEXT = "ขออภัยครับ ผมค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ";
+const SEARCH_FAILED_TEXT = "ขออภัยค่ะ ลูน่าค้นข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้งค่ะ";
 
 /*
  * ช่องวินิจฉัยของผู้ดูแล (server/diagnostics.ts): คำขอที่แนบรหัส (diagnose) ที่ถูกต้อง จะได้เหตุการณ์ "diagnostic" ต่อท้ายคำตอบ
@@ -812,7 +812,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
     });
 
     if (!outcome.ok) {
-      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยครับ ผมอ่านหน้าเว็บนี้ไม่ได้ (${outcome.detail})`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยค่ะ ลูน่าอ่านหน้าเว็บนี้ไม่ได้ (${outcome.detail})`));
       return;
     }
 
@@ -849,7 +849,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
         annotation: { type: "url_citation", url: outcome.url, title: outcome.title }
       });
     } else {
-      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยครับ ผมสรุปเนื้อหาจากหน้าเว็บนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ขออภัยค่ะ ลูน่าสรุปเนื้อหาจากหน้าเว็บนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง`));
     }
   };
 
@@ -922,7 +922,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       });
     }
     if (!answered) {
-      forward(textDelta(`${spokeBefore ? " " : ""}ตอนนี้มี ${targets.length} โปรเจกต์ในระบบ (${listing.mode}) ครับ`));
+      forward(textDelta(`${spokeBefore ? " " : ""}ตอนนี้มี ${targets.length} โปรเจกต์ในระบบ (${listing.mode}) ค่ะ`));
     }
   };
 
@@ -1176,7 +1176,7 @@ export const chatHandler: RequestHandler = async (request, response, next) => {
       if (event.type === "project_action" && projectListing) {
         const matched = findProject(event.proposal.projectId, projectListing.projects);
         if (!matched) {
-          send({ type: "delta", text: " ขออภัยครับ ไม่พบโปรเจกต์ที่ระบุในรายการโปรเจกต์ที่อนุญาตครับ" });
+          send({ type: "delta", text: " ขออภัยค่ะ ไม่พบโปรเจกต์ที่ระบุในรายการโปรเจกต์ที่อนุญาตค่ะ" });
           continue;
         }
         send({

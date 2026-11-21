@@ -159,11 +159,11 @@ function VoiceSection({
       {(aiStatus?.chat === "quota" || retiringModels.length > 0) && (
         <div className="toast error" role="status">
           {aiStatus?.chat === "quota" && (
-            <div>บัญชี AI หลักแจ้งเตือนว่าเครดิตหมดชั่วคราว — กรุณาตรวจสอบโควตา/เครดิตบนเซิร์ฟเวอร์ครับ</div>
+            <div>บัญชี AI หลักแจ้งเตือนว่าเครดิตหมดชั่วคราว — กรุณาตรวจสอบโควตา/เครดิตบนเซิร์ฟเวอร์ค่ะ</div>
           )}
           {retiringModels.map((item) => (
             <div key={`${item.service}-${item.model}`}>
-              แจ้งเตือนโมเดล: <strong>{item.model}</strong> มีกำหนดปิดบริการวันที่ {item.date} ควรสลับเป็นรุ่นใหม่ก่อนวันดังกล่าวครับ
+              แจ้งเตือนโมเดล: <strong>{item.model}</strong> มีกำหนดปิดบริการวันที่ {item.date} ควรสลับเป็นรุ่นใหม่ก่อนวันดังกล่าวค่ะ
             </div>
           ))}
         </div>

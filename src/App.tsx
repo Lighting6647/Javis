@@ -358,7 +358,7 @@ export default function App() {
       pendingCaptureRef.current = captured;
       setPendingCapture(captured);
     } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : "ไม่สามารถจับภาพหน้าจอได้ครับ");
+      setCaptureError(error instanceof Error ? error.message : "ไม่สามารถจับภาพหน้าจอได้ค่ะ");
     } finally {
       setCapturingScreen(false);
     }

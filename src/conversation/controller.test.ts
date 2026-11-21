@@ -666,7 +666,7 @@ describe("ConversationController", () => {
       expect(controller.getState().pendingFillId).toBeNull();
       expect(controller.getState().notice).toEqual({
         tone: "info",
-        text: "กรอกให้แล้ว 2 ช่องครับ กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง"
+        text: "กรอกให้แล้ว 2 ช่องค่ะ กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง"
       });
     });
 

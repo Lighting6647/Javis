@@ -53,7 +53,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
       setItems(data.items);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "โหลดสถานะ Router ไม่สำเร็จครับ");
+      setError(cause instanceof Error ? cause.message : "โหลดสถานะ Router ไม่สำเร็จค่ะ");
     } finally {
       setLoading(false);
     }
@@ -71,7 +71,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
       })
       .catch((cause) => {
         if (!active) return;
-        setError(cause instanceof Error ? cause.message : "โหลดสถานะ Router ไม่สำเร็จครับ");
+        setError(cause instanceof Error ? cause.message : "โหลดสถานะ Router ไม่สำเร็จค่ะ");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -92,7 +92,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
       setProbeResult(res.decision);
       await loadSnapshot();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "ทดสอบ Router ไม่สำเร็จครับ");
+      setError(cause instanceof Error ? cause.message : "ทดสอบ Router ไม่สำเร็จค่ะ");
     } finally {
       setProbing(false);
     }
@@ -107,7 +107,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
       setTelemetry(res.telemetry);
       setItems((prev) => prev.map((entry) => (entry.id === id ? res.item : entry)));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "ส่งคำตัดสินไม่สำเร็จครับ");
+      setError(cause instanceof Error ? cause.message : "ส่งคำตัดสินไม่สำเร็จค่ะ");
     } finally {
       setBusyReviewId(null);
     }
@@ -272,7 +272,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
             )}
           </div>
           {pendingItems.length === 0 ? (
-            <p className="router-empty">ไม่มีรายการค้างตรวจที่ด่าน Gate 0.85 ครับ</p>
+            <p className="router-empty">ไม่มีรายการค้างตรวจที่ด่าน Gate 0.85 ค่ะ</p>
           ) : (
             <ul className="router-review-list">
               {pendingItems.map((item) => {
@@ -316,7 +316,7 @@ export function RouterPanel({ onClose }: RouterPanelProps) {
             <span className="router-box-meta">ไม่บันทึกข้อความผู้ใช้</span>
           </div>
           {!telemetry || telemetry.recentLog.length === 0 ? (
-            <p className="router-empty">ยังไม่มีบันทึกการ Route ในเซสชันนี้ครับ</p>
+            <p className="router-empty">ยังไม่มีบันทึกการ Route ในเซสชันนี้ค่ะ</p>
           ) : (
             <ul className="router-log-list">
               {telemetry.recentLog.slice(0, 10).map((entry, idx) => (

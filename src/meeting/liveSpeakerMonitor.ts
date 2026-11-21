@@ -41,13 +41,13 @@ async function startMicSpectrumSampler(
   onError?: (message: string) => void
 ): Promise<MicSampler | null> {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    onError?.("เบราว์เซอร์นี้ไม่รองรับการเข้าถึงไมโครโฟนครับ");
+    onError?.("เบราว์เซอร์นี้ไม่รองรับการเข้าถึงไมโครโฟนค่ะ");
     return null;
   }
 
   const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) {
-    onError?.("เบราว์เซอร์นี้ไม่รองรับ Web Audio API ครับ");
+    onError?.("เบราว์เซอร์นี้ไม่รองรับ Web Audio API ค่ะ");
     return null;
   }
 
@@ -105,7 +105,7 @@ async function startMicSpectrumSampler(
     return { stop };
   } catch {
     stop();
-    onError?.("เปิดไมโครโฟนเพื่อทดสอบเทียบเสียงไม่สำเร็จ กรุณาตรวจสิทธิ์ไมโครโฟนครับ");
+    onError?.("เปิดไมโครโฟนเพื่อทดสอบเทียบเสียงไม่สำเร็จ กรุณาตรวจสิทธิ์ไมโครโฟนค่ะ");
     return null;
   }
 }

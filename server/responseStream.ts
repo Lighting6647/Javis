@@ -494,7 +494,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       }
       if (projectAction) {
         if (!text.trim() && !page && !fill) {
-          events.push({ type: "delta", text: `เตรียมคำสั่ง ${projectAction.action} สำหรับโปรเจกต์ ${projectAction.projectName} ให้แล้วครับ กดยืนยันเพื่อเริ่มทำงานได้เลย` });
+          events.push({ type: "delta", text: `เตรียมคำสั่ง ${projectAction.action} สำหรับโปรเจกต์ ${projectAction.projectName} ให้แล้วค่ะ กดยืนยันเพื่อเริ่มทำงานได้เลย` });
         }
         events.push({ type: "project_action", proposal: projectAction });
       }
@@ -529,9 +529,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction && !appLaunch;
     },
     get memoryFallbackText() {
-      if (memoryAdds.length > 0) return "จำไว้แล้วครับ";
-      if (memoryRemoves.length > 0) return "ลืมเรื่องนั้นให้แล้วครับ";
-      return "เรื่องนี้ผมไม่ได้บันทึกไว้ครับ";
+      if (memoryAdds.length > 0) return "จำไว้แล้วค่ะ";
+      if (memoryRemoves.length > 0) return "ลืมเรื่องนั้นให้แล้วค่ะ";
+      return "เรื่องนี้ลูน่าไม่ได้บันทึกไว้ค่ะ";
     },
     get searchRequest() {
       return searchRequest;

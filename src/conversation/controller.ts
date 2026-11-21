@@ -638,12 +638,12 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingProjectAction: null });
-      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วครับ` };
+      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วค่ะ` };
     }
 
     if (!this.deps.runProjectAction) {
       this.update({ pendingProjectAction: null });
-      return { tone: "error", text: "ระบบยังไม่พร้อมรันคำสั่งโปรเจกต์ครับ" };
+      return { tone: "error", text: "ระบบยังไม่พร้อมรันคำสั่งโปรเจกต์ค่ะ" };
     }
 
     this.filling = true;
@@ -663,7 +663,7 @@ export class ConversationController {
       void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
-      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
+      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จค่ะ` };
     } finally {
       this.filling = false;
     }
@@ -743,7 +743,7 @@ export class ConversationController {
     const skipped = result.missing.length > 0 ? ` อีก ${result.missing.length} ช่องกรอกไม่ได้` : "";
     return {
       tone: "info",
-      text: `กรอกให้แล้ว ${result.filled} ช่องครับ${skipped} กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง`
+      text: `กรอกให้แล้ว ${result.filled} ช่องค่ะ${skipped} กรุณาตรวจความถูกต้อง แล้วกดส่งฟอร์มด้วยตัวเอง`
     };
   }
 
