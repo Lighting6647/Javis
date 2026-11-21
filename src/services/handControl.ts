@@ -1,4 +1,5 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+import { dueForDetection, OneEuroPoint, PinchDetector, pinchRatio } from "./handGestures";
 
 export interface HandPointerState {
   active: boolean;
@@ -53,11 +54,14 @@ export async function startHandControl(
     await video.play();
 
     const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
-    landmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-      runningMode: "VIDEO",
-      numHands: 1
-    });
+    const create = (delegate: "GPU" | "CPU") =>
+      HandLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: MODEL_URL, delegate },
+        runningMode: "VIDEO",
+        numHands: 1
+      });
+    // บางเครื่องเปิดการ์ดจอให้เบราว์เซอร์ใช้ไม่ได้: ใช้ CPU แทน ช้ากว่าแต่ยังใช้งานได้
+    landmarker = await create("GPU").catch(() => create("CPU"));
 
     if (stopped) {
       landmarker.close();
@@ -67,56 +71,59 @@ export async function startHandControl(
 
     let smoothX = window.innerWidth / 2;
     let smoothY = window.innerHeight / 2;
-    let wasPinching = false;
-    let lastClickAt = 0;
     let lastVideoTime = -1;
+    let lastDetectAt = -Infinity;
+    let handVisible = false;
+    // ตัวกรอง One-Euro: นิ่งตอนมือหยุด ตามทันตอนมือขยับเร็ว (หน่วยพิกเซลบนจอ)
+    const cursor = new OneEuroPoint(1.1, 0.012);
+    const pinch = new PinchDetector();
 
     const tick = () => {
       if (stopped || !video || !landmarker) return;
       rafId = requestAnimationFrame(tick);
 
+      const now = performance.now();
+      // ตรวจจับราว 30 ครั้งต่อวินาทีพอ: เคอร์เซอร์ยังลื่น แต่ใช้ CPU/GPU น้อยลงมาก
+      if (document.hidden || !dueForDetection(now, lastDetectAt)) return;
       if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
       lastVideoTime = video.currentTime;
+      lastDetectAt = now;
 
-      const result = landmarker.detectForVideo(video, performance.now());
+      const result = landmarker.detectForVideo(video, now);
       const hand = result.landmarks?.[0];
-      if (!hand) {
-        onUpdate({ active: false, x: smoothX, y: smoothY, pinching: false, openPalm: false });
-        wasPinching = false;
+      const indexTip = hand?.[8];
+      const thumbTip = hand?.[4];
+      const wrist = hand?.[0];
+      const middleMcp = hand?.[9];
+      if (!hand || !indexTip || !thumbTip || !wrist || !middleMcp) {
+        // แจ้งครั้งเดียวตอนมือหายไป ไม่ต้องวาดหน้าจอซ้ำทุกเฟรม
+        if (handVisible) onUpdate({ active: false, x: smoothX, y: smoothY, pinching: false, openPalm: false });
+        handVisible = false;
+        cursor.reset();
+        pinch.reset();
         return;
       }
-
-      const indexTip = hand[8];
-      const thumbTip = hand[4];
-      const middleTip = hand[12];
-      const ringTip = hand[16];
-      const pinkyTip = hand[20];
-      const wrist = hand[0];
-      if (!indexTip || !thumbTip || !wrist) return;
+      handVisible = true;
 
       // กลับด้านแนวนอนเหมือนกระจก
-      const targetX = (1 - indexTip.x) * window.innerWidth;
-      const targetY = indexTip.y * window.innerHeight;
-      smoothX = smoothX * 0.68 + targetX * 0.32;
-      smoothY = smoothY * 0.68 + targetY * 0.32;
+      const smoothed = cursor.filter({ x: (1 - indexTip.x) * window.innerWidth, y: indexTip.y * window.innerHeight }, now);
+      smoothX = smoothed.x;
+      smoothY = smoothed.y;
 
-      const pinchDist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
-      const pinching = pinchDist < 0.048;
+      const { pinching, click } = pinch.update(pinchRatio(thumbTip, indexTip, wrist, middleMcp), now);
 
+      const middleTip = hand[12];
+      const pinkyTip = hand[20];
+      const handSize = Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y);
+      // แบมือ: ปลายนิ้วกลางและนิ้วก้อยอยู่ไกลจากข้อมือเมื่อเทียบกับขนาดมือ (ไม่ขึ้นกับระยะห่างจากกล้อง)
       const spread =
-        middleTip && ringTip && pinkyTip
-          ? Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) + Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y)
+        middleTip && pinkyTip && handSize > 0
+          ? (Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) + Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y)) / handSize
           : 0;
-      const openPalm = !pinching && spread > 0.68;
+      const openPalm = !pinching && spread > 3.2;
 
       onUpdate({ active: true, x: smoothX, y: smoothY, pinching, openPalm });
-
-      const now = performance.now();
-      if (pinching && !wasPinching && now - lastClickAt > 450) {
-        lastClickAt = now;
-        onPinchClick(smoothX, smoothY);
-      }
-      wasPinching = pinching;
+      if (click) onPinchClick(smoothX, smoothY);
     };
 
     rafId = requestAnimationFrame(tick);
