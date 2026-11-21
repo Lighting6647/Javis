@@ -247,6 +247,17 @@ export class ConversationController {
     else this.update({ phase: "idle" });
   };
 
+  /**
+   * ผู้ใช้สั่งให้ฟังทันทีโดยไม่ต้องเรียกชื่อ (เช่น ชูนิ้วชี้ค้างไว้) คำพูดถัดไปนับเป็นคำสั่ง
+   * คืน false เมื่อยังไม่ได้เปิดการสนทนาด้วยเสียง ให้ผู้เรียกเปิดไมโครโฟนต่อเอง (ช่วงเรียกชื่อยังรออยู่)
+   */
+  listenNow = (): boolean => {
+    this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
+    if (!this.state.active) return false;
+    void this.listen(this.halt());
+    return true;
+  };
+
   /** ผู้ใช้บอกว่าพูดจบแล้ว ไม่ต้องรอให้ระบบตัดจบเอง */
   finishListening = (): void => {
     if (this.state.phase === "listening") this.deps.recognizer.stop();

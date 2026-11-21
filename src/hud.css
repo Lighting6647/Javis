@@ -653,6 +653,127 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .voice-waveform {
   transform: scale(1.25);
 }
 
+/* ---------- โครงมือโฮโลแกรม เมนูวงกลม และป้ายกล้อง ---------- */
+.hand-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 199;
+}
+.gesture-menu {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 198;
+}
+.gesture-menu-ring {
+  position: absolute;
+  left: calc(var(--menu-radius) * -1);
+  top: calc(var(--menu-radius) * -1);
+  width: calc(var(--menu-radius) * 2);
+  height: calc(var(--menu-radius) * 2);
+  border-radius: 50%;
+  border: 1px dashed rgba(56, 232, 255, 0.45);
+  box-shadow: 0 0 24px rgba(56, 232, 255, 0.18) inset;
+  animation: gesture-menu-in 180ms ease-out;
+}
+.gesture-menu-core {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 112px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(9, 14, 22, 0.82);
+  border: 1px solid rgba(56, 232, 255, 0.35);
+  color: #e6faff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+.gesture-menu-core small {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(230, 250, 255, 0.7);
+}
+.gesture-menu-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(9, 14, 22, 0.86);
+  border: 1px solid rgba(56, 232, 255, 0.4);
+  color: #e6faff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  animation: gesture-menu-in 180ms ease-out;
+}
+.gesture-menu-item.active {
+  background: rgba(56, 232, 255, 0.22);
+  border-color: rgba(56, 232, 255, 0.95);
+  box-shadow: 0 0 18px rgba(56, 232, 255, 0.55);
+}
+@keyframes gesture-menu-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.camera-on-badge {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 201;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(9, 14, 22, 0.82);
+  border: 1px solid rgba(251, 113, 133, 0.55);
+  color: #ffe4e8;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.camera-on-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fb7185;
+  box-shadow: 0 0 8px #fb7185;
+  animation: camera-dot-pulse 1.6s ease-in-out infinite;
+}
+/* จอแคบ: เหลือแค่จุดแดง ไม่บังปุ่มไมโครโฟน (ข้อความยังอ่านได้ด้วยโปรแกรมอ่านหน้าจอ) */
+@media (max-width: 600px) {
+  .camera-on-badge { padding: 7px; }
+  .camera-on-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@keyframes camera-dot-pulse {
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gesture-menu-ring,
+  .gesture-menu-item,
+  .camera-on-dot { animation: none; }
+  .gesture-menu-item { transition: none; }
+}
+
 /* ---------- Responsive Header & Summary Card (Zero horizontal overflow) ---------- */
 .meeting-summary-card {
   box-sizing: border-box;

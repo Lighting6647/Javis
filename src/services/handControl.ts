@@ -1,5 +1,6 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
-import { dueForDetection, OneEuroPoint, PinchDetector, pinchRatio } from "./handGestures";
+import { classifyHand, GestureEngine, type GestureCommand, type HoldProgress, palmCenter, type RadialMenuState } from "./gestureCommands";
+import { dueForDetection, type LandmarkPoint, OneEuroPoint, PINCH_ON, PinchDetector, pinchRatio } from "./handGestures";
 
 export interface HandPointerState {
   active: boolean;
@@ -7,6 +8,31 @@ export interface HandPointerState {
   y: number;
   pinching: boolean;
   openPalm: boolean;
+}
+
+/** ข้อมูลหนึ่งเฟรมสำหรับวาดโครงมือ (พิกัดบนจอเป็นพิกเซล กลับด้านแบบกระจกแล้ว) */
+export interface HandFrame {
+  points: LandmarkPoint[];
+  /** นิ้วโป้งกับนิ้วชี้ใกล้กันแค่ไหน 0 = ห่าง, 1 = จีบสุด */
+  pinch: number;
+  /** เฟรมนี้จีบนิ้วคลิกไปแล้ว */
+  clicked: boolean;
+  /** ท่าที่กำลังค้างอยู่ (วงนับถอยหลัง) */
+  hold: HoldProgress | null;
+  palm: LandmarkPoint;
+}
+
+export interface HandControlCallbacks {
+  onUpdate: (state: HandPointerState) => void;
+  /** null = ไม่เห็นมือ */
+  onFrame: (frame: HandFrame | null) => void;
+  onPinchClick: (x: number, y: number) => void;
+  onCommand: (command: GestureCommand) => void;
+  /** เรียกเมื่อเมนูวงกลมเปิด ปิด หรือเปลี่ยนช่องที่เลือก */
+  onMenu: (menu: RadialMenuState | null) => void;
+  onError: (message: string) => void;
+  /** ลูน่ากำลังพูดอยู่หรือไม่ (แบมือตอนพูด = หยุดพูด แทนการเปิดเมนู) */
+  isSpeaking: () => boolean;
 }
 
 export interface HandControlHandle {
@@ -17,16 +43,17 @@ const WASM_ROOT = "/mediapipe/wasm";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 
+const sameMenu = (a: RadialMenuState | null, b: RadialMenuState | null) =>
+  a === b || (!!a && !!b && a.highlighted === b.highlighted && a.center.x === b.center.x && a.center.y === b.center.y);
+
 /**
- * เริ่มตรวจจับท่ามือด้วยกล้องเว็บแคม (MediaPipe HandLandmarker)
- * - ชี้นิ้วชี้: เลื่อนตัวชี้โฮโลแกรม
- * - จีบนิ้วโป้งกับนิ้วชี้ (Pinch): คลิกปุ่มตรงตำแหน่งที่ชี้
+ * เริ่มตรวจจับท่ามือด้วยกล้องเว็บแคม (MediaPipe HandLandmarker) ประมวลผลในเครื่องทั้งหมด
+ * - ชี้นิ้วชี้: เลื่อนตัวชี้โฮโลแกรม / จีบนิ้วโป้งกับนิ้วชี้: คลิก
+ * - ท่าค้าง (ดู gestureCommands): ชูนิ้วชี้ = ฟัง, แบมือ = เมนูหรือหยุดพูด, นิ้วโป้งขึ้น/ลง = ยืนยัน/ยกเลิก
+ * @param menuItems จำนวนช่องในเมนูวงกลม
  */
-export async function startHandControl(
-  onUpdate: (state: HandPointerState) => void,
-  onPinchClick: (x: number, y: number) => void,
-  onError: (message: string) => void
-): Promise<HandControlHandle> {
+export async function startHandControl(callbacks: HandControlCallbacks, menuItems: number): Promise<HandControlHandle> {
+  const { onUpdate, onFrame, onPinchClick, onCommand, onMenu, onError, isSpeaking } = callbacks;
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     throw new Error("เบราว์เซอร์นี้ไม่รองรับการใช้กล้องตรวจจับท่ามือ");
   }
@@ -76,7 +103,17 @@ export async function startHandControl(
     let handVisible = false;
     // ตัวกรอง One-Euro: นิ่งตอนมือหยุด ตามทันตอนมือขยับเร็ว (หน่วยพิกเซลบนจอ)
     const cursor = new OneEuroPoint(1.1, 0.012);
+    const palmFilter = new OneEuroPoint(1.0, 0.01);
     const pinch = new PinchDetector();
+    const gestures = new GestureEngine(menuItems);
+    let menu: RadialMenuState | null = null;
+    const viewport = () => ({ width: window.innerWidth, height: window.innerHeight });
+
+    const publishMenu = (next: RadialMenuState | null) => {
+      if (sameMenu(menu, next)) return;
+      menu = next;
+      onMenu(next);
+    };
 
     const tick = () => {
       if (stopped || !video || !landmarker) return;
@@ -95,34 +132,49 @@ export async function startHandControl(
       const thumbTip = hand?.[4];
       const wrist = hand?.[0];
       const middleMcp = hand?.[9];
-      if (!hand || !indexTip || !thumbTip || !wrist || !middleMcp) {
+      const palm = hand ? palmCenter(hand) : null;
+      if (!hand || !indexTip || !thumbTip || !wrist || !middleMcp || !palm) {
         // แจ้งครั้งเดียวตอนมือหายไป ไม่ต้องวาดหน้าจอซ้ำทุกเฟรม
-        if (handVisible) onUpdate({ active: false, x: smoothX, y: smoothY, pinching: false, openPalm: false });
+        if (handVisible) {
+          onUpdate({ active: false, x: smoothX, y: smoothY, pinching: false, openPalm: false });
+          onFrame(null);
+        }
         handVisible = false;
         cursor.reset();
+        palmFilter.reset();
         pinch.reset();
+        // ยังป้อนต่อ เพื่อให้เมนูปิดเองเมื่อมือหายนานพอ
+        publishMenu(gestures.update({ shape: null, point: { x: 0, y: 0 }, now, speaking: isSpeaking(), viewport: viewport() }).menu);
         return;
       }
       handVisible = true;
 
+      const width = window.innerWidth;
+      const height = window.innerHeight;
       // กลับด้านแนวนอนเหมือนกระจก
-      const smoothed = cursor.filter({ x: (1 - indexTip.x) * window.innerWidth, y: indexTip.y * window.innerHeight }, now);
+      const toScreen = (point: LandmarkPoint) => ({ x: (1 - point.x) * width, y: point.y * height });
+      const smoothed = cursor.filter(toScreen(indexTip), now);
       smoothX = smoothed.x;
       smoothY = smoothed.y;
+      const palmPoint = palmFilter.filter(toScreen(palm), now);
 
-      const { pinching, click } = pinch.update(pinchRatio(thumbTip, indexTip, wrist, middleMcp), now);
+      const shape = classifyHand(hand);
+      const ratio = pinchRatio(thumbTip, indexTip, wrist, middleMcp);
+      // กำมืออยู่ (ปลายนิ้วชิดกันเอง) หรือกำลังเลือกในเมนู: ไม่นับเป็นการจีบคลิก
+      const { pinching, click } = pinch.update(shape === "fist" || gestures.menuOpen ? null : ratio, now);
 
-      const middleTip = hand[12];
-      const pinkyTip = hand[20];
-      const handSize = Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y);
-      // แบมือ: ปลายนิ้วกลางและนิ้วก้อยอยู่ไกลจากข้อมือเมื่อเทียบกับขนาดมือ (ไม่ขึ้นกับระยะห่างจากกล้อง)
-      const spread =
-        middleTip && pinkyTip && handSize > 0
-          ? (Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) + Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y)) / handSize
-          : 0;
-      const openPalm = !pinching && spread > 3.2;
+      const output = gestures.update({ shape: pinching ? "none" : shape, point: palmPoint, now, speaking: isSpeaking(), viewport: viewport() });
 
-      onUpdate({ active: true, x: smoothX, y: smoothY, pinching, openPalm });
+      onUpdate({ active: true, x: smoothX, y: smoothY, pinching, openPalm: shape === "open" });
+      onFrame({
+        points: hand.map(toScreen),
+        pinch: ratio === null ? 0 : Math.min(1, Math.max(0, (1 - ratio) / (1 - PINCH_ON))),
+        clicked: click,
+        hold: output.hold,
+        palm: palmPoint
+      });
+      publishMenu(output.menu);
+      output.commands.forEach(onCommand);
       if (click) onPinchClick(smoothX, smoothY);
     };
 
@@ -144,6 +196,8 @@ export async function startHandControl(
       }
       if (stream) stream.getTracks().forEach((t) => t.stop());
       onUpdate({ active: false, x: 0, y: 0, pinching: false, openPalm: false });
+      onFrame(null);
+      onMenu(null);
     }
   };
 }

@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { AudioLines, Brain, Briefcase, FolderKanban, GitBranch, Globe, Hand, LogOut, Mic, MicOff, NotebookPen, Settings2, Sparkles, Square, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
@@ -11,6 +12,8 @@ import { ServiceBanner } from "./components/ServiceBanner";
 import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback";
 import { VoiceDock } from "./components/VoiceDock";
 import { BootSequence } from "./components/hud/BootSequence";
+import { CameraOnBadge, GestureRadialMenu, type RadialMenuItem } from "./components/hud/GestureRadialMenu";
+import { HandOverlay } from "./components/hud/HandOverlay";
 import { HandPointer } from "./components/hud/HandPointer";
 import { HudFrame } from "./components/hud/HudFrame";
 import { Reactor3D } from "./components/hud/Reactor3D";
@@ -52,7 +55,10 @@ import { contactsStore } from "./services/contactsStore";
 import { customAppsStore } from "./services/customAppsStore";
 import { customVoicesStore } from "./services/customVoicesStore";
 import { startWorkspacePreferencesSync } from "./services/preferencesSync";
+import type { GestureCommand, RadialMenuState } from "./services/gestureCommands";
+import { gestureIntents } from "./services/gestureEvents";
 import { type HandPointerState, startHandControl } from "./services/handControl";
+import { handFrameStore } from "./services/handFrameStore";
 import { hudEffectsStore } from "./services/hudEffectsStore";
 import { sfx } from "./services/sfx";
 import { themeStore } from "./services/themeStore";
@@ -68,6 +74,14 @@ import {
   isScreenCaptureVoiceCommand
 } from "./services/screenCapture";
 
+/** เมนูวงกลมของท่ามือ: ช่องแรกอยู่บน แล้ววนตามเข็มนาฬิกา (ลำดับต้องตรงกับ menuActions ใน App) */
+const GESTURE_MENU_ITEMS: readonly RadialMenuItem[] = [
+  { id: "mail", label: "อีเมล", hint: "ให้ลูน่าสรุปอีเมลสำคัญ" },
+  { id: "calendar", label: "ปฏิทิน", hint: "ให้ลูน่าบอกนัดวันนี้" },
+  { id: "briefing", label: "สรุปเช้า", hint: "สรุปงาน เมล นัด และโน้ต" },
+  { id: "workspace", label: "Workspace", hint: "เปิด Workspace Hub" }
+];
+
 export default function App() {
   const session = useSession();
   const ready = session.phase === "signed-in" || session.phase === "open";
@@ -80,6 +94,7 @@ export default function App() {
     stop,
     reset,
     interrupt,
+    listenNow,
     finishListening,
     sendText,
     confirmFill,
@@ -130,6 +145,10 @@ export default function App() {
     pinching: false,
     openPalm: false
   });
+  const [gestureMenu, setGestureMenu] = useState<RadialMenuState | null>(null);
+  // ตัวจับท่ามือเริ่มครั้งเดียวต่อการเปิดกล้อง จึงอ่านสถานะและคำสั่งล่าสุดผ่าน ref
+  const speakingRef = useRef(false);
+  const gestureCommandRef = useRef<(command: GestureCommand) => void>(() => undefined);
   const meeting = useMeeting({ ready, controller });
   // โหมดสรุปการประชุมใช้ไมโครโฟนและพื้นที่หลักของจอเอง Javis ไม่ฟังคำสั่งและไม่ตอบจนกว่าการประชุมจะจบ
   const meetingStatus = ready && meeting.state.status !== "idle" ? meeting.state.status : null;
@@ -623,29 +642,96 @@ export default function App() {
     };
   }, [ready, clapEnabled, inMeeting, active, handsFree, start]);
 
-  // ควบคุมด้วยท่ามือผ่านกล้อง (MediaPipe)
+  // ท่ามือสั่งลูน่า: ชูนิ้วชี้ = ฟัง, แบมือตอนพูด = หยุด, เมนูวงกลม, นิ้วโป้งขึ้น/ลง = ยืนยัน/ยกเลิก
+  useEffect(() => {
+    speakingRef.current = phase === "speaking";
+  }, [phase]);
+
+  useEffect(() => {
+    const menuActions = [
+      () => sendMessage("สรุปอีเมลสำคัญที่ยังไม่ได้อ่านให้ฟังหน่อย", { speak: true }),
+      () => sendMessage("วันนี้มีนัดอะไรบ้าง", { speak: true }),
+      () => void runMorningBriefing(),
+      () => setWorkspaceOpen(true)
+    ];
+    gestureCommandRef.current = (command) => {
+      switch (command.type) {
+        case "listen":
+          sfx.wake();
+          // ยังไม่ได้เปิดไมโครโฟน: เปิดให้ รอบแรกหลังเปิดไม่ต้องเรียกชื่อ
+          if (!listenNow()) {
+            if (handsFree.capable) handsFree.enable();
+            else void start();
+          }
+          break;
+        case "stopSpeaking":
+          interrupt();
+          break;
+        case "confirm":
+        case "cancel":
+          gestureIntents.emit(command.type);
+          break;
+        case "menuSelect":
+          sfx.click();
+          menuActions[command.item]?.();
+          break;
+      }
+    };
+  }, [listenNow, interrupt, handsFree, start, sendMessage, runMorningBriefing]);
+
+  // การ์ดยืนยันที่มีในตอนนี้รับท่านิ้วโป้ง: เปิดแอปและกรอกฟอร์มยืนยันได้ ส่วนคำสั่งโปรเจกต์ยกเลิกได้อย่างเดียว
+  // (คำสั่งโปรเจกต์รันบนเครื่องจริง จึงให้กดยืนยันเองบนการ์ด)
+  useEffect(
+    () =>
+      gestureIntents.subscribe((intent) => {
+        if (intent === "confirm") {
+          if (pendingAppLaunch) confirmAppLaunch();
+          else if (pendingFill) confirmFill();
+          return;
+        }
+        if (pendingAppLaunch) cancelAppLaunch();
+        else if (pendingFill) cancelFill();
+        else if (pendingProjectAction) cancelProjectAction();
+      }),
+    [pendingAppLaunch, pendingFill, pendingProjectAction, confirmAppLaunch, confirmFill, cancelAppLaunch, cancelFill, cancelProjectAction]
+  );
+
+  // ควบคุมด้วยท่ามือผ่านกล้อง (MediaPipe) ประมวลผลในเครื่องทั้งหมด
   useEffect(() => {
     if (!ready || !handControlEnabled || inMeeting) return;
     let cancelled = false;
     let stopHands: (() => void) | undefined;
     void startHandControl(
-      (next) => {
-        if (!cancelled) setHandPointer(next);
+      {
+        onUpdate: (next) => {
+          if (!cancelled) setHandPointer(next);
+        },
+        onFrame: (frame) => {
+          if (!cancelled) handFrameStore.set(frame);
+        },
+        onPinchClick: (x, y) => {
+          if (cancelled) return;
+          const target = document.elementFromPoint(x, y);
+          const btn = target instanceof HTMLElement ? target.closest("button, a, [role='button']") : null;
+          if (btn instanceof HTMLElement) {
+            sfx.click();
+            btn.click();
+          }
+        },
+        onCommand: (command) => {
+          if (!cancelled) gestureCommandRef.current(command);
+        },
+        onMenu: (menu) => {
+          if (!cancelled) setGestureMenu(menu);
+        },
+        onError: (message) => {
+          if (cancelled) return;
+          setHandControlEnabled(false);
+          setSensorNotice({ tone: "error", text: message });
+        },
+        isSpeaking: () => speakingRef.current
       },
-      (x, y) => {
-        if (cancelled) return;
-        const target = document.elementFromPoint(x, y);
-        const btn = target instanceof HTMLElement ? target.closest("button, a, [role='button']") : null;
-        if (btn instanceof HTMLElement) {
-          sfx.click();
-          btn.click();
-        }
-      },
-      (message) => {
-        if (cancelled) return;
-        setHandControlEnabled(false);
-        setSensorNotice({ tone: "error", text: message });
-      }
+      GESTURE_MENU_ITEMS.length
     )
       .then((handle) => {
         if (cancelled) handle.stop();
@@ -662,6 +748,8 @@ export default function App() {
     return () => {
       cancelled = true;
       stopHands?.();
+      handFrameStore.set(null);
+      setGestureMenu(null);
     };
   }, [ready, handControlEnabled, inMeeting]);
 
@@ -1168,7 +1256,17 @@ export default function App() {
           }}
         />
       )}
-      {handControlEnabled && <HandPointer pointer={handPointer} />}
+      {/* วางไว้ที่ body: ผังหน้าบางส่วนมี transform ทำให้ position: fixed เลื่อนตำแหน่งตามไปด้วย */}
+      {handControlEnabled &&
+        createPortal(
+          <>
+            <CameraOnBadge />
+            <HandOverlay />
+            {gestureMenu && <GestureRadialMenu menu={gestureMenu} items={GESTURE_MENU_ITEMS} />}
+            <HandPointer pointer={handPointer} />
+          </>,
+          document.body
+        )}
     </div>
   );
 }

@@ -1860,6 +1860,36 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
   });
 
+  it("listenNow (ชูนิ้วชี้ค้าง): ฟังใหม่ทันที และคำพูดถัดไปเป็นคำสั่งโดยไม่ต้องเรียกชื่อ", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake();
+    expect(controller.getState().wake).toBe("waiting");
+
+    expect(controller.listenNow()).toBe(true);
+    await settle();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "awake" });
+
+    clock.time += 2000;
+    recognizer.current.result.resolve("ตอนนี้กี่โมงแล้ว");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "ตอนนี้กี่โมงแล้ว" }]);
+  });
+
+  it("listenNow ตอนยังไม่เปิดไมโครโฟน: คืน false ให้ผู้เรียกเปิดเอง และรอบแรกหลังเปิดไม่ต้องเรียกชื่อ", async () => {
+    const flag = { enabled: true };
+    const { recognizer, chat, controller } = setup({
+      handsFree: true,
+      wake: { enabled: () => flag.enabled, phrases: () => PHRASES, windowMs: 8000 }
+    });
+    expect(controller.listenNow()).toBe(false);
+    void controller.start();
+    await settle();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "awake" });
+
+    recognizer.current.result.resolve("เปิดเพลงหน่อย");
+    await settle();
+    expect(chat.current.messages).toEqual([{ role: "user", content: "เปิดเพลงหน่อย" }]);
+  });
+
   it("เรียกชื่ออย่างเดียวแล้วเลยเวลา: คำพูดถัดไปไม่ถูกส่ง", async () => {
     const { recognizer, chat, clock, controller } = await startWithWake();
 

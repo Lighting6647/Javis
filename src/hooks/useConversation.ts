@@ -119,6 +119,7 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
     stop: controller.stop,
     reset: controller.reset,
     interrupt: controller.interrupt,
+    listenNow: controller.listenNow,
     finishListening: controller.finishListening,
     sendText: controller.sendText,
     confirmFill: controller.confirmFill,
