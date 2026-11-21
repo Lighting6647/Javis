@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   readonly VITE_WAKE_PHRASES?: string;
 }
 
+/** มีไฟล์ public/audio/boot-music.mp3 ตอน build หรือตอนรัน dev server (ดู vite.config.ts) */
+declare const __BOOT_MUSIC__: boolean;
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
