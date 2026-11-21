@@ -44,7 +44,7 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
       {!started ? (
         <div className="ignition-card">
           <div className="ignition-ring" aria-hidden />
-          <span className="ignition-code">J.A.R.V.I.S · MARK-TH</span>
+          <span className="ignition-code">LUNA · MARK-TH</span>
           <h2>ระบบผู้ช่วยอัจฉริยะภาษาไทย</h2>
           <p>แตะปุ่มด้านล่างเพื่อเปิดระบบเสียงและแกนพลังงาน 3 มิติ</p>
           <div className="ignition-actions">
@@ -66,7 +66,7 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
       ) : (
         <div className="boot-card">
           <div className="boot-reticle" aria-hidden>
-            <span className="boot-core-title">J.A.R.V.I.S</span>
+            <span className="boot-core-title">LUNA</span>
           </div>
           <div className="boot-progress-meta">
             <strong>{current.title}</strong>

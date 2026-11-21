@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.fernclinic.javis",
-  appName: "Javis",
+  appName: "LUNA",
   webDir: "dist",
   server: {
     androidScheme: "https"

@@ -58,7 +58,7 @@ export function Stage({
       aria-label="แผงสถานะของลูน่า"
     >
       <div className="stage-identity" aria-hidden>
-        <span className="stage-id-code">J.A.R.V.I.S.</span>
+        <span className="stage-id-code">LUNA</span>
         <span className="stage-id-sub">{platformLabel ? `ระบบ · ${platformLabel}` : "ระบบผู้ช่วยเสียงภาษาไทย"}</span>
       </div>
 

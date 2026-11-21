@@ -5,7 +5,7 @@
 
 /**
  * แปลงลิงก์ของบริการยอดนิยมที่บล็อก iframe ปกติ (เช่น Google Maps, YouTube)
- * ให้เป็นรูปแบบ embed ที่เปิดแสดงภายใน J.A.R.V.I.S. ได้โดยไม่ขึ้น refused to connect
+ * ให้เป็นรูปแบบ embed ที่เปิดแสดงภายใน LUNA ได้โดยไม่ขึ้น refused to connect
  */
 export function toEmbeddableFrameUrl(rawUrl: string): string {
   if (!rawUrl) return rawUrl;

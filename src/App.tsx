@@ -700,7 +700,7 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden>JR</span>
           <div className="brand-title">
-            <strong>J.A.R.V.I.S.</strong>
+            <strong>LUNA</strong>
             <span className="brand-sub">CENTRAL VOICE STUDIO</span>
           </div>
           {ready && !aiDown && (
