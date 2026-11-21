@@ -51,6 +51,8 @@ export interface MorningBriefingResponse {
   emails: WorkspaceEmail[];
   events: WorkspaceCalendarEvent[];
   notes: WorkspaceNote[];
+  /** สภาพอากาศ (มีเมื่อส่งพิกัดมาและดึงข้อมูลได้) */
+  weather?: { temperature: number; max: number; min: number; rainChance: number; description: string } | null;
   spokenSummary: string;
 }
 
@@ -62,8 +64,10 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
-export async function fetchMorningBriefing(): Promise<MorningBriefingResponse> {
-  const res = await fetch(`${API_BASE}/api/workspace/briefing`, {
+export async function fetchMorningBriefing(coords?: { lat: number; lon: number }): Promise<MorningBriefingResponse> {
+  // ปัดพิกัดเหลือทศนิยม 2 ตำแหน่ง (ราว 1 กม.) ก่อนส่ง พอสำหรับดูอากาศ
+  const query = coords ? `?lat=${coords.lat.toFixed(2)}&lon=${coords.lon.toFixed(2)}` : "";
+  const res = await fetch(`${API_BASE}/api/workspace/briefing${query}`, {
     headers: { ...sessionStore.authHeaders() }
   });
   return readJson<MorningBriefingResponse>(res);

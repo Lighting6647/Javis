@@ -34,6 +34,7 @@ import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversa
 import { pickThaiFiller } from "./conversation/fillers";
 import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
+import { useMorningBriefing } from "./hooks/useMorningBriefing";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useCalendarReminder } from "./hooks/useCalendarReminder";
 import { useCloudVoiceStatus } from "./hooks/useCloudVoiceStatus";
@@ -93,7 +94,8 @@ export default function App() {
     sendEmailDraft,
     cancelEmailDraft,
     confirmCalendarChange,
-    cancelCalendarChange
+    cancelCalendarChange,
+    announce
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
@@ -126,6 +128,8 @@ export default function App() {
       return true;
     }
   });
+  // สรุปเช้าอัตโนมัติ: เปิดแอปครั้งแรกของวันก่อนเที่ยง หลังหน้าบูตจบ (ปิดได้ในหน้าตั้งค่า)
+  useMorningBriefing({ ready: ready && bootDone, announce });
   const [clapEnabled, setClapEnabled] = useState(false);
   const [handControlEnabled, setHandControlEnabled] = useState(false);
   const [sensorNotice, setSensorNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
