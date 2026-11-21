@@ -53,10 +53,10 @@ export function Stage({
     <aside
       className={`stage${compact ? " compact" : ""}${offline ? " offline" : ""}${thinkHard ? " think-hard" : ""}`}
       data-phase={phase}
-      aria-label="แผงสถานะของจาวิส"
+      aria-label="แผงสถานะของจาร์วิส"
     >
       <div className="stage-identity" aria-hidden>
-        <span className="stage-id-code">JV-CORE-01</span>
+        <span className="stage-id-code">J.A.R.V.I.S.</span>
         <span className="stage-id-sub">{platformLabel ? `ระบบ · ${platformLabel}` : "ระบบผู้ช่วยเสียงภาษาไทย"}</span>
       </div>
 
@@ -83,7 +83,7 @@ export function Stage({
           <div className="hud-side-systems" aria-hidden>
             <span className="hud-side-title">ระบบ</span>
             <ul>
-              <li className={offline ? "warn" : "on"}><i /> จาวิส</li>
+              <li className={offline ? "warn" : "on"}><i /> จาร์วิส</li>
               <li className={phase === "speaking" || phase === "listening" ? "on" : ""}><i /> เสียงพูด</li>
               <li className={thinkHard ? "on" : ""}><i /> คิดลึก</li>
               <li className="on"><i /> เว็บในแอป</li>
@@ -103,7 +103,7 @@ export function Stage({
 
       {/* สถานะเดียวกับป้ายบนแถบบนซึ่งโปรแกรมอ่านหน้าจออ่านอยู่แล้ว ตรงนี้จึงเป็นภาพอย่างเดียว */}
       <div className="stage-status" aria-hidden>
-        <span className="stage-kicker">จาวิส · ศูนย์สั่งการด้วยเสียง</span>
+        <span className="stage-kicker">จาร์วิส · ศูนย์สั่งการด้วยเสียง</span>
         <strong>{statusLabel}</strong>
         <HudClock />
       </div>

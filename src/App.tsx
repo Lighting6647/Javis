@@ -685,9 +685,9 @@ export default function App() {
       <HudFrame />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>JV</span>
+          <span className="brand-mark" aria-hidden>JR</span>
           <div className="brand-title">
-            <strong>Javis</strong>
+            <strong>J.A.R.V.I.S.</strong>
             <span className="brand-sub">CENTRAL VOICE STUDIO</span>
           </div>
           {ready && !aiDown && (
@@ -1087,12 +1087,12 @@ export default function App() {
           )}
           {elsewhereHint && (
             <div className="toast info" role="status">
-              Javis กำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
+              Jarvis กำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
             </div>
           )}
           {speechHint && (
             <div className="toast info" role="status">
-              เบราว์เซอร์ยังไม่ให้ Javis พูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
+              เบราว์เซอร์ยังไม่ให้ Jarvis พูดจนกว่าจะมีการแตะหน้านี้ แตะที่ใดก็ได้หนึ่งครั้งเพื่อเปิดเสียงตอบ
             </div>
           )}
           {heard && (
