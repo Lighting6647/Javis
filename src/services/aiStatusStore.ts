@@ -79,7 +79,7 @@ export function describeAiProblem(status: AiStatus | null, usesServerTranscripti
     return {
       scope: "chat",
       reason: status.chat,
-      title: "เดลลูน่ายังตอบไม่ได้ในตอนนี้",
+      title: "ลูน่ายังตอบไม่ได้ในตอนนี้",
       detail: CHAT_DETAIL[status.chat]
     };
   }
@@ -90,15 +90,15 @@ export function describeAiProblem(status: AiStatus | null, usesServerTranscripti
       scope: "voice",
       reason: "unsupported",
       title: "แอปเดสก์ท็อปยังฟังเสียงพูดไม่ได้",
-      detail: "บริการ AI ที่ใช้อยู่ไม่มีการแปลงเสียง พิมพ์ข้อความคุยกับเดลลูน่าแทนได้ หรือใช้ผ่านเว็บเบราว์เซอร์เพื่อพูดได้ตามปกติ"
+      detail: "บริการ AI ที่ใช้อยู่ไม่มีการแปลงเสียง พิมพ์ข้อความคุยกับลูน่าแทนได้ หรือใช้ผ่านเว็บเบราว์เซอร์เพื่อพูดได้ตามปกติ"
     };
   }
   if (usesServerTranscription && isBlocking(status.transcribe)) {
     return {
       scope: "voice",
       reason: status.transcribe,
-      title: "เดลลูน่ายังฟังเสียงพูดไม่ได้ในตอนนี้",
-      detail: "พิมพ์ข้อความคุยกับเดลลูน่าแทนได้ และกรุณาแจ้งผู้ดูแลระบบให้ตรวจการตั้งค่าการแปลงเสียง"
+      title: "ลูน่ายังฟังเสียงพูดไม่ได้ในตอนนี้",
+      detail: "พิมพ์ข้อความคุยกับลูน่าแทนได้ และกรุณาแจ้งผู้ดูแลระบบให้ตรวจการตั้งค่าการแปลงเสียง"
     };
   }
 

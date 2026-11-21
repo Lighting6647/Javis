@@ -277,7 +277,7 @@ export default function App() {
       lines.push(`ความจำที่บันทึกไว้: ${memories.slice(-3).map((m) => m.text).join(" / ")}`);
     }
     if (lastReply) {
-      lines.push(`คำตอบล่าสุดจาก Javis: ${lastReply.slice(0, 400)}`);
+      lines.push(`คำตอบล่าสุดจาก ลูน่า: ${lastReply.slice(0, 400)}`);
     }
     return lines.join("\n").slice(0, 2500);
   }, [ready, showingWeb, showingProjects, showingRouter, browser.title, browser.requestedUrl, inMeeting, messages.length, metricsHidden, readouts, statusLabel, memories, lastReply]);
@@ -698,7 +698,7 @@ export default function App() {
       )}
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>JR</span>
+          <span className="brand-mark" aria-hidden>LU</span>
           <div className="brand-title">
             <strong>LUNA</strong>
             <span className="brand-sub">CENTRAL VOICE STUDIO</span>
@@ -797,7 +797,7 @@ export default function App() {
               className="meeting-entry"
               onClick={meeting.begin}
               aria-label="เริ่มโหมดสรุปการประชุม"
-              title="โหมดสรุปการประชุม: Javis ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
+              title="โหมดสรุปการประชุม: ลูน่า ฟังเงียบ ๆ จดคำพูดทั้งหมด แล้วสรุปให้ครั้งเดียวตอนจบ"
             >
               <NotebookPen size={16} aria-hidden />
               <span>ประชุม</span>
@@ -877,7 +877,7 @@ export default function App() {
               className="voice-enroll-entry"
               onClick={openRecorder}
               aria-label="บันทึกเสียงของไลท์"
-              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ Javis จดจำและใช้เสียงนี้พูดตอบกลับ"
+              title="เมนูบันทึกเสียง: อัดเสียงของไลท์เพื่อให้ ลูน่า จดจำและใช้เสียงนี้พูดตอบกลับ"
             >
               <AudioLines size={16} aria-hidden />
               <span>บันทึกเสียง</span>
@@ -895,7 +895,7 @@ export default function App() {
               onClick={micOn ? handsFree.disable : handsFree.enable}
               aria-pressed={micOn}
               aria-label="ไมโครโฟนฟังตลอดเวลา"
-              title={micOn ? "ไมโครโฟนเปิดอยู่ Javis ฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้ Javis ฟังตลอดเวลา"}
+              title={micOn ? "ไมโครโฟนเปิดอยู่ ลูน่า ฟังตลอดเวลา แตะเพื่อปิด" : "ไมโครโฟนปิดอยู่ แตะเพื่อให้ ลูน่า ฟังตลอดเวลา"}
             >
               {micOn ? <Mic size={17} aria-hidden /> : <MicOff size={17} aria-hidden />}
             </button>
@@ -1048,7 +1048,7 @@ export default function App() {
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img
                 src={`data:${shownCapture.mimeType};base64,${shownCapture.data}`}
-                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ Javis วิเคราะห์"
+                alt="ภาพหน้าจอที่เลือกไว้สำหรับให้ ลูน่า วิเคราะห์"
                 className="capture-preview-thumb"
               />
               <div className="capture-preview-meta">

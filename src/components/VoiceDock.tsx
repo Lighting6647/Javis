@@ -78,9 +78,9 @@ export function VoiceDock({
     phase === "thinking" && searching
       ? "กำลังค้นข้อมูลจากเว็บ…"
       : idle && alwaysOn
-        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว Javis จะฟังคำสั่งเสียงตลอดเวลา"
+        ? "แตะไมโครโฟนหนึ่งครั้ง แล้ว ลูน่าจะฟังคำสั่งเสียงตลอดเวลา"
         : CAPTION[phase];
-  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ Javis ฟังตลอดเวลา" : ORB_LABEL[phase];
+  const orbLabel = idle && alwaysOn ? "เปิดไมโครโฟนให้ ลูน่า ฟังตลอดเวลา" : ORB_LABEL[phase];
 
   return (
     <div className="dock-inner">
@@ -119,8 +119,8 @@ export function VoiceDock({
             className="dock-capture-btn"
             onClick={() => void onCaptureScreen()}
             disabled={capturingScreen}
-            aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ Javis อ่าน"
-            title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ Javis อ่าน"
+            aria-label="จับภาพหน้าจอหรือโปรแกรมอื่นให้ ลูน่า อ่าน"
+            title="ส่องหน้าจอ / แท็บ / โปรแกรมอื่นให้ ลูน่า อ่าน"
           >
             <Monitor size={18} aria-hidden />
           </button>

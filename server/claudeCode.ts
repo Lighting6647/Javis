@@ -93,7 +93,7 @@ export function fetchTargetProblem(raw: unknown): string | null {
  */
 export function decideClaudeCodeTool(name: string, input: unknown): ToolVerdict {
   if (!CLAUDE_CODE_TOOLS.includes(name)) {
-    return { allow: false, reason: "Blocked: Javis runs Claude Code in read-only mode; only web search and reading public web pages are available." };
+    return { allow: false, reason: "Blocked: LUNA runs Claude Code in read-only mode; only web search and reading public web pages are available." };
   }
   if (name === "WebFetch") {
     const problem = fetchTargetProblem((input as { url?: unknown } | null)?.url);

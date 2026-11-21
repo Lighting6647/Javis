@@ -306,7 +306,7 @@ export function WorkspacePanel({ onClose, onRunBriefing }: WorkspacePanelProps) 
           <h2>Workspace Hub</h2>
           <p>
             บัญชี {accountEmail} ·{" "}
-            {googleConnected ? "เชื่อมต่อ Gmail / Calendar / Tasks แล้ว" : "รอเชื่อมต่อ Google OAuth (ใช้งาน DelLuna Notes & App Launcher ได้ทันที)"}
+            {googleConnected ? "เชื่อมต่อ Gmail / Calendar / Tasks แล้ว" : "รอเชื่อมต่อ Google OAuth (ใช้งาน LUNA Notes & App Launcher ได้ทันที)"}
           </p>
         </div>
         <div className="projects-head-actions">
@@ -474,7 +474,7 @@ export function WorkspacePanel({ onClose, onRunBriefing }: WorkspacePanelProps) 
 
             <div className="projects-grid">
               <form className="project-card" onSubmit={handleAddNote}>
-                <h3>จด DelLuna Note ใหม่</h3>
+                <h3>จด LUNA Note ใหม่</h3>
                 <label className="projects-search">
                   <input
                     type="text"
