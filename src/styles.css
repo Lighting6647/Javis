@@ -222,27 +222,12 @@ iframe.browser-frame { width: 100%; }
 .studio-drawer-head strong { font-size: 14px; font-weight: 700; color: var(--text); }
 html[data-theme="holo"] .studio-drawer { background: rgba(7, 13, 25, .96); border-left-color: var(--accent-ring); }
 html[data-theme="holo"] .studio-drawer-toggle { background: rgba(11, 17, 32, .9); border-color: var(--accent-ring); color: var(--accent-hover); }
-@media (min-width: 1000px) {
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) .welcome {
-    min-height: 0;
-    align-items: center;
-    text-align: center;
-    padding-block: var(--space-3) 0;
-    gap: var(--space-2);
-  }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) .studio-hero {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) .studio-hero-copy {
-    align-items: center;
-    text-align: center;
-    flex: none;
-  }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) .studio-timestamp-card {
-    display: none;
-  }
+/* ซ่อนหัวข้อต้อนรับและประวัติแชทบนหน้าจอหลักโหมด Voice Focus (ธีม holo) เหลือเพียงปุ่มลิ้นชักข้างๆ */
+html[data-theme="holo"] .app.has-stage:not(.show-main) .thread,
+html[data-theme="holo"] .app.has-stage:not(.show-main) .studio-hero,
+html[data-theme="holo"] .app.has-stage:not(.show-main) .welcome > small,
+html[data-theme="holo"] .app.has-stage:not(.show-main) .welcome > .core.large {
+  display: none;
 }
 @media (max-width: 640px) {
   .studio-drawer-toggle { top: auto; bottom: 84px; transform: none; padding: 8px 10px; font-size: 11px; }

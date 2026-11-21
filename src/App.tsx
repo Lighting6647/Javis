@@ -201,6 +201,7 @@ export default function App() {
   });
   // แผงสถานะหลบให้หน้าเว็บเมื่อผู้ใช้กำลังดูหน้าเว็บในแอปเดสก์ท็อป ส่วนบนเว็บ หน้าที่เปิดแสดงในพื้นที่หลักข้างแผงสถานะ
   const stageShown = ready && !(showingWeb && desktop);
+  const hasMeetingSummary = messages.some((message) => Boolean(message.meeting));
 
   const replyStrip = showingWeb && !pendingFill ? lastReply : undefined;
   // คำที่กำลังได้ยิน: แถบสั่งงานเคยแสดงให้ เมื่อไม่มีแถบจึงแสดงเป็นบรรทัดเดียวเฉพาะตอนผู้ใช้กำลังพูด
@@ -210,6 +211,14 @@ export default function App() {
   // เริ่มจดการประชุมไม่สำเร็จ: ไม่มีแผงการประชุมให้แสดงสาเหตุ จึงแจ้งที่แถบล่าง
   const meetingNotice = inMeeting ? null : meeting.state.notice;
   const shownCapture = ready && !inMeeting ? pendingCapture : null;
+  const showMainContent =
+    showingWeb ||
+    showingProjects ||
+    showingWorkspace ||
+    showingRouter ||
+    inMeeting ||
+    hasMeetingSummary ||
+    Boolean(pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint);
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
   const footerShown =
     !inMeeting &&
@@ -546,7 +555,7 @@ export default function App() {
   }, [ready, inMeeting, controller, synthesizer, desktop, reset, pushDesktopNotification]);
 
   return (
-    <div className={`app${stageShown ? " has-stage" : ""}`}>
+    <div className={`app${stageShown ? " has-stage" : ""}${showMainContent ? " show-main" : ""}`}>
       <HudFrame />
       <header className="app-header">
         <div className="brand">

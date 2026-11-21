@@ -196,32 +196,65 @@ html[data-theme="holo"] .composer::before { content: "\203A"; flex: none; margin
   html[data-theme="holo"] .stage .core.hero { width: min(244px, 20vw, 31vh); }
   .stage .telemetry { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-  /* หน้าแรก (ยังไม่สนทนา): ย้ายวงกลมแกนกลางมาอยู่ตรงกลางหน้าจออย่างเด่นชัด */
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) {
+  /* โหมด Voice Focus (หน้าหลักและระหว่างสนทนาด้วยเสียง): วงกลมแกนกลางอยู่กลางหน้าจอ ซ่อนกล่อง KPI และแชท */
+  html[data-theme="holo"] .app.has-stage:not(.show-main) {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
-    grid-template-areas: "header" "main" "stage" "dock";
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "header" "stage" "dock";
   }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .app-main {
-    overflow: visible;
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main {
+    grid-area: stage;
+    pointer-events: none;
+    overflow: hidden;
   }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .stage {
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer-toggle,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer-backdrop {
+    pointer-events: auto;
+  }
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage {
     border-right: 0;
     border-bottom: 0;
     background: transparent;
     justify-content: center;
-    padding: var(--space-2) var(--space-4) var(--space-4);
+    padding: var(--space-4);
   }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .stage .core.hero {
-    width: min(272px, 28vw, 34vh);
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .core.hero {
+    width: min(300px, 34vw, 40vh);
   }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .stage .stage-identity,
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .stage .stage-traces {
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .stage-identity,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .stage-traces,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .telemetry {
     display: none;
   }
-  html[data-theme="holo"] .app.has-stage:has(.stage:not(.compact)) > .stage .telemetry {
-    max-width: 760px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* มือถือ/แท็บเล็ต โหมด Voice Focus: แกนกลางอยู่กลางจอและซ่อนกล่องต่าง ๆ */
+@media (max-width: 999px) {
+  html[data-theme="holo"] .app.has-stage:not(.show-main) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "header" "stage" "dock";
+  }
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main {
+    grid-area: stage;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer-toggle,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .app-main .studio-drawer-backdrop {
+    pointer-events: auto;
+  }
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage {
+    grid-area: stage;
+    border-bottom: 0;
+    background: transparent;
+    justify-content: center;
+  }
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .stage-identity,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .stage-traces,
+  html[data-theme="holo"] .app.has-stage:not(.show-main) > .stage .telemetry {
+    display: none;
   }
 }
 
