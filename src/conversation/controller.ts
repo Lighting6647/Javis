@@ -629,7 +629,7 @@ export class ConversationController {
       this.update({ phase: "idle", notice });
       return;
     }
-    if (notice && this.voiceReplies) {
+    if (notice && this.voiceReplies && notice.tone !== "error") {
       this.update({ phase: "speaking", notice });
       await this.deps.synthesizer.speak(notice.text).catch(() => undefined);
       if (epoch !== this.epoch) return;
@@ -649,7 +649,7 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingProjectAction: null });
-      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วค่ะ` };
+      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วครับ` };
     }
 
     if (!this.deps.runProjectAction) {
@@ -671,10 +671,12 @@ export class ConversationController {
           { id: this.nextId(), role: "assistant", text: `${result.summary}${outputLine}` }
         ]
       });
-      void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
+      if (result.ok) {
+        void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
+      }
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
-      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จค่ะ` };
+      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
     } finally {
       this.filling = false;
     }
@@ -686,12 +688,12 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingAppLaunch: null });
-      return { tone: "info", text: `ยกเลิกการเปิดโปรแกรม ${proposal.appName} แล้วค่ะ` };
+      return { tone: "info", text: `ยกเลิกการเปิดโปรแกรม ${proposal.appName} แล้วครับ` };
     }
 
     if (!this.deps.launchApp) {
       this.update({ pendingAppLaunch: null });
-      return { tone: "error", text: "ระบบยังไม่พร้อมเปิดโปรแกรมในเครื่องค่ะ" };
+      return { tone: "error", text: "ระบบยังไม่พร้อมเปิดโปรแกรมในเครื่องครับ" };
     }
 
     this.filling = true;
@@ -704,10 +706,12 @@ export class ConversationController {
       this.update({
         messages: [...this.state.messages, { id: this.nextId(), role: "assistant", text: result.message }]
       });
-      void this.deps.synthesizer.speak(result.message).catch(() => undefined);
+      if (result.ok) {
+        void this.deps.synthesizer.speak(result.message).catch(() => undefined);
+      }
       return { tone: result.ok ? "info" : "error", text: result.message };
     } catch {
-      return { tone: "error", text: `เปิดโปรแกรม ${proposal.appName} ไม่สำเร็จค่ะ` };
+      return { tone: "error", text: `เปิดโปรแกรม ${proposal.appName} ไม่สำเร็จครับ` };
     } finally {
       this.filling = false;
     }

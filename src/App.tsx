@@ -505,7 +505,7 @@ export default function App() {
             if (voiceTimerRef.current !== null) window.clearTimeout(voiceTimerRef.current);
             voiceTimerRef.current = window.setTimeout(() => {
               voiceTimerRef.current = null;
-              const alertText = `ครบเวลา ${command.label} ที่ตั้งไว้แล้วค่ะ`;
+              const alertText = `ครบเวลา ${command.label} ที่ตั้งไว้แล้วครับ`;
               controller.addExchange(`ครบเวลา ${command.label}`, { text: alertText });
               pushDesktopNotification("ตัวจับเวลาครบกำหนด", alertText);
               void synthesizer.speak(alertText).catch(() => undefined);
@@ -605,7 +605,9 @@ export default function App() {
           case "launch-custom-app":
             void launchAllowedApp(command.app.id, command.app.name).then((res) => {
               controller.addExchange(text, { text: res.message });
-              void synthesizer.speak(res.message).catch(() => undefined);
+              if (res.ok) {
+                void synthesizer.speak(res.message).catch(() => undefined);
+              }
             });
             return "keep-listening";
         }
