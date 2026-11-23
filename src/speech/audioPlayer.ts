@@ -1,4 +1,5 @@
 import type { AudioPlayback, AudioPlayer, PlaybackOutcome } from "./cloudVoice";
+import { setOutputAnalyser } from "./outputMeter";
 
 // 44-byte silent 8kHz mono PCM WAV — สร้างเป็น Blob URL เพื่อไม่ให้ชน CSP media-src 'self' blob:
 const SILENT_WAV_BYTES = new Uint8Array([
@@ -159,6 +160,7 @@ export function createBrowserAudioPlayer(): AudioPlayer {
       let settled = false;
       let stopped = false;
       let activeSource: AudioBufferSourceNode | null = null;
+      let meter: AnalyserNode | null = null;
       let fallbackPlayback: AudioPlayback | null = null;
       let finish!: (outcome: PlaybackOutcome) => void;
       const finished = new Promise<PlaybackOutcome>((resolve) => {
@@ -171,6 +173,10 @@ export function createBrowserAudioPlayer(): AudioPlayer {
         if (activeSource) {
           activeSource.onended = null;
           activeSource = null;
+        }
+        if (meter) {
+          setOutputAnalyser(null);
+          meter = null;
         }
         finish(outcome);
       };
@@ -190,7 +196,17 @@ export function createBrowserAudioPlayer(): AudioPlayer {
           const source = ctx.createBufferSource();
           source.buffer = decoded;
           source.playbackRate.value = rate;
-          source.connect(ctx.destination);
+          // ต่อผ่านตัววัดความดัง ให้วงขีดรอบลูกแก้วขยับตามเสียงพูดจริง ถ้าสร้างไม่ได้ก็ต่อตรงเหมือนเดิม
+          try {
+            meter = ctx.createAnalyser();
+            meter.fftSize = 512;
+            source.connect(meter);
+            meter.connect(ctx.destination);
+            setOutputAnalyser(meter);
+          } catch {
+            meter = null;
+            source.connect(ctx.destination);
+          }
           activeSource = source;
           source.onended = () => settle("ended");
           source.start(0);

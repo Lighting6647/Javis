@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Phase } from "../../conversation/types";
 import { ACCENT_RGB, type HudAccent } from "../../services/hudEffectsStore";
+import { readOutputLevel } from "../../speech/outputMeter";
 import { getSessionMeter } from "../../speech/sessionMeter";
 
 interface LunaOrbProps {
@@ -124,6 +125,9 @@ export function LunaOrb({ phase, offline = false, thinkHard = false, accent = "c
         micOk = Boolean(meter && meter.read(micBuf));
       }
 
+      // ความดังจริงของเสียงที่ลูน่ากำลังพูด (null เมื่อเล่นผ่านช่องทางที่วัดไม่ได้)
+      const voice = s.phase === "speaking" ? readOutputLevel() : null;
+
       let overall = 0;
       for (let i = 0; i < TICKS; i += 1) {
         const f = i / TICKS;
@@ -140,7 +144,10 @@ export function LunaOrb({ phase, offline = false, thinkHard = false, accent = "c
             target = 0.18 + 0.12 * Math.sin(time * 2.4 + i * 0.45) * Math.sin(time * 1.1 + i * 0.17);
           }
         } else if (s.phase === "speaking") {
-          const env = 0.45 + 0.3 * Math.sin(time * 7.1) * Math.sin(time * 2.3) + 0.15 * Math.sin(time * 13.7);
+          const env =
+            voice !== null
+              ? 0.06 + voice * 1.1
+              : 0.45 + 0.3 * Math.sin(time * 7.1) * Math.sin(time * 2.3) + 0.15 * Math.sin(time * 13.7);
           const wave = 0.5 + 0.5 * Math.sin(i * 0.9 + time * 9) * Math.sin(i * 0.37 - time * 5.3);
           target = Math.max(0.08, env * (0.35 + wave * 0.9));
         } else if (s.phase === "thinking" || s.phase === "starting") {

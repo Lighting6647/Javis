@@ -156,11 +156,15 @@ describe("GestureEngine", () => {
     expect(commandsOf(feed(down, "thumbsDown", 983, 1100))).toEqual([{ type: "cancel" }]);
   });
 
-  it("แบมือตอนลูน่าพูด หยุดเสียงเกือบทันทีและไม่เปิดเมนู", () => {
+  it("แบมือค้างตอนลูน่าพูด หยุดเสียงหลังราวครึ่งวินาทีและไม่เปิดเมนู", () => {
     const engine = new GestureEngine(4);
+    const brief = new GestureEngine(4);
+    expect(commandsOf(feed(brief, "open", 0, 300, { x: 640, y: 400 }, true))).toEqual([]);
     const out = feed(engine, "open", 0, 1000, { x: 640, y: 400 }, true);
     expect(commandsOf(out)).toEqual([{ type: "stopSpeaking" }]);
-    expect(out.findIndex((o) => o.commands.length > 0) * STEP).toBeLessThanOrEqual(200);
+    const firedAt = out.findIndex((o) => o.commands.length > 0) * STEP;
+    expect(firedAt).toBeGreaterThanOrEqual(550);
+    expect(firedAt).toBeLessThanOrEqual(700);
     expect(out.every((o) => o.menu === null)).toBe(true);
   });
 

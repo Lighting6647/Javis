@@ -649,7 +649,7 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingProjectAction: null });
-      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วครับ` };
+      return { tone: "info", text: `ยกเลิกคำสั่ง ${proposal.action} ของโปรเจกต์ ${proposal.projectName} แล้วค่ะ` };
     }
 
     if (!this.deps.runProjectAction) {
@@ -676,7 +676,7 @@ export class ConversationController {
       }
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
-      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จครับ` };
+      return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จค่ะ` };
     } finally {
       this.filling = false;
     }
@@ -688,12 +688,12 @@ export class ConversationController {
 
     if (decision === "cancel") {
       this.update({ pendingAppLaunch: null });
-      return { tone: "info", text: `ยกเลิกการเปิดโปรแกรม ${proposal.appName} แล้วครับ` };
+      return { tone: "info", text: `ยกเลิกการเปิดโปรแกรม ${proposal.appName} แล้วค่ะ` };
     }
 
     if (!this.deps.launchApp) {
       this.update({ pendingAppLaunch: null });
-      return { tone: "error", text: "ระบบยังไม่พร้อมเปิดโปรแกรมในเครื่องครับ" };
+      return { tone: "error", text: "ระบบยังไม่พร้อมเปิดโปรแกรมในเครื่องค่ะ" };
     }
 
     this.filling = true;
@@ -711,7 +711,7 @@ export class ConversationController {
       }
       return { tone: result.ok ? "info" : "error", text: result.message };
     } catch {
-      return { tone: "error", text: `เปิดโปรแกรม ${proposal.appName} ไม่สำเร็จครับ` };
+      return { tone: "error", text: `เปิดโปรแกรม ${proposal.appName} ไม่สำเร็จค่ะ` };
     } finally {
       this.filling = false;
     }

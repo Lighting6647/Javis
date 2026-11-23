@@ -505,11 +505,10 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .voice-waveform {
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 0 10px var(--accent);
-  transition: height 180ms ease;
+  transition: height 80ms linear;
 }
-.hud-voice-meter.listening i { height: 58%; background: #34d399; }
-.hud-voice-meter.speaking i { height: 76%; }
-.hud-voice-meter.thinking i { height: 38%; background: #fbbf24; }
+.hud-voice-meter.listening i { background: #34d399; }
+.hud-voice-meter.thinking i { background: #fbbf24; }
 .hud-voice-pct { font-size: 10px; font-variant-numeric: tabular-nums; opacity: 0.75; }
 
 @media (max-width: 768px) {

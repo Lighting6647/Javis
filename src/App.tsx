@@ -505,7 +505,7 @@ export default function App() {
             if (voiceTimerRef.current !== null) window.clearTimeout(voiceTimerRef.current);
             voiceTimerRef.current = window.setTimeout(() => {
               voiceTimerRef.current = null;
-              const alertText = `ครบเวลา ${command.label} ที่ตั้งไว้แล้วครับ`;
+              const alertText = `ครบเวลา ${command.label} ที่ตั้งไว้แล้วค่ะ`;
               controller.addExchange(`ครบเวลา ${command.label}`, { text: alertText });
               pushDesktopNotification("ตัวจับเวลาครบกำหนด", alertText);
               void synthesizer.speak(alertText).catch(() => undefined);

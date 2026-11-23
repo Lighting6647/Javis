@@ -7,6 +7,7 @@ import { ArcCore } from "./ArcCore";
 import { HudClock } from "./HudClock";
 import { NeuralSphere } from "./NeuralSphere";
 import { OrbitalEnergyCore } from "./OrbitalEnergyCore";
+import { VoiceLevelMeter } from "./VoiceLevelMeter";
 import { VoiceWaveform } from "./VoiceWaveform";
 
 interface StageProps {
@@ -86,12 +87,7 @@ export function Stage({
           </div>
           <div className="hud-side-voice" aria-hidden>
             <span className="hud-side-title">ระดับเสียง</span>
-            <div className={`hud-voice-meter ${phase}`}>
-              <i />
-            </div>
-            <span className="hud-voice-pct">
-              {phase === "speaking" ? "72%" : phase === "listening" ? "58%" : phase === "thinking" ? "34%" : "0%"}
-            </span>
+            <VoiceLevelMeter phase={phase} />
           </div>
         </>
       )}
