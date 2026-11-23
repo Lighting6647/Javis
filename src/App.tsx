@@ -16,7 +16,7 @@ import { CameraOnBadge, GestureRadialMenu, type RadialMenuItem } from "./compone
 import { HandOverlay } from "./components/hud/HandOverlay";
 import { HandPointer } from "./components/hud/HandPointer";
 import { HudFrame } from "./components/hud/HudFrame";
-import { Reactor3D } from "./components/hud/Reactor3D";
+import { LunaOrb } from "./components/hud/LunaOrb";
 import { LazyBoundary } from "./components/lazy/LazyBoundary";
 import {
   BrowserView,
@@ -777,14 +777,7 @@ export default function App() {
     >
       <HudFrame />
       {stageShown && !showMainContent && (
-        <Reactor3D
-          phase={shownPhase}
-          offline={aiDown}
-          thinkHard={thinkHard}
-          accent={hudVisual.accent}
-          style={hudVisual.style}
-          fallback={null}
-        />
+        <LunaOrb phase={shownPhase} offline={aiDown} thinkHard={thinkHard} accent={hudVisual.accent} />
       )}
       <header className="app-header">
         <div className="brand">
