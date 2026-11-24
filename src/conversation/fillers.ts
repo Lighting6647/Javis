@@ -8,6 +8,9 @@ export const THAI_FILLERS = [
   "แป๊บนึงนะคะ ลูน่ากำลังคิดให้อยู่ค่ะ"
 ] as const;
 
+/** พูดเมื่อ AI กำลังค้นเว็บ (ใช้เวลานานกว่าปกติ) ให้รู้ว่ายังทำงานอยู่ */
+export const SEARCH_FILLER = "ขอค้นข้อมูลจากเว็บแป๊บนึงนะคะ";
+
 let lastIndex = -1;
 
 export function pickThaiFiller(): string {

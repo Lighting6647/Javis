@@ -32,7 +32,7 @@ import {
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
-import { pickThaiFiller, THAI_FILLERS } from "./conversation/fillers";
+import { pickThaiFiller, SEARCH_FILLER, THAI_FILLERS } from "./conversation/fillers";
 import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
@@ -764,7 +764,7 @@ export default function App() {
   // เตรียมเสียงคำตอบรับไว้ก่อน จะได้เล่นได้ทันทีระหว่างรอ AI และรอสร้างเสียงคำตอบ
   useEffect(() => {
     if (!ready || !active) return;
-    synthesizer.warmClips?.(THAI_FILLERS);
+    synthesizer.warmClips?.([...THAI_FILLERS, SEARCH_FILLER]);
   }, [ready, active, synthesizer]);
 
   // เสียงตอบรับสั้นๆ ระหว่างรอ AI คิดคำตอบ (Filler)
@@ -778,6 +778,13 @@ export default function App() {
     }, 700);
     return () => window.clearTimeout(timer);
   }, [ready, inMeeting, phase, active, synthesizer]);
+
+  // ค้นเว็บใช้เวลานาน: บอกผู้ใช้ด้วยเสียงที่เตรียมไว้ หลังคำตอบรับแรกพูดจบ
+  useEffect(() => {
+    if (!ready || inMeeting || phase !== "thinking" || !searching || !active || !synthesizer.playClip) return;
+    const timer = window.setTimeout(() => void synthesizer.playClip?.(SEARCH_FILLER), 3200);
+    return () => window.clearTimeout(timer);
+  }, [ready, inMeeting, phase, searching, active, synthesizer]);
 
   return (
     <div

@@ -56,6 +56,12 @@ function mapError(error: string): SpeechErrorCode | null {
   }
 }
 
+/**
+ * คำพูดนิ่งไม่เปลี่ยนนานเท่านี้ ถือว่าพูดจบแล้ว สั่งหยุดฟังเลย ไม่ต้องรอเบราว์เซอร์ตัดจบเอง
+ * (Chrome รอเงียบนานกว่านี้มากกับภาษาไทย ทำให้ลูน่าเริ่มคิดช้า)
+ */
+export const STABLE_TRANSCRIPT_MS = 800;
+
 /** ตัวฟังบนเบราว์เซอร์: Safari ใช้ระบบเสียงของ Apple ส่วน Chrome/Edge ใช้ของผู้ผลิตเบราว์เซอร์ */
 export class WebSpeechRecognizer implements SpeechRecognizer {
   private active: ActiveSession | null = null;
@@ -87,14 +93,50 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
 
       let transcript = "";
       let failure: SpeechErrorCode | null = null;
+      let stableTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearStable = () => {
+        if (stableTimer !== null) clearTimeout(stableTimer);
+        stableTimer = null;
+      };
+      /** ได้ข้อความครบแล้ว: ส่งผลทันที แล้วปิดการฟังที่เหลือทิ้ง */
+      const finishEarly = () => {
+        clearStable();
+        if (this.active?.recognition !== recognition) return;
+        this.active = null;
+        resolve(transcript);
+        try {
+          recognition.abort();
+        } catch {
+          // ปิดไม่ได้ก็ไม่เป็นไร ผลถูกส่งไปแล้ว
+        }
+      };
 
       recognition.onresult = (event) => {
         let text = "";
+        let final = false;
         for (let index = 0; index < event.results.length; index += 1) {
-          text += event.results[index]?.[0]?.transcript ?? "";
+          const result = event.results[index];
+          text += result?.[0]?.transcript ?? "";
+          if (index === event.results.length - 1) final = Boolean(result?.isFinal);
         }
         transcript = text.trim();
         onPartial(transcript);
+        if (!transcript) return;
+        if (final) {
+          finishEarly();
+          return;
+        }
+        clearStable();
+        stableTimer = setTimeout(() => {
+          stableTimer = null;
+          if (this.active?.recognition !== recognition) return;
+          // ขอให้เบราว์เซอร์สรุปผลสุดท้ายตอนนี้เลย
+          try {
+            recognition.stop();
+          } catch {
+            finishEarly();
+          }
+        }, STABLE_TRANSCRIPT_MS);
       };
 
       recognition.onerror = (event) => {
@@ -103,6 +145,7 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
 
       // บางเบราว์เซอร์ไม่ส่งผลลัพธ์สุดท้ายแยกมา จึงสรุปผลตอนจบการฟังเสมอ
       recognition.onend = () => {
+        clearStable();
         if (this.active?.recognition !== recognition) return;
         this.active = null;
         if (failure) reject(new SpeechError(failure));
