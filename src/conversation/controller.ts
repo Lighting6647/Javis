@@ -97,6 +97,11 @@ export interface WakeOptions {
   detector?: WakeWordDetector;
   /** เรียกชื่ออย่างเดียวแล้ว คำพูดถัดไปที่เริ่มภายในเวลานี้เป็นคำสั่ง (มิลลิวินาที) */
   windowMs?: number;
+  /**
+   * โหมดคุยต่อเนื่อง: เรียกชื่อครั้งเดียวแล้วสั่งต่อได้เรื่อย ๆ โดยไม่ต้องเรียกชื่อซ้ำ
+   * จนกว่าจะเงียบไม่สั่งอะไรนานเท่านี้ (มิลลิวินาที) ไม่กำหนด = ต้องเรียกชื่อทุกคำสั่ง
+   */
+  conversationMs?: number;
 }
 
 /** สิ่งที่ตัวควบคุมต้องการจากคลังความจำ */
@@ -461,12 +466,16 @@ export class ConversationController {
       if (heard) {
         const command = this.passWake(heard, wake);
         if (command) {
-          this.awakeUntil = 0;
+          const conversation = this.deps.wake?.conversationMs ?? 0;
+          this.awakeUntil = conversation > 0 ? this.clock() + conversation : 0;
           await this.handle(command, epoch);
           return;
         }
         // เรียกชื่ออย่างเดียว: รอคำสั่งในคำพูดถัดไป
-        if (command === "") this.awakeUntil = this.clock() + (this.deps.wake?.windowMs ?? WAKE_WINDOW_MS);
+        if (command === "") {
+          const awakeMs = Math.max(this.deps.wake?.windowMs ?? WAKE_WINDOW_MS, this.deps.wake?.conversationMs ?? 0);
+          this.awakeUntil = this.clock() + awakeMs;
+        }
         // ไม่ได้เรียกชื่อ: ทิ้งคำพูดนั้นแล้วฟังต่อ
       }
       pendingNotice = null;

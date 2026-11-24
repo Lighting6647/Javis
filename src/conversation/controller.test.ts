@@ -1860,6 +1860,31 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
   });
 
+  it("โหมดคุยต่อเนื่อง: เรียกชื่อครั้งเดียว แล้วสั่งต่อได้โดยไม่ต้องเรียกชื่อ จนเงียบเกินเวลาที่กำหนด", async () => {
+    const { recognizer, chat, clock, controller } = await startWithWake({ conversationMs: 60_000 });
+
+    recognizer.current.result.resolve("ลูน่า ตอนนี้กี่โมง");
+    await settle();
+    chat.reply("บ่ายโมงค่ะ");
+    await settle();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "awake" });
+
+    clock.time += 10_000;
+    recognizer.current.result.resolve("เปิดเพลงหน่อย");
+    await settle();
+    expect(chat.current.messages.at(-1)).toEqual({ role: "user", content: "เปิดเพลงหน่อย" });
+    chat.reply("ได้ค่ะ");
+    await settle();
+
+    clock.time += 61_000;
+    recognizer.current.result.resolve("");
+    await settle();
+    expect(controller.getState().wake).toBe("waiting");
+    recognizer.current.result.resolve("ข่าวภาคค่ำ");
+    await settle();
+    expect(chat.calls).toHaveLength(2);
+  });
+
   it("listenNow (ชูนิ้วชี้ค้าง): ฟังใหม่ทันที และคำพูดถัดไปเป็นคำสั่งโดยไม่ต้องเรียกชื่อ", async () => {
     const { recognizer, chat, clock, controller } = await startWithWake();
     expect(controller.getState().wake).toBe("waiting");

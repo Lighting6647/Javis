@@ -14,6 +14,9 @@ import { wakeGateEnabled, wakePhrases } from "../services/wakeGateStore";
 import { createSpeechServices, handsFreeAvailable } from "../speech";
 import { CloudVoiceSynthesizer, resolveAssistantIdentity } from "../speech/cloudVoice";
 
+/** เรียก "ลูน่า" ครั้งเดียวแล้วสั่งงานต่อได้โดยไม่ต้องเรียกชื่อซ้ำ จนกว่าจะเงียบไป 5 นาที */
+const CONVERSATION_AWAKE_MS = 5 * 60_000;
+
 interface ConversationOptions {
   /** เซสชันผ่านการตรวจแล้วและใช้งานได้ บทสนทนาที่เก็บไว้จะถูกคืนให้หลังจากนี้เท่านั้น */
   ready: boolean;
@@ -54,7 +57,7 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
       // คำสั่งที่แอปทำเองโดยไม่ถาม AI เช่น "เริ่มโหมดประชุม" (ลงทะเบียนที่ src/hooks/useMeeting.ts)
       onCommand: appCommands.handle,
       // คำเรียกชื่อ: ระหว่างฟังตลอดเวลา ส่งไปถาม AI เฉพาะคำพูดที่เรียก "ลูน่า" ก่อน (ปิดได้ในหน้าตั้งค่า)
-      wake: { enabled: wakeGateEnabled, phrases: () => wakePhrases },
+      wake: { enabled: wakeGateEnabled, phrases: () => wakePhrases, conversationMs: CONVERSATION_AWAKE_MS },
       // เปิดหน้าเว็บภายใน Javis เสมอ (แอปเดสก์ท็อปใช้เบราว์เซอร์ในตัว บนเว็บเปิดใน FrameView ไม่เด้งออกไปข้างนอก)
       openPage: (url) => (isDesktopApp() ? browserStore.open(url) : browserStore.showFramed(url, "หน้าเว็บ")),
       showPage: runsInBrowserTab() ? browserStore.showFramed : undefined,
