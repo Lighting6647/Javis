@@ -26,6 +26,12 @@ describe("matchWakePhrase", () => {
     expect(matchWakePhrase("luna")).toEqual({ command: "" });
   });
 
+  it("เรียกชื่อไว้ท้ายประโยค: ทั้งประโยคเป็นคำสั่ง", () => {
+    expect(matchWakePhrase("สวัสดีลูน่า")).toEqual({ command: "สวัสดีลูน่า" });
+    expect(matchWakePhrase("เปิดเพลงหน่อย ลูน่า!")).toEqual({ command: "เปิดเพลงหน่อย ลูน่า" });
+    expect(matchWakePhrase("... ลูน่า")).toEqual({ command: "" });
+  });
+
   it("ตัดเครื่องหมายระหว่างคำเรียกชื่อกับคำสั่ง", () => {
     expect(matchWakePhrase("Luna, what time is it?")).toEqual({ command: "what time is it?" });
     expect(matchWakePhrase("ลูน่า... ช่วยหน่อย")).toEqual({ command: "ช่วยหน่อย" });

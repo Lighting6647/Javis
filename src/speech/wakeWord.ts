@@ -19,6 +19,7 @@ const LATIN_WORD_CHAR = /[a-z0-9]/;
 
 /** เครื่องหมายและช่องว่างที่ตัดทิ้งระหว่างคำเรียกชื่อกับคำสั่ง */
 const LEADING_PUNCTUATION = /^[\s,.:;!?\-–—'"“”‘’ๆ]+/u;
+const TRAILING_PUNCTUATION = /[\s,.:;!?\-–—'"“”‘’]+$/u;
 
 /** ทำให้ข้อความเทียบกันได้: ตัวพิมพ์เล็ก รูปแบบยูนิโค้ดเดียวกัน และช่องว่างช่องเดียว */
 export function normalizeWakeText(text: string): string {
@@ -74,7 +75,12 @@ export function matchWakePhrase(heard: string, phrases: readonly string[] = DEFA
   }
 
   if (!best) return null;
-  return { command: text.slice(best.end).replace(LEADING_PUNCTUATION, "").trim() };
+  const command = text.slice(best.end).replace(LEADING_PUNCTUATION, "").trim();
+  if (command) return { command };
+  // เรียกชื่อไว้ท้ายประโยค เช่น "สวัสดีลูน่า" หรือ "เปิดเพลงหน่อยลูน่า": ทั้งประโยคคือสิ่งที่พูดกับลูน่า
+  const before = text.slice(0, best.start).replace(TRAILING_PUNCTUATION, "").trim();
+  if (before) return { command: text.slice(0, best.end).trim() };
+  return { command: "" };
 }
 
 /**
