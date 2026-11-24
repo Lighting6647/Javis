@@ -32,7 +32,7 @@ import {
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
-import { pickThaiFiller } from "./conversation/fillers";
+import { pickThaiFiller, THAI_FILLERS } from "./conversation/fillers";
 import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
@@ -761,12 +761,21 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [sensorNotice]);
 
+  // เตรียมเสียงคำตอบรับไว้ก่อน จะได้เล่นได้ทันทีระหว่างรอ AI และรอสร้างเสียงคำตอบ
+  useEffect(() => {
+    if (!ready || !active) return;
+    synthesizer.warmClips?.(THAI_FILLERS);
+  }, [ready, active, synthesizer]);
+
   // เสียงตอบรับสั้นๆ ระหว่างรอ AI คิดคำตอบ (Filler)
+  // ใช้เสียงที่เตรียมไว้: ขอเสียงใหม่ตอนนี้ใช้เวลาราว 3 วินาที จะมาพร้อมคำตอบจริงและเสียงซ้อนกัน
   useEffect(() => {
     if (!ready || inMeeting || phase !== "thinking" || !active) return;
     const timer = window.setTimeout(() => {
-      void synthesizer.speak(pickThaiFiller()).catch(() => undefined);
-    }, 1500);
+      const filler = pickThaiFiller();
+      if (synthesizer.playClip) void synthesizer.playClip(filler);
+      else void synthesizer.speak(filler).catch(() => undefined);
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [ready, inMeeting, phase, active, synthesizer]);
 

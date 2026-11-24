@@ -466,4 +466,47 @@ describe("CloudVoiceSynthesizer", () => {
       expect(seen.mock.calls.length).toBeGreaterThanOrEqual(3);
     });
   });
+
+  describe("เสียงคำตอบรับที่เตรียมไว้", () => {
+    it("ขอเสียงไว้ครั้งเดียว แล้วเล่นได้ทันทีโดยไม่ขอใหม่", async () => {
+      const { voice, requests, plays, deliver } = setup();
+      voice.warmClips(["รอแป๊บนะคะ"]);
+      voice.warmClips(["รอแป๊บนะคะ"]);
+      expect(requests).toHaveLength(1);
+      expect(await Promise.race([voice.playClip("รอแป๊บนะคะ"), settle().then(() => "pending")])).toBe(false);
+      await deliver(0);
+
+      void voice.playClip("รอแป๊บนะคะ");
+      expect(plays).toHaveLength(1);
+      expect(requests).toHaveLength(1);
+    });
+
+    it("ข้อความที่ยังไม่ได้เตรียม ไม่เล่นอะไรและไม่ขอเสียง", async () => {
+      const { voice, requests, plays } = setup();
+      expect(await voice.playClip("ไม่เคยเตรียม")).toBe(false);
+      expect(requests).toHaveLength(0);
+      expect(plays).toHaveLength(0);
+    });
+
+    it("คำตอบจริงมาถึง ตัดเสียงคำตอบรับที่เล่นค้างอยู่", async () => {
+      const { voice, plays, deliver } = setup();
+      voice.warmClips(["รอแป๊บนะคะ"]);
+      await deliver(0);
+      void voice.playClip("รอแป๊บนะคะ");
+
+      void voice.speak("คำตอบจริงค่ะ");
+      await deliver(1);
+      expect(plays[0]?.stopped).toBe(true);
+      expect(plays).toHaveLength(2);
+    });
+
+    it("ยกเลิกการพูดแล้ว เสียงที่เตรียมไว้ยังอยู่", async () => {
+      const { voice, plays, deliver } = setup();
+      voice.warmClips(["รอแป๊บนะคะ"]);
+      voice.cancel();
+      await deliver(0);
+      void voice.playClip("รอแป๊บนะคะ");
+      expect(plays).toHaveLength(1);
+    });
+  });
 });

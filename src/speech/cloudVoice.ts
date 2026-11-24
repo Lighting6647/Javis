@@ -124,6 +124,10 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   /** จบเมื่อรอบปัจจุบันถูกยกเลิก ให้การสั่งพูดที่รอเสียงอยู่จบได้ทันที */
   private cancelled = createCancelSignal();
   private pause: { reason: CloudVoiceFailure; until: number } | null = null;
+  /** เสียงสั้น ๆ ที่เตรียมไว้ล่วงหน้า (คำตอบรับระหว่างรอ) เล่นได้ทันทีโดยไม่ต้องรอเซิร์ฟเวอร์ */
+  private readonly clips = new Map<string, Blob>();
+  private readonly clipRequests = new Set<string>();
+  private clipPlayback: AudioPlayback | null = null;
 
   constructor(private readonly deps: CloudVoiceDeps) {}
 
@@ -176,6 +180,44 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     this.fill();
   }
 
+  private clipKey(text: string): string {
+    return `${this.settings.cloudVoice ?? ""}|${this.settings.persona ?? ""}|${text}`;
+  }
+
+  /**
+   * ขอเสียงของข้อความสั้น ๆ ที่จะใช้บ่อยมาเก็บไว้ก่อน (เช่นคำตอบรับระหว่างรอ AI คิด)
+   * ไม่ผูกกับรอบการพูด การยกเลิกจึงไม่ทิ้งเสียงที่เตรียมไว้
+   */
+  warmClips(texts: readonly string[]): void {
+    if (!this.usable()) return;
+    for (const text of texts) {
+      const key = this.clipKey(text);
+      if (this.clips.has(key) || this.clipRequests.has(key)) continue;
+      this.clipRequests.add(key);
+      this.deps
+        .fetchSpeech(text, this.settings.cloudVoice, new AbortController().signal, this.settings.persona)
+        .then((audio) => {
+          this.clips.set(key, audio);
+        })
+        .catch(() => undefined)
+        .finally(() => this.clipRequests.delete(key));
+    }
+  }
+
+  /** เล่นเสียงที่เตรียมไว้ทันที คืน false ถ้ายังไม่มีเสียงของข้อความนี้ (ผู้เรียกไม่ต้องพูดแทน) */
+  playClip(text: string): Promise<boolean> {
+    const audio = this.usable() ? this.clips.get(this.clipKey(text)) : undefined;
+    if (!audio || this.current || this.queue.length > 0) return Promise.resolve(false);
+    this.deps.player.unlock?.();
+    this.clipPlayback?.stop();
+    const playback = this.deps.player.play(audio, this.settings.rate);
+    this.clipPlayback = playback;
+    return playback.finished.then((outcome) => {
+      if (this.clipPlayback === playback) this.clipPlayback = null;
+      return outcome === "ended" || outcome === "stopped";
+    });
+  }
+
   private speakWithFallback(text: string): Promise<void> {
     this.deps.fallback.setFallbackGender?.("female");
     return this.deps.fallback.speak(text);
@@ -216,6 +258,8 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     this.loading = false;
     this.current?.stop();
     this.current = null;
+    this.clipPlayback?.stop();
+    this.clipPlayback = null;
     this.cancelled.resolve("cancelled");
     this.cancelled = createCancelSignal();
     this.deps.fallback.cancel();
@@ -304,6 +348,9 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     }
     if (audio === "cancelled" || epoch !== this.epoch) return true;
 
+    // คำตอบจริงมาแล้ว: ตัดคำตอบรับที่ยังเล่นค้างอยู่ ไม่ให้เสียงซ้อนกัน
+    this.clipPlayback?.stop();
+    this.clipPlayback = null;
     const playback = this.deps.player.play(audio, this.settings.rate);
     this.current = playback;
     const outcome = await playback.finished;
