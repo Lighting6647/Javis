@@ -216,6 +216,20 @@ describe("createChatCompletionsTranslator", () => {
     expect(items.map((event) => event.item.call_id)).toEqual(["call_1", "call_2"]);
   });
 
+  it("เรียกหลายเครื่องมือแยกก้อนโดยไม่บอกลำดับ (แบบ Gemini): เป็นคนละรายการ", () => {
+    const translator = createChatCompletionsTranslator();
+    const call = (id: string, name: string, args: string) => ({
+      choices: [{ delta: { tool_calls: [{ id, type: "function", function: { name, arguments: args } }] } }]
+    });
+    translator.push(call("a", "pc_list_files", '{"path":"Documents"}'));
+    translator.push(call("b", "browser_open", '{"url":"https://example.com"}'));
+    expect(translator.finish()).toMatchObject([
+      { item: { name: "pc_list_files", call_id: "a", arguments: '{"path":"Documents"}' } },
+      { item: { name: "browser_open", call_id: "b", arguments: '{"url":"https://example.com"}' } },
+      { type: "response.completed" }
+    ]);
+  });
+
   it("สตรีมจบโดยไม่บอกเหตุผล: ยังปิดท้ายให้ เพื่อไม่ให้เครื่องมือที่เรียกไว้หายไป", () => {
     const translator = createChatCompletionsTranslator();
     translator.push(chunk({ tool_calls: [{ index: 0, id: "c1", function: { name: "forget_memory", arguments: '{"memory_id":"m1"}' } }] }));

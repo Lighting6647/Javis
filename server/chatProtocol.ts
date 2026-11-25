@@ -42,10 +42,28 @@ export type ChatEvent =
    */
   | { type: "open_app"; proposal: AppLaunchProposal }
   /**
+   * AI เสนอทำสิ่งที่เปลี่ยนแปลงเครื่องหรือหน้าเว็บ (server/mcp) รายละเอียดมาจากเซิร์ฟเวอร์ ไม่ใช่คำบรรยายของ AI
+   * หน้าเว็บต้องแสดงการ์ดให้ผู้ใช้ยืนยันก่อนเสมอ
+   */
+  | { type: "pc_action"; proposal: PcActionProposal }
+  /**
    * แถบคำค้นที่เกี่ยวข้องของ Google (HTML สำเร็จรูปจาก Google) สำหรับคำตอบที่ได้จากการค้นด้วย Google
    * เงื่อนไขการใช้ของ Google กำหนดให้แสดงคู่กับคำตอบโดยไม่ดัดแปลง หน้าเว็บต้องแสดงแบบที่ HTML นี้รันสคริปต์ไม่ได้
    */
   | { type: "suggestions"; html: string[] };
+
+export type PcActionKind = "command" | "write" | "move" | "click" | "type" | "open";
+
+export interface PcActionProposal {
+  id: string;
+  kind: PcActionKind;
+  title: string;
+  /** สิ่งที่จะทำจริงทั้งหมด เช่น คำสั่งเต็ม */
+  detail: string;
+  /** ต้องกดปุ่มเท่านั้น ใช้เสียงหรือท่ามือยืนยันไม่ได้ */
+  buttonOnly: boolean;
+  expiresAt: number;
+}
 
 export interface AppLaunchProposal {
   id: string;

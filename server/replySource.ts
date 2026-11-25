@@ -30,18 +30,48 @@ export interface StreamTranslator {
   finish(): unknown[];
 }
 
+/** พอสำหรับข้อผิดพลาดที่ต่อท้าย พร้อมบรรทัดข้อมูลก่อนหน้า */
+const MAX_TAIL_LENGTH = 16_000;
+
+/**
+ * ต้นทางล้มเหลวกลางสตรีมแล้วต่อท้ายด้วย JSON ของข้อผิดพลาดดิบ ๆ ที่ไม่ใช่รูปแบบ SSE (Gemini ทำแบบนี้เมื่อคนใช้เยอะ)
+ * ถ้าไม่อ่านส่วนนี้ คำตอบที่ขาดกลางประโยคจะถูกนับว่าจบปกติ
+ */
+function readTrailingError(rest: string): unknown {
+  // ตัดบรรทัดข้อมูล SSE สุดท้ายออก เหลือเฉพาะส่วนที่ต่อท้าย
+  const lines = rest.split(/\r?\n/);
+  const lastData = lines.findLastIndex((line) => line.startsWith("data:"));
+  const text = lines.slice(lastData + 1).join("\n").trim();
+  if (!text.startsWith("[") && !text.startsWith("{")) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const payload: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
+    return typeof payload === "object" && payload !== null && "error" in payload ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
 /** อ่านสตรีม SSE จากต้นทางทีละเหตุการณ์ หยุดเมื่อ onEvent คืน true */
 async function readSseEvents(body: ReadableStream<Uint8Array>, onEvent: (event: unknown) => boolean): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  /** ท้ายสตรีมแบบดิบ ใช้หาข้อผิดพลาดที่ต่อท้ายมา */
+  let tail = "";
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) return;
+      if (done) {
+        const failure = readTrailingError(tail + decoder.decode());
+        if (failure) onEvent(failure);
+        return;
+      }
 
-      const chunk = parseSseChunk(buffer + decoder.decode(value, { stream: true }));
+      const text = decoder.decode(value, { stream: true });
+      tail = (tail + text).slice(-MAX_TAIL_LENGTH);
+      const chunk = parseSseChunk(buffer + text);
       buffer = chunk.rest;
       for (const event of chunk.events) {
         if (onEvent(event)) return;

@@ -158,7 +158,12 @@ export function createChatCompletionsTranslator(): ChatCompletionsTranslator {
 
     deltas.forEach((delta, position) => {
       if (!isObject(delta)) return;
-      const index = typeof delta.index === "number" ? delta.index : position;
+      let index = typeof delta.index === "number" ? delta.index : position;
+      // Gemini ส่งการเรียกหลายรายการแยกก้อนโดยไม่บอกลำดับ รหัสที่ต่างกันจึงต้องเป็นคนละรายการ ไม่เอาอาร์กิวเมนต์มาต่อกัน
+      const id = typeof delta.id === "string" ? delta.id : "";
+      const sameId = id ? [...calls].find(([, known]) => known.id === id) : undefined;
+      if (sameId) index = sameId[0];
+      else if (id && calls.get(index)?.id) index = Math.max(...calls.keys()) + 1;
       const call = calls.get(index) ?? { id: "", name: "", arguments: "" };
       const fn = isObject(delta.function) ? delta.function : {};
 

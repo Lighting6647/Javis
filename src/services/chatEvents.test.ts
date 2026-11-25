@@ -110,6 +110,21 @@ describe("parseChatEventLine", () => {
   });
 });
 
+describe("รายการที่ลูน่าเสนอทำในเครื่อง", () => {
+  const proposal = { id: "1", kind: "command", title: "รัน", detail: "node -v", buttonOnly: true, expiresAt: 5 };
+
+  it("รับรายการที่ครบ และถือว่าต้องกดปุ่มเมื่อไม่ได้บอกไว้ชัด", () => {
+    expect(parseChatEventLine(line({ type: "pc_action", proposal }))).toEqual({ type: "pc_action", proposal });
+    expect(parseChatEventLine(line({ type: "pc_action", proposal: { ...proposal, buttonOnly: undefined } }))).toMatchObject({ proposal: { buttonOnly: true } });
+  });
+
+  it("ทิ้งรายการที่ไม่ครบหรือชนิดที่ไม่รู้จัก", () => {
+    expect(parseChatEventLine(line({ type: "pc_action", proposal: { ...proposal, kind: "delete" } }))).toBeNull();
+    expect(parseChatEventLine(line({ type: "pc_action", proposal: { ...proposal, detail: 1 } }))).toBeNull();
+    expect(parseChatEventLine(line({ type: "pc_action" }))).toBeNull();
+  });
+});
+
 describe("แถบคำค้นที่เกี่ยวข้องของ Google", () => {
   const block = '<style>.chip{color:#111}</style><div class="container"><a class="chip" href="https://www.google.com/search?q=x">x</a></div>';
 

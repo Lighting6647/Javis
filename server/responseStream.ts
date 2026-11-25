@@ -8,6 +8,7 @@ import type {
   ProjectActionProposal,
   WebSource
 } from "./chatProtocol.js";
+import { readToolRequest, type ToolRequest } from "./mcp/agentLoop.js";
 import { readUpstreamErrorCodes } from "./upstreamError.js";
 
 export const OPEN_PAGE_TOOL = "open_web_page";
@@ -169,7 +170,9 @@ export interface ResponseReducer {
    */
   readonly meetingHistoryQuery: string | null;
   /** AI ขอเช็ค/อ่านอีเมลสำคัญจาก Gmail (null = ไม่ได้ขอ) */
-  readonly emailCheckRequest: { query?: string; limit?: number } | null;
+  readonly emailCheckRequest: { query?: string; limit?: number; readFull?: boolean } | null;
+  /** AI ขอใช้เครื่องมือควบคุมคอมพิวเตอร์หรือเบราว์เซอร์อัตโนมัติ (ว่าง = ไม่ได้ขอ) */
+  readonly pcRequests: readonly ToolRequest[];
   /** AI ขอดูหรือบันทึกนัดหมายบน Google Calendar (null = ไม่ได้ขอ) */
   readonly calendarRequest: {
     action: "list" | "create";
@@ -223,7 +226,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   let projectAction: ProjectActionProposal | null = null;
   let appLaunch: AppLaunchProposal | null = null;
   let meetingHistoryQuery: string | null = null;
-  let emailCheckRequest: { query?: string; limit?: number } | null = null;
+  let emailCheckRequest: { query?: string; limit?: number; readFull?: boolean } | null = null;
+  const pcRequests: ToolRequest[] = [];
+  const seenPcCalls = new Set<string>();
   let calendarRequest: ResponseReducer["calendarRequest"] = null;
   let noteRequest: ResponseReducer["noteRequest"] = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
@@ -385,13 +390,22 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
           reason: reason || `เปิดโปรแกรม ${matched.name}`
         };
       }
+    } else if (readToolRequest(item)) {
+      // รายการเดียวกันอาจมาซ้ำในเหตุการณ์จบ ต้องไม่ทำสองครั้ง
+      const callId = typeof item.call_id === "string" ? item.call_id : "";
+      const request = readToolRequest(item);
+      if (request && !seenPcCalls.has(callId)) pcRequests.push(request);
+      if (callId) seenPcCalls.add(callId);
+      // ขั้นถัดไปจะอ่านไฟล์หรือเว็บ: ลิงก์ในคำตอบรอบนี้จึงต้องให้ผู้ใช้กดเอง และไม่จำอะไรเพิ่ม
+      searched = true;
     } else if (item.type === "function_call" && item.name === CHECK_EMAILS_TOOL && !emailCheckRequest) {
       const args = parseArguments(item.arguments);
       const query = typeof args.query === "string" ? cleanLine(args.query, 160) : "";
       const rawLimit = typeof args.limit === "number" ? args.limit : 5;
       emailCheckRequest = {
         ...(query ? { query } : {}),
-        limit: Math.min(Math.max(Math.trunc(rawLimit) || 5, 1), 10)
+        limit: Math.min(Math.max(Math.trunc(rawLimit) || 5, 1), 10),
+        ...(args.read_full === true ? { readFull: true } : {})
       };
     } else if (item.type === "function_call" && item.name === MANAGE_CALENDAR_TOOL && !calendarRequest) {
       const args = parseArguments(item.arguments);
@@ -526,7 +540,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       return memoryCalls;
     },
     get needsFollowUp() {
-      return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction && !appLaunch;
+      return memoryCalls.length > 0 && !text.trim() && !page && !fill && !projectAction && !appLaunch && pcRequests.length === 0;
     },
     get memoryFallbackText() {
       if (memoryAdds.length > 0) return "จำไว้แล้วค่ะ";
@@ -547,6 +561,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get meetingHistoryQuery() {
       return meetingHistoryQuery;
+    },
+    get pcRequests() {
+      return pcRequests;
     },
     get emailCheckRequest() {
       return emailCheckRequest;

@@ -3,6 +3,8 @@
  * สำหรับบัญชี Lighting6647@gmail.com ผ่าน Google OAuth 2.0 Refresh Token ฝั่ง Backend เท่านั้น
  * ไม่เก็บหรือส่งต่อ Token ใด ๆ ออกไปฝั่งหน้าเว็บ
  */
+import { extractReadableText } from "./webReader.js";
+
 export const DEFAULT_GOOGLE_ACCOUNT_EMAIL = "Lighting6647@gmail.com";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -217,6 +219,83 @@ export async function listImportantEmails(
       accountEmail,
       error: error instanceof Error ? `เชื่อมต่อ Gmail ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Gmail ไม่สำเร็จ"
     };
+  }
+}
+
+interface GmailPart {
+  mimeType?: string;
+  filename?: string;
+  body?: { data?: string };
+  parts?: GmailPart[];
+  headers?: Array<{ name?: string; value?: string }>;
+}
+
+const MAX_EMAIL_BODY = 6000;
+
+/** หาเนื้อหาอีเมล: ใช้ข้อความล้วนก่อน ถ้าไม่มีจึงแปลงจาก HTML ไฟล์แนบไม่ถูกอ่าน */
+export function extractEmailBody(payload: GmailPart | undefined): string {
+  const found: { plain?: string; html?: string } = {};
+  const walk = (part: GmailPart | undefined, depth: number) => {
+    if (!part || depth > 8) return;
+    const data = part.body?.data;
+    if (data && !part.filename) {
+      const decoded = Buffer.from(data, "base64url").toString("utf8");
+      if (part.mimeType === "text/plain") found.plain ??= decoded;
+      else if (part.mimeType === "text/html") found.html ??= decoded;
+    }
+    part.parts?.forEach((child) => walk(child, depth + 1));
+  };
+  walk(payload, 0);
+  const plain = found.plain?.trim();
+  const text = plain || (found.html ? extractReadableText(found.html, "text/html").text : "");
+  return text
+    .replace(/[\u034f\u00ad\u200b-\u200f\u2060\ufeff]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim()
+    .slice(0, MAX_EMAIL_BODY);
+}
+
+export interface FullEmail {
+  from: string;
+  subject: string;
+  date: string;
+  body: string;
+}
+
+/** อ่านเนื้อหาอีเมลฉบับล่าสุด (หรือฉบับล่าสุดที่ตรงคำค้น) */
+export async function readLatestEmail(
+  options: { query?: string; env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<{ ok: true; accountEmail: string; email: FullEmail | null } | { ok: false; error: string }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const cfg = resolveGoogleWorkspaceConfig(options.env ?? process.env);
+  if (!cfg) return { ok: false, error: "ยังไม่ได้เชื่อมต่อ Google กรุณาตั้งค่าใน .env.local" };
+
+  try {
+    const token = await getAccessToken(cfg, fetchImpl);
+    const headers = { Authorization: `Bearer ${token}` };
+    const q = options.query?.trim() || "in:inbox -category:promotions -category:social";
+    const listRes = await fetchWithTimeout(`${GMAIL_API_BASE}/messages?maxResults=1&q=${encodeURIComponent(q)}`, { headers }, fetchImpl);
+    if (!listRes.ok) return { ok: false, error: `ไม่สามารถอ่านอีเมลได้ (HTTP ${listRes.status})` };
+    const listed = (await listRes.json()) as { messages?: Array<{ id?: string }> };
+    const id = listed.messages?.[0]?.id;
+    if (!id) return { ok: true, accountEmail: cfg.accountEmail, email: null };
+
+    const res = await fetchWithTimeout(`${GMAIL_API_BASE}/messages/${encodeURIComponent(id)}?format=full`, { headers }, fetchImpl);
+    if (!res.ok) return { ok: false, error: `ไม่สามารถอ่านอีเมลได้ (HTTP ${res.status})` };
+    const message = (await res.json()) as { snippet?: string; payload?: GmailPart };
+    return {
+      ok: true,
+      accountEmail: cfg.accountEmail,
+      email: {
+        from: readHeader(message.payload?.headers, "From") || "ไม่ระบุผู้ส่ง",
+        subject: readHeader(message.payload?.headers, "Subject") || "(ไม่มีหัวข้อ)",
+        date: readHeader(message.payload?.headers, "Date"),
+        body: extractEmailBody(message.payload) || (message.snippet ?? "")
+      }
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? `เชื่อมต่อ Gmail ไม่สำเร็จ (${error.message})` : "เชื่อมต่อ Gmail ไม่สำเร็จ" };
   }
 }
 

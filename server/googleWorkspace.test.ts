@@ -4,10 +4,32 @@ import {
   createCalendarEvent,
   createGoogleTask,
   DEFAULT_GOOGLE_ACCOUNT_EMAIL,
+  extractEmailBody,
   getGoogleWorkspaceStatus,
   listCalendarEvents,
   listImportantEmails
 } from "./googleWorkspace.js";
+
+describe("extractEmailBody", () => {
+  const encode = (text: string) => ({ data: Buffer.from(text, "utf8").toString("base64url") });
+
+  it("ใช้ข้อความล้วนก่อน HTML และไม่อ่านไฟล์แนบ", () => {
+    expect(
+      extractEmailBody({
+        mimeType: "multipart/mixed",
+        parts: [
+          { mimeType: "text/plain", filename: "notes.txt", body: encode("ไฟล์แนบ") },
+          { mimeType: "multipart/alternative", parts: [{ mimeType: "text/html", body: encode("<p>html</p>") }, { mimeType: "text/plain", body: encode("สวัสดี\u034f\n\n  ครับ") }] }
+        ]
+      })
+    ).toBe("สวัสดี\nครับ");
+  });
+
+  it("แปลงจาก HTML เมื่อไม่มีข้อความล้วน และรับเมลที่ไม่มีเนื้อหา", () => {
+    expect(extractEmailBody({ mimeType: "text/html", body: encode("<style>x</style><p>ใบเสร็จ</p><script>y</script>") })).toBe("ใบเสร็จ");
+    expect(extractEmailBody(undefined)).toBe("");
+  });
+});
 
 describe("googleWorkspace", () => {
   beforeEach(() => {

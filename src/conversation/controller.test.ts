@@ -162,6 +162,7 @@ interface SetupOptions {
   /** คำเรียกชื่อ */
   wake?: WakeOptions;
   /** รันคำสั่งควบคุมโปรเจกต์จำลอง */
+  decidePcAction?: (id: string, decision: "confirm" | "cancel", via: "button" | "voice") => Promise<{ ok: boolean; summary: string; output?: string }>;
   runProjectAction?: (
     projectId: string,
     action: "build" | "test" | "lint" | "redeploy"
@@ -186,6 +187,7 @@ function setup(options: SetupOptions = {}) {
     onCommand: options.onCommand,
     wake: options.wake,
     runProjectAction: options.runProjectAction,
+    decidePcAction: options.decidePcAction,
     wait: (ms) => {
       const done = deferred<void>();
       waits.push({ ms, done });
@@ -476,6 +478,7 @@ describe("ConversationController", () => {
       pendingFillId: null,
       pendingProjectAction: null,
       pendingAppLaunch: null,
+      pendingPcAction: null,
       lastReplyMs: null
     });
   });
@@ -1776,6 +1779,63 @@ describe("ConversationController", () => {
       expect(chat.calls[1]?.options.image).toBeUndefined();
       chat.reply("ยินดีครับ");
       await settle();
+    });
+
+    it("รายการในเครื่องที่ต้องกดปุ่ม: เสียงยืนยันไม่ทำ กดปุ่มจึงทำ และแสดงผล", async () => {
+      const decidePcAction = vi.fn().mockResolvedValue({ ok: true, summary: "รันคำสั่งเสร็จแล้วค่ะ", output: "v26" });
+      const { chat, controller } = setup({ decidePcAction });
+
+      controller.sendText("รันคำสั่ง node -v");
+      await settle();
+      chat.current.options.onEvent({
+        type: "pc_action",
+        proposal: { id: "pc-1", kind: "command", title: "รันคำสั่ง", detail: "node -v", buttonOnly: true, expiresAt: Date.now() + 60_000 }
+      });
+      chat.reply("เตรียมไว้ให้แล้วค่ะ");
+      await settle();
+
+      controller.sendText("ยืนยันครับ");
+      await settle();
+      expect(decidePcAction).not.toHaveBeenCalled();
+      expect(controller.getState().pendingPcAction?.id).toBe("pc-1");
+
+      controller.confirmPcAction();
+      await settle();
+      expect(decidePcAction).toHaveBeenCalledExactlyOnceWith("pc-1", "confirm", "button");
+      expect(controller.getState().pendingPcAction).toBeNull();
+      expect(controller.getState().messages.at(-1)?.text).toContain("v26");
+      expect(controller.getState().notice?.text).toBe("รันคำสั่งเสร็จแล้วค่ะ ผลลัพธ์: v26");
+    });
+
+    it("รายการในเครื่องที่ยืนยันด้วยเสียงได้: พูดยืนยันหรือยกเลิกได้ และคำถามใหม่ล้างรายการเดิม", async () => {
+      const decidePcAction = vi.fn().mockResolvedValue({ ok: true, summary: "แล้วค่ะ" });
+      const { chat, controller } = setup({ decidePcAction });
+      const propose = async (id: string) => {
+        controller.sendText("ย้ายไฟล์");
+        await settle();
+        chat.current.options.onEvent({
+          type: "pc_action",
+          proposal: { id, kind: "move", title: "ย้ายไฟล์", detail: "a", buttonOnly: false, expiresAt: Date.now() + 60_000 }
+        });
+        chat.reply("เตรียมไว้ให้แล้วค่ะ");
+        await settle();
+      };
+
+      await propose("pc-1");
+      controller.sendText("ยืนยัน");
+      await settle();
+      expect(decidePcAction).toHaveBeenLastCalledWith("pc-1", "confirm", "voice");
+
+      await propose("pc-2");
+      controller.sendText("ยกเลิก");
+      await settle();
+      expect(decidePcAction).toHaveBeenLastCalledWith("pc-2", "cancel", "voice");
+
+      await propose("pc-3");
+      controller.sendText("วันนี้วันอะไร");
+      await settle();
+      expect(controller.getState().pendingPcAction).toBeNull();
+      expect(decidePcAction).toHaveBeenCalledTimes(2);
     });
 
     it("รองรับการ์ดยืนยันคำสั่งควบคุมโปรเจกต์และการตอบยืนยันด้วยเสียง", async () => {

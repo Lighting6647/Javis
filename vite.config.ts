@@ -32,6 +32,8 @@ export default defineConfig({
       "/api": {
         target: "http://127.0.0.1:8787",
         changeOrigin: false,
+        // บอกเซิร์ฟเวอร์ว่าคำขอผ่านตัวส่งต่อ: เครื่องมือควบคุมคอมพิวเตอร์จึงไม่รับ เพราะ dev server นี้เปิดรับทั้งวง Wi-Fi
+        xfwd: true,
         configure(proxy) {
           proxy.on("proxyReq", (proxyReq, req) => {
             if (req.headers.host) proxyReq.setHeader("host", req.headers.host);

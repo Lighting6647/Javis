@@ -6,6 +6,7 @@ import { browserStore, isDesktopApp } from "./browser/browserStore";
 import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
 import { AppLaunchCard } from "./components/AppLaunchCard";
+import { PcActionCard } from "./components/PcActionCard";
 import { MeetingSummaryCard } from "./components/MeetingSummaryCard";
 import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
@@ -105,11 +106,13 @@ export default function App() {
     confirmProjectAction,
     cancelProjectAction,
     confirmAppLaunch,
-    cancelAppLaunch
+    cancelAppLaunch,
+    confirmPcAction,
+    cancelPcAction
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, lastReplyMs } = state;
+  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, pendingPcAction, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -263,13 +266,13 @@ export default function App() {
     showingWorkspace ||
     showingRouter ||
     inMeeting ||
-    Boolean(shownMeeting || pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || notice || meetingNotice || speechHint);
+    Boolean(shownMeeting || pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || shownCapture || captureError || notice || meetingNotice || speechHint);
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
   const footerShown =
     !inMeeting &&
     (dockShown ||
       Boolean(
-        pendingFill || pendingProjectAction || pendingAppLaunch || shownCapture || captureError || sensorNotice || notice || meetingNotice || speechHint || heard
+        pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || shownCapture || captureError || sensorNotice || notice || meetingNotice || speechHint || heard
       ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
@@ -726,11 +729,12 @@ export default function App() {
           else if (pendingFill) confirmFill();
           return;
         }
-        if (pendingAppLaunch) cancelAppLaunch();
+        if (pendingPcAction) cancelPcAction();
+        else if (pendingAppLaunch) cancelAppLaunch();
         else if (pendingFill) cancelFill();
         else if (pendingProjectAction) cancelProjectAction();
       }),
-    [pendingAppLaunch, pendingFill, pendingProjectAction, confirmAppLaunch, confirmFill, cancelAppLaunch, cancelFill, cancelProjectAction]
+    [pendingPcAction, cancelPcAction, pendingAppLaunch, pendingFill, pendingProjectAction, confirmAppLaunch, confirmFill, cancelAppLaunch, cancelFill, cancelProjectAction]
   );
 
   // ควบคุมด้วยท่ามือผ่านกล้อง (MediaPipe) ประมวลผลในเครื่องทั้งหมด
@@ -1178,6 +1182,7 @@ export default function App() {
               onCancel={cancelAppLaunch}
             />
           )}
+          {pendingPcAction && <PcActionCard proposal={pendingPcAction} onConfirm={confirmPcAction} onCancel={cancelPcAction} />}
           {shownCapture && (
             <div className="capture-preview-card" role="region" aria-label="ภาพหน้าจอที่แนบไว้">
               <img

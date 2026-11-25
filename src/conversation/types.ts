@@ -139,6 +139,8 @@ export interface ConversationState {
   pendingProjectAction: ProjectActionProposal | null;
   /** คำสั่งเปิดโปรแกรมในคอมพิวเตอร์หรือแอปบนมือถือที่รอผู้ใช้ยืนยันก่อนเปิดจริง */
   pendingAppLaunch: AppLaunchProposal | null;
+  /** สิ่งที่ลูน่าเสนอทำในเครื่องหรือในเว็บ รอผู้ใช้ยืนยัน */
+  pendingPcAction: PcActionProposal | null;
   /** เวลาที่รอคำตอบครั้งล่าสุด นับจากส่งคำถามจนข้อความแรกมาถึง (มิลลิวินาที) หรือ null ถ้ายังไม่เคยได้คำตอบ */
   lastReplyMs: number | null;
 }
@@ -165,8 +167,28 @@ export type ChatEvent =
   | { type: "project_action"; proposal: ProjectActionProposal }
   /** AI เสนอเปิดโปรแกรมในคอมพิวเตอร์หรือแอปในมือถือ (ต้องให้ผู้ใช้กดยืนยันก่อนเปิดจริง) */
   | { type: "open_app"; proposal: AppLaunchProposal }
+  /** AI เสนอทำสิ่งที่เปลี่ยนแปลงเครื่องหรือหน้าเว็บ (ต้องให้ผู้ใช้ยืนยันก่อน) */
+  | { type: "pc_action"; proposal: PcActionProposal }
   /** แถบคำค้นที่เกี่ยวข้องของ Google ที่ต้องแสดงคู่กับคำตอบจากการค้นด้วย Google */
   | { type: "suggestions"; html: string[] };
+
+export type PcActionKind = "command" | "write" | "move" | "click" | "type" | "open";
+
+export interface PcActionProposal {
+  id: string;
+  kind: PcActionKind;
+  title: string;
+  detail: string;
+  /** ต้องกดปุ่มเท่านั้น ใช้เสียงหรือท่ามือยืนยันไม่ได้ */
+  buttonOnly: boolean;
+  expiresAt: number;
+}
+
+export interface PcActionResult {
+  ok: boolean;
+  summary: string;
+  output?: string;
+}
 
 export interface AppLaunchProposal {
   id: string;

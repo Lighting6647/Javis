@@ -17,6 +17,7 @@ import {
   type Notice,
   type PageLink,
   type SendTextOptions,
+  type PcActionResult,
   type StreamChat,
   type WakeState
 } from "./types";
@@ -65,6 +66,7 @@ export interface ConversationDeps {
   ) => Promise<{ ok: boolean; summary: string; output?: string }>;
   /** เปิดโปรแกรมบนคอมพิวเตอร์หรือแอปบนมือถือหลังผู้ใช้กดยืนยันแล้วเท่านั้น */
   launchApp?: (appId: string, appName: string) => Promise<{ ok: boolean; message: string }>;
+  decidePcAction?: (id: string, decision: "confirm" | "cancel", via: "button" | "voice") => Promise<PcActionResult>;
   /** ความจำระยะยาวของผู้ใช้ที่เก็บในอุปกรณ์ */
   memory?: MemoryPort;
   /** นาฬิกาของตัวควบคุม (มิลลิวินาที) ค่าเริ่มต้นคือนาฬิกาของเครื่อง */
@@ -125,6 +127,7 @@ const INITIAL_STATE: ConversationState = {
   pendingFillId: null,
   pendingProjectAction: null,
   pendingAppLaunch: null,
+  pendingPcAction: null,
   lastReplyMs: null
 };
 
@@ -369,6 +372,18 @@ export class ConversationController {
   };
 
   /** ผู้ใช้กดยกเลิกการเปิดโปรแกรมที่รออยู่ */
+  confirmPcAction = (): void => {
+    void this.decidePc("confirm", "button").then((notice) => {
+      if (notice) this.update({ notice });
+    });
+  };
+
+  cancelPcAction = (): void => {
+    void this.decidePc("cancel", "button").then((notice) => {
+      if (notice) this.update({ notice });
+    });
+  };
+
   cancelAppLaunch = (): void => {
     void this.decideAppLaunch("cancel").then((notice) => {
       if (notice) this.update({ notice });
@@ -525,7 +540,7 @@ export class ConversationController {
     const wake = this.deps.wake;
     if (!this.deps.handsFree || !wake?.enabled()) return "off";
     // รอคำยืนยันหรือยกเลิกอยู่: ไม่ต้องเรียกชื่อซ้ำก่อนพูดว่า "ยืนยัน"
-    if (this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch) return "awake";
+    if (this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch || this.state.pendingPcAction) return "awake";
     return this.awakeUntil > this.clock() ? "awake" : "waiting";
   }
 
@@ -656,7 +671,7 @@ export class ConversationController {
     }
 
     const decision =
-      this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch
+      this.state.pendingFillId || this.state.pendingProjectAction || this.state.pendingAppLaunch || this.state.pendingPcAction
         ? interpretFillDecision(userText)
         : null;
     if (!decision) {
@@ -665,7 +680,9 @@ export class ConversationController {
     }
 
     this.update({ partial: "" });
-    const notice = this.state.pendingAppLaunch
+    const notice = this.state.pendingPcAction
+      ? await this.decidePc(decision, "voice")
+      : this.state.pendingAppLaunch
       ? await this.decideAppLaunch(decision)
       : this.state.pendingProjectAction
         ? await this.decideProjectAction(decision)
@@ -724,6 +741,42 @@ export class ConversationController {
       return { tone: result.ok ? "info" : "error", text: result.summary };
     } catch {
       return { tone: "error", text: `รัน ${proposal.action} ของโปรเจกต์ ${proposal.projectName} ไม่สำเร็จค่ะ` };
+    } finally {
+      this.filling = false;
+    }
+  }
+
+  /** ทำตามการตัดสินใจของผู้ใช้ต่อรายการที่ลูน่าเสนอทำในเครื่อง รายการที่ต้องกดปุ่มจะไม่รับเสียงยืนยัน */
+  private async decidePc(decision: FillDecision, via: "button" | "voice"): Promise<Notice | null> {
+    const proposal = this.state.pendingPcAction;
+    if (!proposal || this.filling) return null;
+    if (decision === "confirm" && proposal.buttonOnly && via === "voice") {
+      return { tone: "info", text: "คำสั่งนี้ต้องกดปุ่มยืนยันบนการ์ดเท่านั้นค่ะ" };
+    }
+    if (!this.deps.decidePcAction) {
+      this.update({ pendingPcAction: null });
+      return { tone: "error", text: "ระบบยังไม่พร้อมทำรายการในเครื่องค่ะ" };
+    }
+
+    this.filling = true;
+    this.update({
+      pendingPcAction: null,
+      ...(decision === "confirm" ? { notice: { tone: "info" as const, text: `กำลังทำ: ${proposal.title}…` } } : {})
+    });
+    try {
+      const result = await this.deps.decidePcAction(proposal.id, decision, via);
+      if (decision === "confirm") {
+        const outputBlock = result.output ? `\n\`\`\`\n${result.output}\n\`\`\`` : "";
+        this.update({
+          messages: [...this.state.messages, { id: this.nextId(), role: "assistant", text: `${result.summary}${outputBlock}` }]
+        });
+        if (via === "button") void this.deps.synthesizer.speak(result.summary).catch(() => undefined);
+      }
+      // หน้าหลักเป็นโหมดเสียงไม่แสดงบทสนทนา ผลของคำสั่งจึงต้องอยู่ในข้อความแจ้งด้วย
+      const shortOutput = result.output?.replace(/\s+/g, " ").trim().slice(0, 300) ?? "";
+      return { tone: result.ok ? "info" : "error", text: shortOutput ? `${result.summary} ผลลัพธ์: ${shortOutput}` : result.summary };
+    } catch {
+      return { tone: "error", text: "ทำรายการนี้ไม่สำเร็จค่ะ" };
     } finally {
       this.filling = false;
     }
@@ -820,6 +873,9 @@ export class ConversationController {
     }
     if (this.state.pendingAppLaunch) {
       this.update({ pendingAppLaunch: null });
+    }
+    if (this.state.pendingPcAction) {
+      this.update({ pendingPcAction: null });
     }
 
     const history: ConversationMessage[] = [
@@ -924,6 +980,10 @@ export class ConversationController {
 
             case "project_action":
               this.update({ pendingProjectAction: event.proposal });
+              break;
+
+            case "pc_action":
+              this.update({ pendingPcAction: event.proposal });
               break;
 
             case "open_app": {

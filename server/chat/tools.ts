@@ -2,6 +2,7 @@
  * นิยามเครื่องมือ (function tools) ที่ส่งให้ AI ในแต่ละคำขอ (แยกจาก server/chat.ts โดยพฤติกรรมไม่เปลี่ยน)
  */
 import { ALLOWED_APP_IDS } from "../appLauncher.js";
+import { PC_TOOL_DEFINITIONS } from "../mcp/definitions.js";
 import {
   CHECK_EMAILS_TOOL,
   FILL_FORM_TOOL,
@@ -253,7 +254,7 @@ export const WORKSPACE_TOOL_DEFINITIONS = [
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["query", "limit"],
+      required: ["query", "limit", "read_full"],
       properties: {
         query: {
           type: "string",
@@ -262,6 +263,10 @@ export const WORKSPACE_TOOL_DEFINITIONS = [
         limit: {
           type: "number",
           description: "จำนวนอีเมลสูงสุดที่ต้องการดึง (1 ถึง 10 แนะนำ 5)"
+        },
+        read_full: {
+          type: "boolean",
+          description: "true เมื่อผู้ใช้ขอให้อ่านเนื้อหาอีเมล เช่น อ่านเมลล่าสุด (อ่านฉบับเดียว) false เมื่อแค่เช็คว่ามีเมลอะไรเข้า"
         }
       }
     }
@@ -314,7 +319,7 @@ export const WORKSPACE_TOOL_DEFINITIONS = [
   }
 ] as const;
 
-export function buildTools(search: SearchTool, withFormFill: boolean, withMeetingHistory = false): unknown[] {
+export function buildTools(search: SearchTool, withFormFill: boolean, withMeetingHistory = false, withPc = false): unknown[] {
   return [
     ...(search === "provider" ? [PROVIDER_SEARCH_TOOL] : []),
     ...(search === "request" ? [SEARCH_WEB_TOOL_DEFINITION] : []),
@@ -324,6 +329,7 @@ export function buildTools(search: SearchTool, withFormFill: boolean, withMeetin
     ...PROJECT_TOOL_DEFINITIONS,
     ...WORKSPACE_TOOL_DEFINITIONS,
     ...MEMORY_TOOL_DEFINITIONS,
+    ...(withPc ? PC_TOOL_DEFINITIONS : []),
     ...(withFormFill ? [FILL_FORM_TOOL_DEFINITION] : []),
     ...(withMeetingHistory ? [SEARCH_MEETING_HISTORY_TOOL_DEFINITION] : [])
   ];

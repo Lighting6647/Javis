@@ -25,6 +25,8 @@ import { getJevTelemetry, listReviewQueue, resolveReviewItem, routerPersistence,
 import { createSearchUsageReader } from "./searchUsage.js";
 import { z } from "zod";
 import { fetchProjectCloudStatus } from "./cloudControl.js";
+import { getPcToolkit } from "./mcp/instance.js";
+import { isLocalRequest, pcToolsEnabled } from "./mcp/localAccess.js";
 import { runProjectAction } from "./projectRunner.js";
 import { findProject, listProjects } from "./projects.js";
 import { createUserRoutes } from "./userRoutes.js";
@@ -233,6 +235,22 @@ export function createApp(options: AppOptions = {}): Express {
     }
     const result = await runProjectAction(project, parsedBody.data.action, { rootDir: listing.rootDir });
     response.status(result.ok ? 200 : 400).json(result);
+  });
+
+  // ผู้ใช้ยืนยันหรือยกเลิกรายการที่ Luna เสนอทำในเครื่อง (server/mcp) รับเฉพาะเบราว์เซอร์บนเครื่องเดียวกัน
+  const pcDecisionSchema = z.object({ decision: z.enum(["confirm", "cancel"]), via: z.enum(["button", "voice"]) });
+  app.post("/api/pc/actions/:id", requireAuth, async (request, response) => {
+    if (!pcToolsEnabled() || !isLocalRequest({ remoteAddress: request.socket.remoteAddress, headers: request.headers })) {
+      response.status(403).json({ ok: false, summary: "ใช้ได้เฉพาะบนคอมพิวเตอร์เครื่องที่รันลูน่าค่ะ" });
+      return;
+    }
+    const parsedDecision = pcDecisionSchema.safeParse(request.body);
+    if (!parsedDecision.success) {
+      response.status(400).json({ ok: false, summary: "ข้อมูลการยืนยันไม่ถูกต้องค่ะ" });
+      return;
+    }
+    const { decision, via } = parsedDecision.data;
+    response.set("Cache-Control", "no-store").json(await getPcToolkit().decide(String(request.params.id ?? ""), decision, via));
   });
 
   // Google Workspace (Gmail + Calendar + Tasks สำหรับ Lighting6647@gmail.com) & DelLuna Notes & Preferences Sync

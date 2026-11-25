@@ -7,6 +7,7 @@ import { memoryStore } from "../memory/memoryStore";
 import { streamChatReply } from "../services/chatApi";
 import { runProjectActionRequest } from "../services/projectsApi";
 import { launchAllowedApp } from "../services/appLauncher";
+import { decidePcAction } from "../services/pcActions";
 import { clearConversationSnapshot, restoredConversation } from "../services/conversationSnapshot";
 import { sessionStore } from "../services/sessionStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
@@ -79,6 +80,7 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
         },
       runProjectAction: (projectId, action) => runProjectActionRequest(projectId, action),
       launchApp: (appId, appName) => launchAllowedApp(appId, appName),
+      decidePcAction,
       memory: { list: memoryStore.get, add: memoryStore.add, remove: memoryStore.remove }
     });
     return { controller, synthesizer: services.synthesizer };
@@ -134,6 +136,8 @@ export function useConversation({ ready, getScreenContext }: ConversationOptions
     cancelProjectAction: controller.cancelProjectAction,
     confirmAppLaunch: controller.confirmAppLaunch,
     cancelAppLaunch: controller.cancelAppLaunch,
+    confirmPcAction: controller.confirmPcAction,
+    cancelPcAction: controller.cancelPcAction,
     undoMemory: controller.undoMemory,
     markLinkOpened: controller.markLinkOpened
   };

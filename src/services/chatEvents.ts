@@ -141,6 +141,15 @@ export function parseChatEventLine(line: string): ChatEvent | null {
       };
     }
 
+    case "pc_action": {
+      if (!isObject(value.proposal)) return null;
+      const { id, kind, title, detail, buttonOnly, expiresAt } = value.proposal;
+      const known = (["command", "write", "move", "click", "type", "open"] as const).find((each) => each === kind);
+      if (!known || typeof id !== "string" || typeof title !== "string" || typeof detail !== "string" || typeof expiresAt !== "number") return null;
+      // ค่าที่อ่านไม่ได้ให้ถือว่าต้องกดปุ่ม ซึ่งเป็นทางที่ระวังกว่า
+      return { type: "pc_action", proposal: { id, kind: known, title, detail, buttonOnly: buttonOnly !== false, expiresAt } };
+    }
+
     default:
       return null;
   }
