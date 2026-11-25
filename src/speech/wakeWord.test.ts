@@ -26,6 +26,13 @@ describe("matchWakePhrase", () => {
     expect(matchWakePhrase("luna")).toEqual({ command: "" });
   });
 
+  it("Chrome ได้ยินชื่อเพี้ยน (ลูนน่า รูน่า ลูน้า): ยังนับว่าเรียกชื่อ", () => {
+    expect(matchWakePhrase("ลูนน่า เปิดเพลง")).toEqual({ command: "เปิดเพลง" });
+    expect(matchWakePhrase("รูน่า")).toEqual({ command: "" });
+    expect(matchWakePhrase("ลูน้า กี่โมงแล้ว")).toEqual({ command: "กี่โมงแล้ว" });
+    expect(matchWakePhrase("รูน่า เปิดไฟ", ["ฟรายเดย์"])).toBeNull();
+  });
+
   it("เรียกชื่อไว้ท้ายประโยค: ทั้งประโยคเป็นคำสั่ง", () => {
     expect(matchWakePhrase("สวัสดีลูน่า")).toEqual({ command: "สวัสดีลูน่า" });
     expect(matchWakePhrase("เปิดเพลงหน่อย ลูน่า!")).toEqual({ command: "เปิดเพลงหน่อย ลูน่า" });

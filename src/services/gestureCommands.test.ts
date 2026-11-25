@@ -80,8 +80,13 @@ describe("classifyHand", () => {
     expect(classifyHand(rotate(THUMBS_UP, Math.PI / 2))).not.toMatch(/^thumbs/);
   });
 
-  it("ชูสองนิ้วหรือข้อมูลไม่ครบ ไม่เดาท่า", () => {
-    expect(classifyHand(makeHand([true, true, false, false], "tucked"))).toBe("none");
+  it("ชูสองนิ้ว (✌️) ตั้งตรง = peace ชี้ไปด้านข้างไม่นับ", () => {
+    const peace = makeHand([true, true, false, false], "tucked");
+    expect(classifyHand(peace)).toBe("peace");
+    expect(classifyHand(rotate(peace, Math.PI / 2))).toBe("none");
+  });
+
+  it("ข้อมูลไม่ครบ ไม่เดาท่า", () => {
     expect(classifyHand(OPEN.slice(0, 10))).toBe("none");
     expect(classifyHand(scale(OPEN, 0.1))).toBe("none");
   });
@@ -166,6 +171,40 @@ describe("GestureEngine", () => {
     expect(firedAt).toBeGreaterThanOrEqual(550);
     expect(firedAt).toBeLessThanOrEqual(700);
     expect(out.every((o) => o.menu === null)).toBe(true);
+  });
+
+  it("ชูสองนิ้วค้าง 0.8 วิ = พักลูน่า", () => {
+    const engine = new GestureEngine(4);
+    expect(commandsOf(feed(engine, "peace", 0, 760))).toEqual([]);
+    expect(commandsOf(feed(engine, "peace", 793, 2000))).toEqual([{ type: "sleep" }]);
+  });
+
+  /** แบมือแล้วเลื่อนจาก from ไป to ภายใน durationMs */
+  function sweep(engine: GestureEngine, from: { x: number; y: number }, to: { x: number; y: number }, startMs: number, durationMs: number) {
+    const outputs: GestureOutput[] = [];
+    for (let t = 0; t <= durationMs; t += STEP) {
+      const k = Math.min(1, t / durationMs);
+      const point = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
+      outputs.push(engine.update({ shape: "open", point, now: startMs + t, speaking: false, viewport }));
+    }
+    return outputs;
+  }
+
+  it("ปัดมือเร็ว ๆ ไปซ้ายหรือขวา สั่งปัดครั้งเดียว ไม่เปิดเมนู", () => {
+    const left = new GestureEngine(4);
+    const outLeft = [...sweep(left, { x: 900, y: 400 }, { x: 400, y: 420 }, 0, 300), ...feed(left, "open", 333, 900, { x: 400, y: 420 })];
+    expect(commandsOf(outLeft)).toEqual([{ type: "swipe", direction: "left" }]);
+    expect(outLeft.every((o) => o.menu === null)).toBe(true);
+
+    const right = new GestureEngine(4);
+    expect(commandsOf(sweep(right, { x: 300, y: 400 }, { x: 800, y: 380 }, 0, 300))).toEqual([{ type: "swipe", direction: "right" }]);
+  });
+
+  it("เลื่อนมือช้า ๆ หรือขยับขึ้นลง ไม่นับเป็นปัด", () => {
+    const slow = new GestureEngine(4);
+    expect(commandsOf(sweep(slow, { x: 900, y: 400 }, { x: 600, y: 400 }, 0, 2000)).filter((c) => c.type === "swipe")).toEqual([]);
+    const vertical = new GestureEngine(4);
+    expect(commandsOf(sweep(vertical, { x: 640, y: 100 }, { x: 700, y: 700 }, 0, 300)).filter((c) => c.type === "swipe")).toEqual([]);
   });
 
   it("แบมือค้างเปิดเมนู เลื่อนมือไปขวาแล้วกำมือ เลือกช่องขวา", () => {

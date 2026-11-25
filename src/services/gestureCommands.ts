@@ -8,7 +8,7 @@
 import type { LandmarkPoint } from "./handGestures";
 
 /** ท่ามือที่จำได้ */
-export type HandShape = "open" | "fist" | "indexUp" | "thumbsUp" | "thumbsDown" | "none";
+export type HandShape = "open" | "fist" | "indexUp" | "peace" | "thumbsUp" | "thumbsDown" | "none";
 
 const distance = (a: LandmarkPoint, b: LandmarkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -75,6 +75,12 @@ export function classifyHand(hand: readonly LandmarkPoint[]): HandShape {
 
   if (extended === 4 && thumbOut) return "open";
 
+  // ชูสองนิ้ว (✌️): นิ้วชี้กับนิ้วกลางเหยียดขึ้น นิ้วนางกับก้อยงอ
+  if (index === "extended" && middle === "extended" && ring === "curled" && pinky === "curled") {
+    if (verticalDirection(hand[5]!, hand[8]!) < -0.7 && verticalDirection(hand[9]!, hand[12]!) < -0.7) return "peace";
+    return "none";
+  }
+
   // ชูนิ้วชี้ขึ้นตรง ๆ นิ้วอื่นงอ
   if (index === "extended" && middle !== "extended" && ring !== "extended" && pinky !== "extended" && curled >= 2) {
     if (verticalDirection(hand[5]!, hand[8]!) < -0.8) return "indexUp";
@@ -120,10 +126,12 @@ export type GestureCommand =
   | { type: "stopSpeaking" }
   | { type: "confirm" }
   | { type: "cancel" }
+  | { type: "sleep" }
+  | { type: "swipe"; direction: "left" | "right" }
   | { type: "menuSelect"; item: number };
 
 /** ท่าที่กำลังค้างอยู่ และค้างไปแล้วกี่ส่วน (0..1) ใช้วาดวงนับถอยหลัง */
-export type HoldKind = "listen" | "stopSpeaking" | "menu" | "confirm" | "cancel" | "select";
+export type HoldKind = "listen" | "stopSpeaking" | "menu" | "confirm" | "cancel" | "sleep" | "select";
 export interface HoldProgress {
   kind: HoldKind;
   progress: number;
@@ -143,8 +151,15 @@ export const HOLD_MS: Record<HoldKind, number> = {
   // ยืนยันต้องค้างนานกว่ายกเลิก เพราะยืนยันแล้วมีผลจริง
   confirm: 1800,
   cancel: 1000,
+  sleep: 800,
   select: 250
 };
+
+/** ปัดมือ: แบมือแล้วเลื่อนไปด้านข้างอย่างน้อยเท่านี้ของความกว้างจอ ภายในเวลานี้ */
+export const SWIPE_DISTANCE = 0.25;
+export const SWIPE_WINDOW_MS = 450;
+/** หลังปัดแล้วไม่นับท่าแบมือ (เมนู/หยุดพูด) และไม่นับปัดซ้ำช่วงนี้ เพราะมือยังแบค้างอยู่ตอนลดลง */
+export const SWIPE_COOLDOWN_MS = 900;
 
 /** มือหายไปหรือเปลี่ยนท่าแวบเดียวไม่เกินเท่านี้ ยังนับว่าค้างท่าเดิมอยู่ (กันภาพกระตุก) */
 export const FLICKER_GRACE_MS = 150;
@@ -181,6 +196,9 @@ export class GestureEngine {
   private hold: Hold | null = null;
   private menu: RadialMenuState | null = null;
   private lostSince: number | null = null;
+  /** ตำแหน่งฝ่ามือตอนแบมือ ช่วงล่าสุด ใช้จับการปัด */
+  private trail: { x: number; y: number; at: number }[] = [];
+  private swipedAt = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly menuItems: number,
@@ -199,6 +217,27 @@ export class GestureEngine {
     this.hold = null;
     this.menu = null;
     this.lostSince = null;
+    this.trail = [];
+  }
+
+  /** ฝ่ามือแบเคลื่อนไปด้านข้างเร็วพอ = ปัด คืนทิศ หรือ null */
+  private detectSwipe(frame: GestureFrame): "left" | "right" | null {
+    if (frame.shape !== "open") {
+      this.trail = [];
+      return null;
+    }
+    this.trail.push({ x: frame.point.x, y: frame.point.y, at: frame.now });
+    this.trail = this.trail.filter((p) => frame.now - p.at <= SWIPE_WINDOW_MS);
+    if (frame.now - this.swipedAt < SWIPE_COOLDOWN_MS) return null;
+    const first = this.trail[0];
+    if (!first) return null;
+    const dx = frame.point.x - first.x;
+    const dy = frame.point.y - first.y;
+    if (Math.abs(dx) < SWIPE_DISTANCE * frame.viewport.width || Math.abs(dy) > Math.abs(dx) * 0.6) return null;
+    this.swipedAt = frame.now;
+    this.trail = [];
+    this.hold = null;
+    return dx < 0 ? "left" : "right";
   }
 
   update(frame: GestureFrame): GestureOutput {
@@ -230,7 +269,14 @@ export class GestureEngine {
       return { hold: selecting, menu: this.menu, commands };
     }
 
-    const kind = this.kindFor(frame.shape, frame.speaking);
+    const swipe = this.detectSwipe(frame);
+    if (swipe) {
+      commands.push({ type: "swipe", direction: swipe });
+      return { hold: null, menu: null, commands };
+    }
+    // เพิ่งปัดไป: มือที่ยังแบค้างอยู่ไม่นับเป็นท่าเมนูหรือหยุดพูด
+    const afterSwipe = frame.shape === "open" && frame.now - this.swipedAt < SWIPE_COOLDOWN_MS;
+    const kind = afterSwipe ? null : this.kindFor(frame.shape, frame.speaking);
     const hold = this.track(kind, frame.now);
     if (hold?.justFired) {
       switch (hold.progress.kind) {
@@ -252,6 +298,9 @@ export class GestureEngine {
         case "cancel":
           commands.push({ type: "cancel" });
           break;
+        case "sleep":
+          commands.push({ type: "sleep" });
+          break;
         case "select":
           break;
       }
@@ -270,6 +319,8 @@ export class GestureEngine {
         return "confirm";
       case "thumbsDown":
         return "cancel";
+      case "peace":
+        return "sleep";
       default:
         return null;
     }

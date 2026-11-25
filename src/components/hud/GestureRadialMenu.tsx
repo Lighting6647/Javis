@@ -51,9 +51,21 @@ export function GestureRadialMenu({ menu, items }: GestureRadialMenuProps) {
 }
 
 /** ป้ายบอกว่ากล้องเปิดอยู่ แสดงตลอดเวลาที่กล้องทำงาน */
+/** ท่ามือทั้งหมด แสดงเมื่อชี้เมาส์ที่ป้ายกล้อง */
+export const GESTURE_HELP = [
+  "☝️ ชูนิ้วชี้ค้าง = สั่งฟัง",
+  "✋ แบมือค้างตอนลูน่าพูด = หยุดพูด",
+  "✋ แบมือค้าง = เปิดเมนู แล้วกำมือเพื่อเลือก",
+  "✌️ ชูสองนิ้วค้าง = พักลูน่า",
+  "👈 ปัดมือไปซ้าย = ปิดหน้าต่าง กลับหน้าหลัก",
+  "👉 ปัดมือไปขวา = ทวนคำตอบล่าสุด",
+  "👍 / 👎 ค้าง = ยืนยัน / ยกเลิก",
+  "🤏 จีบนิ้ว = คลิก"
+].join("\n");
+
 export function CameraOnBadge() {
   return (
-    <div className="camera-on-badge" role="status" title="กล้องเปิดอยู่ · ประมวลผลในเครื่อง">
+    <div className="camera-on-badge" role="status" title={`กล้องเปิดอยู่ · ประมวลผลในเครื่อง\n\n${GESTURE_HELP}`}>
       <span className="camera-on-dot" aria-hidden />
       <span className="camera-on-text">กล้องเปิดอยู่ · ประมวลผลในเครื่อง</span>
     </div>

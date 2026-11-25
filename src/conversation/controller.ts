@@ -253,6 +253,44 @@ export class ConversationController {
   };
 
   /**
+   * พูดคำตอบล่าสุดอีกครั้ง (ผู้ใช้ฟังไม่ทัน) แล้วกลับมาฟังต่อ ยกเลิกได้ด้วยท่าแบมือเหมือนคำตอบปกติ
+   * คืน false เมื่อยังไม่มีคำตอบให้ทวน
+   */
+  repeatLast = (): boolean => {
+    const last = [...this.state.messages].reverse().find((message) => message.role === "assistant" && message.text.trim());
+    if (!last) return false;
+    const epoch = this.halt();
+    const sentences: string[] = [];
+    const chunker = createSentenceChunker((sentence) => sentences.push(sentence));
+    chunker.push(last.text);
+    chunker.flush();
+    for (const sentence of sentences) this.deps.synthesizer.preload?.(sentence);
+    this.update({ phase: "speaking", notice: null });
+    void (async () => {
+      for (const sentence of sentences) {
+        if (epoch !== this.epoch) return;
+        await this.deps.synthesizer.speak(sentence).catch(() => undefined);
+      }
+      if (epoch !== this.epoch) return;
+      if (this.state.active) await this.listen(epoch);
+      else this.update({ phase: "idle" });
+    })();
+    return true;
+  };
+
+  /** จบช่วงคุยต่อเนื่อง: คำสั่งถัดไปต้องเรียก "ลูน่า" ก่อนอีกครั้ง (ไม่แตะการฟังที่กำลังทำอยู่) */
+  endConversation = (): void => {
+    this.awakeUntil = 0;
+    if (this.state.wake === "awake") this.update({ wake: "waiting" });
+  };
+
+  /** ให้ลูน่าพัก: หยุดพูดหรือคิด จบช่วงคุยต่อเนื่อง แล้วกลับไปรอคำเรียกชื่อ */
+  sleep = (): void => {
+    this.endConversation();
+    this.interrupt();
+  };
+
+  /**
    * ผู้ใช้สั่งให้ฟังทันทีโดยไม่ต้องเรียกชื่อ (เช่น ชูนิ้วชี้ค้างไว้) คำพูดถัดไปนับเป็นคำสั่ง
    * คืน false เมื่อยังไม่ได้เปิดการสนทนาด้วยเสียง ให้ผู้เรียกเปิดไมโครโฟนต่อเอง (ช่วงเรียกชื่อยังรออยู่)
    */

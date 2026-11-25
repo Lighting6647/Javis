@@ -14,6 +14,17 @@ export interface WakeMatch {
   command: string;
 }
 
+/**
+ * คำที่ระบบฟังของ Chrome มักได้ยินเพี้ยนไปจาก "ลูน่า" นับเป็นการเรียกชื่อด้วย
+ * ใช้เฉพาะเมื่อคำเรียกชื่อที่ตั้งไว้มี ลูน่า หรือ ลูนา
+ */
+const LUNA_MISHEARINGS: readonly string[] = ["ลูนน่า", "ลูนนา", "ลูน้า", "ลูหน้า", "ลูนาร์", "รูน่า", "รูนา", "ลุนา", "ลุน่า", "ลูน่ะ"];
+
+function withMishearings(phrases: readonly string[]): readonly string[] {
+  const normalized = phrases.map(normalizeWakeText);
+  return normalized.includes("ลูน่า") || normalized.includes("ลูนา") ? [...phrases, ...LUNA_MISHEARINGS] : phrases;
+}
+
 /** ตัวอักษรละตินหรือตัวเลข: คำเรียกชื่อภาษาอังกฤษต้องไม่ติดกับตัวอักษรเหล่านี้ เช่น "lunatic" ไม่นับ */
 const LATIN_WORD_CHAR = /[a-z0-9]/;
 
@@ -57,7 +68,7 @@ export function matchWakePhrase(heard: string, phrases: readonly string[] = DEFA
   if (!text) return null;
 
   let best: { start: number; end: number } | null = null;
-  for (const raw of phrases) {
+  for (const raw of withMishearings(phrases)) {
     const phrase = normalizeWakeText(raw);
     if (!phrase) continue;
 

@@ -95,6 +95,9 @@ export default function App() {
     reset,
     interrupt,
     listenNow,
+    sleep,
+    endConversation,
+    repeatLast,
     finishListening,
     sendText,
     confirmFill,
@@ -602,6 +605,18 @@ export default function App() {
             speakInstant(command.reply);
             return "keep-listening";
 
+          case "sleep":
+            endConversation();
+            speakInstant(command.reply);
+            return "keep-listening";
+
+          case "repeat":
+            // ให้รอบฟังที่กำลังจะเริ่มเริ่มไปก่อน แล้วค่อยตัดเข้ามาพูดทวน (พูดจบแล้วฟังต่อเอง)
+            window.setTimeout(() => {
+              if (!repeatLast()) speakInstant("ยังไม่มีคำตอบให้ทวนเลยค่ะ");
+            }, 0);
+            return "keep-listening";
+
           case "launch-custom-app":
             void launchAllowedApp(command.app.id, command.app.name).then((res) => {
               controller.addExchange(text, { text: res.message });
@@ -613,7 +628,7 @@ export default function App() {
         }
       }
     });
-  }, [ready, inMeeting, controller, synthesizer, desktop, reset, pushDesktopNotification]);
+  }, [ready, inMeeting, controller, synthesizer, desktop, reset, pushDesktopNotification, endConversation, repeatLast]);
 
   // ตบมือ 2 ครั้งปลุก Javis
   useEffect(() => {
@@ -644,7 +659,8 @@ export default function App() {
     };
   }, [ready, clapEnabled, inMeeting, active, handsFree, start]);
 
-  // ท่ามือสั่งลูน่า: ชูนิ้วชี้ = ฟัง, แบมือตอนพูด = หยุด, เมนูวงกลม, นิ้วโป้งขึ้น/ลง = ยืนยัน/ยกเลิก
+  // ท่ามือสั่งลูน่า: ชูนิ้วชี้ = ฟัง, แบมือตอนพูด = หยุด, เมนูวงกลม, นิ้วโป้งขึ้น/ลง = ยืนยัน/ยกเลิก,
+  // ชูสองนิ้ว = พักลูน่า, ปัดมือซ้าย = กลับหน้าหลัก, ปัดมือขวา = ทวนคำตอบล่าสุด
   useEffect(() => {
     speakingRef.current = phase === "speaking";
   }, [phase]);
@@ -677,9 +693,28 @@ export default function App() {
           sfx.click();
           menuActions[command.item]?.();
           break;
+        case "sleep":
+          // ✌️ ค้าง: ลูน่าหยุดพูดและกลับไปรอคำเรียกชื่อ
+          sfx.click();
+          sleep();
+          break;
+        case "swipe":
+          sfx.click();
+          if (command.direction === "left") {
+            // ปัดซ้าย: ปิดหน้าต่างที่เปิดอยู่ทั้งหมด กลับหน้าหลัก
+            setWorkspaceOpen(false);
+            setProjectsOpen(false);
+            setRouterOpen(false);
+            setSettingsOpen(false);
+            browserStore.hide();
+          } else {
+            // ปัดขวา: ทวนคำตอบล่าสุด
+            repeatLast();
+          }
+          break;
       }
     };
-  }, [listenNow, interrupt, handsFree, start, sendMessage, runMorningBriefing]);
+  }, [listenNow, interrupt, handsFree, start, sendMessage, runMorningBriefing, sleep, repeatLast]);
 
   // การ์ดยืนยันที่มีในตอนนี้รับท่านิ้วโป้ง: เปิดแอปและกรอกฟอร์มยืนยันได้ ส่วนคำสั่งโปรเจกต์ยกเลิกได้อย่างเดียว
   // (คำสั่งโปรเจกต์รันบนเครื่องจริง จึงให้กดยืนยันเองบนการ์ด)

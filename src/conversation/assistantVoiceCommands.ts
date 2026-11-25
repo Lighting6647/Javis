@@ -18,7 +18,9 @@ export type AssistantVoiceCommand =
   | { kind: "hand-control"; enabled: boolean; reply: string }
   | { kind: "clap-wake"; enabled: boolean; reply: string }
   | { kind: "open-url"; url: string; reply: string }
-  | { kind: "launch-custom-app"; app: CustomDesktopApp; reply: string };
+  | { kind: "launch-custom-app"; app: CustomDesktopApp; reply: string }
+  | { kind: "sleep"; reply: string }
+  | { kind: "repeat"; reply: string };
 
 const WAKE_PREFIX = /^(?:(?:เดลลูน่า|เดลูนา|ลูน่า|ลูนา|luna|delluna|จาวิส|javis|นีน่า|nina|โอเค\s*กูเกิล|ok\s*google|hey\s*google)\s*[,:]?\s*)?/i;
 const POLITE_SUFFIX = /(?:\s*(?:ให้หน่อย|หน่อย|ให้ฟังหน่อย|ให้ที|ด้วย|สิ|นะ|นะคะ|นะครับ|ค่ะ|ครับ))*$/i;
@@ -68,6 +70,15 @@ export function matchAssistantVoiceCommand(
   }
   if (/^(?:วันนี้)?(?:วันที่เท่าไหร่|วันอะไร|วันที่เท่าไร)$/i.test(text)) {
     return { kind: "date", reply: formatThaiDate(now) };
+  }
+
+  // ให้ลูน่าพัก: กลับไปรอคำเรียกชื่อ ("พักก่อน", "ไปพักได้แล้ว", "เลิกฟังก่อน")
+  if (/^(?:ลูน่า)?(?:พักก่อน|ไปพัก(?:ได้|ก่อน|เถอะ)?(?:แล้ว)?|พักได้(?:แล้ว)?|เลิกฟัง(?:ก่อน)?|หยุดฟัง(?:ก่อน)?|ไม่มีอะไรแล้ว|แค่นี้(?:ก่อน)?(?:แหละ)?)$/i.test(text)) {
+    return { kind: "sleep", reply: "ได้ค่ะ ลูน่าพักก่อนนะคะ เรียกได้ตลอดเลยค่ะ" };
+  }
+  // ทวนคำตอบล่าสุด ("ว่าไงนะ", "พูดอีกที", "ขอฟังอีกครั้ง")
+  if (/^(?:ว่าไง(?:นะ)?|ว่าอะไร(?:นะ)?|อะไร(?:นะ)?|พูดอีก(?:ที|ครั้ง|รอบ)|ทวน(?:อีก(?:ที|ครั้ง|รอบ))?|ขอฟังอีก(?:ที|ครั้ง|รอบ)|พูดใหม่(?:อีกที)?)$/i.test(text)) {
+    return { kind: "repeat", reply: "" };
   }
 
   // 2. ตัวจับเวลา (Timer)

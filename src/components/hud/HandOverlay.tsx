@@ -20,6 +20,7 @@ const HOLD_STYLE: Record<HoldKind, { color: string; label: string }> = {
   menu: { color: "125, 211, 252", label: "เมนู" },
   confirm: { color: "52, 211, 153", label: "ยืนยัน" },
   cancel: { color: "251, 113, 133", label: "ยกเลิก" },
+  sleep: { color: "167, 139, 250", label: "พักลูน่า" },
   select: { color: "52, 211, 153", label: "เลือก" }
 };
 const FLASH_MS = 220;

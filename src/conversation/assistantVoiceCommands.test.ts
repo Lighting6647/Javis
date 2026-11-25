@@ -68,3 +68,16 @@ describe("matchAssistantVoiceCommand", () => {
     }
   });
 });
+
+describe("matchAssistantVoiceCommand: พักและทวนคำตอบ", () => {
+  it.each(["พักก่อน", "ไปพักได้แล้ว", "ลูน่าพักก่อนนะ", "เลิกฟังก่อน", "แค่นี้ก่อน"])("%s = ให้ลูน่าพัก", (text) => {
+    expect(matchAssistantVoiceCommand(text)?.kind).toBe("sleep");
+  });
+  it.each(["ว่าไงนะ", "พูดอีกที", "ขอฟังอีกครั้ง", "ทวนอีกที"])("%s = ทวนคำตอบล่าสุด", (text) => {
+    expect(matchAssistantVoiceCommand(text)?.kind).toBe("repeat");
+  });
+  it("ประโยคที่มีคำเหล่านี้ปนอยู่ ไม่นับเป็นคำสั่ง", () => {
+    expect(matchAssistantVoiceCommand("พักก่อนไปกินข้าวดีไหม")).toBeNull();
+    expect(matchAssistantVoiceCommand("ช่วยพูดอีกทีเรื่องข่าวเมื่อเช้า")).toBeNull();
+  });
+});

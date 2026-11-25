@@ -1885,6 +1885,38 @@ describe("ConversationController: คำเรียกชื่อ", () => {
     expect(chat.calls).toHaveLength(2);
   });
 
+  it("sleep (✌️ หรือสั่งพัก): จบโหมดคุยต่อเนื่อง กลับไปรอคำเรียกชื่อ", async () => {
+    const { recognizer, chat, controller } = await startWithWake({ conversationMs: 60_000 });
+    recognizer.current.result.resolve("ลูน่า ตอนนี้กี่โมง");
+    await settle();
+    chat.reply("บ่ายโมงค่ะ");
+    await settle();
+    expect(controller.getState().wake).toBe("awake");
+
+    controller.sleep();
+    await settle();
+    expect(controller.getState()).toMatchObject({ phase: "listening", wake: "waiting" });
+    recognizer.current.result.resolve("เปิดเพลงหน่อย");
+    await settle();
+    expect(chat.calls).toHaveLength(1);
+  });
+
+  it("repeatLast: พูดคำตอบล่าสุดอีกครั้งโดยไม่ถาม AI แล้วฟังต่อ", async () => {
+    const { recognizer, synthesizer, chat, controller } = await startWithWake({ conversationMs: 60_000 });
+    expect(controller.repeatLast()).toBe(false);
+    recognizer.current.result.resolve("ลูน่า ตอนนี้กี่โมง");
+    await settle();
+    chat.reply("บ่ายโมงค่ะ");
+    await settle();
+    synthesizer.spoken.length = 0;
+
+    expect(controller.repeatLast()).toBe(true);
+    await settle();
+    expect(synthesizer.spoken).toEqual(["บ่ายโมงค่ะ"]);
+    expect(chat.calls).toHaveLength(1);
+    expect(controller.getState().phase).toBe("listening");
+  });
+
   it("listenNow (ชูนิ้วชี้ค้าง): ฟังใหม่ทันที และคำพูดถัดไปเป็นคำสั่งโดยไม่ต้องเรียกชื่อ", async () => {
     const { recognizer, chat, clock, controller } = await startWithWake();
     expect(controller.getState().wake).toBe("waiting");
