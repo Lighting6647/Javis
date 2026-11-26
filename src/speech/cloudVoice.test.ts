@@ -175,34 +175,49 @@ describe("CloudVoiceSynthesizer", () => {
       expect(requests).toHaveLength(1);
     });
 
-    it("ประโยคที่มาระหว่างรอเสียงของประโยคแรก ถูกรวมเป็นคำขอเดียว: คำตอบหนึ่งครั้งจึงใช้ราวสองคำขอ", async () => {
+    it("ประโยคที่สองถูกขอโดยไม่รอเสียงประโยคแรก ประโยคหลังจากนั้นถูกรวมเป็นคำขอเดียว: คำตอบหนึ่งครั้งจึงใช้ราวสามคำขอ", async () => {
       const { voice, fallback, requests, plays, deliver, finishPlay } = setup();
 
       voice.preload("ประโยคแรก");
       voice.preload("ประโยคที่สอง");
       voice.preload("ประโยคที่สาม");
-      expect(requests.map((request) => request.text)).toEqual(["ประโยคแรก"]);
+      voice.preload("ประโยคที่สี่");
+      expect(requests.map((request) => request.text)).toEqual(["ประโยคแรก", "ประโยคที่สอง"]);
 
       await deliver(0);
-      expect(requests.map((request) => request.text)).toEqual(["ประโยคแรก", "ประโยคที่สอง ประโยคที่สาม"]);
+      expect(requests.map((request) => request.text)).toEqual(["ประโยคแรก", "ประโยคที่สอง", "ประโยคที่สาม ประโยคที่สี่"]);
+      await deliver(1);
+      await deliver(2);
 
-      const first = voice.speak("ประโยคแรก");
-      await settle();
+      for (const [index, text] of ["ประโยคแรก", "ประโยคที่สอง", "ประโยคที่สาม"].entries()) {
+        const speaking = voice.speak(text);
+        await settle();
+        await finishPlay(index);
+        await speaking;
+      }
+      // ประโยคที่สี่อยู่ในเสียงก้อนเดียวกับประโยคที่สาม ซึ่งเล่นจบไปแล้ว
+      await voice.speak("ประโยคที่สี่");
+      expect(plays).toHaveLength(3);
+      expect(requests).toHaveLength(3);
+      expect(fallback.spoken).toEqual([]);
+    });
+
+    it("เสียงก้อนที่สองมาถึงก่อนก้อนแรก: ยังเล่นตามลำดับ", async () => {
+      const { voice, plays, deliver, finishPlay } = setup();
+      voice.preload("หนึ่ง");
+      voice.preload("สอง");
+      const first = voice.speak("หนึ่ง");
+      await deliver(1);
+      expect(plays).toHaveLength(0);
+      await deliver(0);
+      expect(await plays[0]?.audio.text()).toBe("audio-0");
       await finishPlay(0);
       await first;
-
-      await deliver(1);
-      const second = voice.speak("ประโยคที่สอง");
+      const second = voice.speak("สอง");
       await settle();
-      expect(plays).toHaveLength(2);
+      expect(await plays[1]?.audio.text()).toBe("audio-1");
       await finishPlay(1);
       await second;
-
-      // ประโยคที่สามอยู่ในเสียงก้อนเดียวกับประโยคที่สอง ซึ่งเล่นจบไปแล้ว
-      await voice.speak("ประโยคที่สาม");
-      expect(plays).toHaveLength(2);
-      expect(requests).toHaveLength(2);
-      expect(fallback.spoken).toEqual([]);
     });
 
     it("ประโยคที่รวมกันยาวเกินที่เซิร์ฟเวอร์รับต่อคำขอ ถูกแบ่งเป็นหลายคำขอ โดยไม่ตัดกลางประโยค", async () => {
@@ -300,18 +315,22 @@ describe("CloudVoiceSynthesizer", () => {
       voice.preload("ประโยคแรก");
       voice.preload("ประโยคที่สอง");
       voice.preload("ประโยคที่สาม");
+      voice.preload("ประโยคที่สี่");
       await deliver(0);
-      const first = voice.speak("ประโยคแรก");
-      await settle();
-      await finishPlay(0);
-      await first;
+      await deliver(1);
+      for (const [index, text] of ["ประโยคแรก", "ประโยคที่สอง"].entries()) {
+        const speaking = voice.speak(text);
+        await settle();
+        await finishPlay(index);
+        await speaking;
+      }
 
-      requests[1]?.audio.reject(new CloudVoiceError("failed"));
+      requests[2]?.audio.reject(new CloudVoiceError("failed"));
       await settle();
-      await voice.speak("ประโยคที่สอง");
       await voice.speak("ประโยคที่สาม");
+      await voice.speak("ประโยคที่สี่");
 
-      expect(fallback.spoken).toEqual(["ประโยคที่สอง", "ประโยคที่สาม"]);
+      expect(fallback.spoken).toEqual(["ประโยคที่สาม", "ประโยคที่สี่"]);
     });
 
     it("ประโยคที่บอกไว้ล่วงหน้าแต่ยังไม่ได้ขอตอนที่เสียงของ Gemini ล้ม: พูดด้วยเสียงในอุปกรณ์เช่นกัน", async () => {
@@ -319,13 +338,16 @@ describe("CloudVoiceSynthesizer", () => {
 
       voice.preload("ประโยคแรก");
       voice.preload("ประโยคที่สอง");
+      voice.preload("ประโยคที่สาม");
       requests[0]?.audio.reject(new CloudVoiceError("quota", 60_000));
+      requests[1]?.audio.reject(new CloudVoiceError("quota", 60_000));
       await settle();
       await voice.speak("ประโยคแรก");
       await voice.speak("ประโยคที่สอง");
+      await voice.speak("ประโยคที่สาม");
 
-      expect(fallback.spoken).toEqual(["ประโยคแรก", "ประโยคที่สอง"]);
-      expect(requests).toHaveLength(1);
+      expect(fallback.spoken).toEqual(["ประโยคแรก", "ประโยคที่สอง", "ประโยคที่สาม"]);
+      expect(requests).toHaveLength(2);
     });
 
     it("เบราว์เซอร์ยังไม่ยอมให้หน้านี้เล่นเสียง: พูดประโยคนั้นด้วยเสียงในอุปกรณ์ โดยไม่ถือว่าเสียงของ Gemini เสีย", async () => {
@@ -416,13 +438,13 @@ describe("CloudVoiceSynthesizer", () => {
       voice.preload("รอบเก่า สอง");
       voice.cancel();
       voice.preload("รอบใหม่");
-      await deliver(1);
+      await deliver(2);
       const speaking = voice.speak("รอบใหม่");
       await settle();
       await finishPlay(0);
       await speaking;
 
-      expect(requests.map((request) => request.text)).toEqual(["รอบเก่า หนึ่ง", "รอบใหม่"]);
+      expect(requests.map((request) => request.text)).toEqual(["รอบเก่า หนึ่ง", "รอบเก่า สอง", "รอบใหม่"]);
       expect(plays).toHaveLength(1);
     });
   });
@@ -430,6 +452,28 @@ describe("CloudVoiceSynthesizer", () => {
   describe("การเตรียมและการตั้งค่า", () => {
     it("อุปกรณ์ไม่มีเสียงภาษาไทย แต่มีเสียงของ Gemini: พูดตอบได้", async () => {
       expect(await setup({ thaiVoice: false }).voice.prepare()).toBe(true);
+    });
+
+    it("บอกว่าเงียบเฉพาะเมื่อเสียงของ Gemini ใช้ไม่ได้และอุปกรณ์ไม่มีเสียงไทย แล้วหายเองเมื่อพ้นเวลาพัก", async () => {
+      const { voice, requests, clock } = setup({ thaiVoice: false });
+      const changes = vi.fn();
+      voice.subscribe(changes);
+      await voice.prepare();
+      expect(voice.isSilent()).toBe(false);
+
+      const speaking = voice.speak("ประโยคแรก");
+      await settle();
+      requests[0]?.audio.reject(new CloudVoiceError("quota", 40_000));
+      await speaking;
+      expect(voice.isSilent()).toBe(true);
+      expect(changes).toHaveBeenCalled();
+
+      clock.time += 41_000;
+      expect(voice.isSilent()).toBe(false);
+
+      const withThai = setup({ available: false });
+      await withThai.voice.prepare();
+      expect(withThai.voice.isSilent()).toBe(false);
     });
 
     it("อุปกรณ์ไม่มีเสียงภาษาไทย และไม่มีเสียงของ Gemini: พูดตอบไม่ได้", async () => {

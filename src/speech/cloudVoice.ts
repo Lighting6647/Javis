@@ -6,6 +6,12 @@ import { DEFAULT_VOICE_SETTINGS, type SpeechSynthesizer, type VoiceOption, type 
  */
 export const MAX_BATCH_LENGTH = 400;
 
+/**
+ * จำนวนคำขอเสียงที่ค้างพร้อมกันได้: ขอก้อนถัดไปไว้ตั้งแต่ก้อนแรกยังมาไม่ถึง
+ * ไม่เช่นนั้นบนเครือข่ายช้า ก้อนแรกซึ่งสั้นจะเล่นจบก่อน แล้วเงียบรอก้อนที่สอง ส่วนที่เกินนี้ยังรวมเป็นคำขอเดียวเพื่อประหยัดโควตา
+ */
+export const MAX_CONCURRENT_BATCHES = 2;
+
 /** เหตุที่ขอเสียงจากเซิร์ฟเวอร์ไม่ได้ ตามรหัสที่เซิร์ฟเวอร์ตอบ */
 export type CloudVoiceFailure = "unavailable" | "quota" | "rate" | "rejected" | "failed";
 
@@ -116,8 +122,10 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   private waiting: string[] = [];
   /** เสียงที่ขอแล้ว เรียงตามลำดับที่จะถูกสั่งพูด */
   private queue: Batch[] = [];
-  /** มีคำขอของก้อนในคิวที่ยังไม่ได้คำตอบ: ขอทีละก้อน เพื่อให้ข้อความที่มาระหว่างนั้นถูกรวมกัน */
-  private loading = false;
+  /** จำนวนคำขอของก้อนในคิวที่ยังไม่ได้คำตอบ จำกัดไว้เพื่อให้ข้อความที่มาระหว่างนั้นถูกรวมกัน */
+  private loading = 0;
+  /** อุปกรณ์มีเสียงภาษาไทยไหม รู้หลังเตรียมเสียงครั้งแรก */
+  private deviceReady: boolean | null = null;
   private current: AudioPlayback | null = null;
   /** คำขอทั้งหมดที่ยังไม่จบ สำหรับยกเลิก */
   private readonly inFlight = new Set<AbortController>();
@@ -146,6 +154,9 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     return { mode: "active" };
   };
 
+  /** คำตอบจะไม่มีเสียงเลย: เสียงของ Gemini ใช้ไม่ได้ตอนนี้ และอุปกรณ์ไม่มีเสียงภาษาไทยให้ใช้แทน */
+  isSilent = (): boolean => this.deviceReady === false && !this.usable();
+
   /** ล้างสถานะพักชั่วคราวเพื่อให้ลองเชื่อมต่อเสียง Cloud TTS ใหม่ทันที */
   retryCloud = (): void => {
     if (!this.pause) return;
@@ -171,6 +182,10 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
   async prepare(): Promise<boolean> {
     this.deps.player.unlock?.();
     const deviceReady = await this.deps.fallback.prepare();
+    if (this.deviceReady !== deviceReady) {
+      this.deviceReady = deviceReady;
+      this.notify();
+    }
     return deviceReady || this.usable();
   }
 
@@ -255,7 +270,7 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     this.inFlight.clear();
     this.waiting = [];
     this.queue = [];
-    this.loading = false;
+    this.loading = 0;
     this.current?.stop();
     this.current = null;
     this.clipPlayback?.stop();
@@ -302,9 +317,9 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
     return { texts, next: 0, audio, abort, failed: false };
   }
 
-  /** ขอเสียงของข้อความที่รออยู่ ทีละก้อน */
+  /** ขอเสียงของข้อความที่รออยู่ ค้างพร้อมกันได้ไม่เกินเพดาน */
   private fill(): void {
-    if (this.loading || this.waiting.length === 0 || !this.usable()) return;
+    if (this.loading >= MAX_CONCURRENT_BATCHES || this.waiting.length === 0 || !this.usable()) return;
 
     // ไม่มีอะไรกำลังพูดหรือรอพูด: ขอช่วงแรกช่วงเดียวเพื่อให้เริ่มพูดเร็วที่สุด นอกนั้นรวมทุกช่วงที่รออยู่เท่าที่เพดานรับ
     const busy = this.queue.length > 0 || this.current !== null;
@@ -318,17 +333,17 @@ export class CloudVoiceSynthesizer implements SpeechSynthesizer {
 
     const batch = this.request(texts);
     this.queue.push(batch);
-    this.loading = true;
+    this.loading += 1;
     const epoch = this.epoch;
     batch.audio.then(
       () => {
         if (epoch !== this.epoch) return;
-        this.loading = false;
+        this.loading -= 1;
         this.fill();
       },
       () => {
         if (epoch !== this.epoch) return;
-        this.loading = false;
+        this.loading -= 1;
         // เสียงของ Gemini ถูกพักแล้ว ข้อความที่ยังไม่ได้ขอจะถูกพูดด้วยเสียงในอุปกรณ์ตอนถึงคิว
         this.waiting = [];
       }

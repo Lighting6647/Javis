@@ -33,8 +33,8 @@ import {
 } from "./components/lazy/views";
 import { Stage } from "./components/hud/Stage";
 import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversation/morningBriefing";
-import { pickThaiFiller, SEARCH_FILLER, THAI_FILLERS } from "./conversation/fillers";
-import { PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
+import { fillersFor, pickThaiFiller, SEARCH_FILLER } from "./conversation/fillers";
+import { NOTICE_TEXT, PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useCalendarReminder } from "./hooks/useCalendarReminder";
@@ -47,6 +47,7 @@ import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { useMeeting } from "./hooks/useMeeting";
 import { useSession } from "./hooks/useSession";
 import { useSpeechBlocked } from "./hooks/useSpeechBlocked";
+import { useVoiceSilent } from "./hooks/useVoiceSilent";
 import { MEETING_PHASE, MEETING_STATUS_LABEL } from "./meeting/presentation";
 import { appCommands } from "./conversation/appCommands";
 import { matchAssistantVoiceCommand } from "./conversation/assistantVoiceCommands";
@@ -65,6 +66,7 @@ import { sfx } from "./services/sfx";
 import { themeStore } from "./services/themeStore";
 import { thinkHardStore } from "./services/thinkHardStore";
 import { voiceSettingsStore } from "./services/voiceSettingsStore";
+import { isMobileDevice } from "./speech";
 import { startClapDetector } from "./speech/clapDetector";
 import { resolveAssistantIdentity } from "./speech/cloudVoice";
 import { memoryStore } from "./memory/memoryStore";
@@ -162,6 +164,8 @@ export default function App() {
   // หน้าตั้งค่า/บันทึกเสียงใช้ไมโครโฟนหรือมีเสียงตัวอย่าง จึงพักการฟังไว้ระหว่างที่เปิดอยู่ เช่นเดียวกับตลอดการประชุม
   const handsFree = useHandsFree({ ready, paused: settingsOpen || recorderOpen || meeting.active, controller });
   const speechBlocked = useSpeechBlocked(synthesizer);
+  const voiceSilent = useVoiceSilent(synthesizer);
+  const [fillers] = useState(() => fillersFor(isMobileDevice()));
 
   const pageOpen = ready && browser.requestedUrl !== null;
   const showingWeb = pageOpen && browser.visible && !inMeeting;
@@ -803,20 +807,20 @@ export default function App() {
   // เตรียมเสียงคำตอบรับไว้ก่อน จะได้เล่นได้ทันทีระหว่างรอ AI และรอสร้างเสียงคำตอบ
   useEffect(() => {
     if (!ready || !active) return;
-    synthesizer.warmClips?.([...THAI_FILLERS, SEARCH_FILLER]);
-  }, [ready, active, synthesizer]);
+    synthesizer.warmClips?.([...fillers, SEARCH_FILLER]);
+  }, [ready, active, fillers, synthesizer]);
 
   // เสียงตอบรับสั้นๆ ระหว่างรอ AI คิดคำตอบ (Filler)
   // ใช้เสียงที่เตรียมไว้: ขอเสียงใหม่ตอนนี้ใช้เวลาราว 3 วินาที จะมาพร้อมคำตอบจริงและเสียงซ้อนกัน
   useEffect(() => {
     if (!ready || inMeeting || phase !== "thinking" || !active) return;
     const timer = window.setTimeout(() => {
-      const filler = pickThaiFiller();
+      const filler = pickThaiFiller(fillers);
       if (synthesizer.playClip) void synthesizer.playClip(filler);
       else void synthesizer.speak(filler).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [ready, inMeeting, phase, active, synthesizer]);
+  }, [ready, inMeeting, phase, active, fillers, synthesizer]);
 
   // ค้นเว็บใช้เวลานาน: บอกผู้ใช้ด้วยเสียงที่เตรียมไว้ หลังคำตอบรับแรกพูดจบ
   useEffect(() => {
@@ -1241,6 +1245,11 @@ export default function App() {
           {elsewhereHint && (
             <div className="toast info" role="status">
               ลูน่ากำลังฟังอยู่ในอีกแท็บหนึ่ง แตะปุ่มไมโครโฟนที่แท็บนี้ถ้าต้องการให้ฟังที่นี่แทน
+            </div>
+          )}
+          {voiceSilent && (
+            <div className="toast error" role="alert">
+              {NOTICE_TEXT.voiceSilent}
             </div>
           )}
           {speechHint && (

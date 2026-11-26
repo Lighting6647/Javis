@@ -10,6 +10,60 @@ const SILENT_WAV_BYTES = new Uint8Array([
 
 const RESUME_TIMEOUT_MS = 1200;
 
+/** ตรวจว่าเสียงยังเดินอยู่ไหมทุกเท่านี้ */
+const PROGRESS_CHECK_MS = 250;
+/** เสียงหยุดเดินนานเท่านี้ถือว่าถูกขัด (สายเข้า ไมโครโฟนแย่งระบบเสียง หูฟังหลุด) สองช่องทางรวมกันต้องไม่เกิน 3 วินาที */
+const STALL_MS = 1200;
+/** ตอนเพิ่งสั่งเล่น อุปกรณ์อาจใช้เวลาเปิดลำโพง จึงรอนานกว่าปกติ */
+const START_STALL_MS = 2500;
+/** เหลือไม่ถึงเท่านี้ (วินาที) ตอนถูกขัด ถือว่าเล่นจบแล้ว */
+const TAIL_SECONDS = 0.3;
+
+const pageHidden = (): boolean => typeof document !== "undefined" && document.hidden === true;
+
+/**
+ * เฝ้าว่าเสียงเดินต่อ: เบราว์เซอร์มือถือหยุดเสียงกลางคลิปได้โดยไม่แจ้งว่าจบ คำตอบจึงค้างเงียบไปตลอด
+ * ระหว่างที่หน้าถูกซ่อน (รับสาย สลับแอป ปิดจอ) ไม่นับเวลา รอให้ผู้ใช้กลับมาก่อนแล้วเล่นต่อ ไม่พูดทับสาย
+ * @param position ตำแหน่งที่เล่นถึง คืนค่าเดิมเมื่อเสียงไม่เดิน
+ * @param revive ลองให้เสียงกลับมาเดิน เรียกทุกครั้งที่ตรวจพบว่าหยุด
+ * @param onStall เสียงหยุดนานเกินกำหนด เรียกครั้งเดียว
+ * @param startGraceMs รอให้เสียงเริ่มเดินครั้งแรกได้นานเท่านี้
+ * @returns ฟังก์ชันเลิกเฝ้า
+ */
+function watchProgress(position: () => number, revive: () => void, onStall: () => void, startGraceMs: number): () => void {
+  let last = position();
+  let moved = false;
+  let stalledMs = 0;
+
+  const onVisible = () => {
+    if (!pageHidden()) revive();
+  };
+  const stop = () => {
+    clearInterval(timer);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
+  };
+  const timer = setInterval(() => {
+    const now = position();
+    if (now !== last) {
+      last = now;
+      moved = true;
+      stalledMs = 0;
+      return;
+    }
+    if (pageHidden()) {
+      stalledMs = 0;
+      return;
+    }
+    revive();
+    stalledMs += PROGRESS_CHECK_MS;
+    if (stalledMs < (moved ? STALL_MS : startGraceMs)) return;
+    stop();
+    onStall();
+  }, PROGRESS_CHECK_MS);
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+  return stop;
+}
+
 function resumeContextWithTimeout(ctx: AudioContext): Promise<boolean> {
   if (ctx.state === "running") return Promise.resolve(true);
   return new Promise<boolean>((resolve) => {
@@ -67,7 +121,8 @@ export function createBrowserAudioPlayer(): AudioPlayer {
     return element;
   };
 
-  const playWithElement = (audio: Blob, rate: number): AudioPlayback => {
+  /** @param offset เริ่มเล่นจากวินาทีที่เท่านี้ ใช้ตอนเล่นต่อจากช่องทางหลักที่ถูกขัด */
+  const playWithElement = (audio: Blob, rate: number, offset = 0): AudioPlayback => {
     const element = ensureElement();
     if (!element) {
       return { finished: Promise.resolve("failed"), stop: () => undefined };
@@ -80,6 +135,7 @@ export function createBrowserAudioPlayer(): AudioPlayer {
     element.volume = 1;
     element.src = url;
     element.playbackRate = rate;
+    if (offset > 0) element.currentTime = offset;
 
     let settled = false;
     let finish!: (outcome: PlaybackOutcome) => void;
@@ -90,11 +146,24 @@ export function createBrowserAudioPlayer(): AudioPlayer {
     const settle = (outcome: PlaybackOutcome) => {
       if (settled) return;
       settled = true;
+      stopWatching();
       element.onended = null;
       element.onerror = null;
       URL.revokeObjectURL(url);
       finish(outcome);
     };
+
+    const stopWatching = watchProgress(
+      () => element.currentTime,
+      () => {
+        if (element.paused) void element.play().catch(() => undefined);
+      },
+      () => {
+        element.pause();
+        settle("failed");
+      },
+      STALL_MS
+    );
 
     element.onended = () => settle("ended");
     element.onerror = () => settle("failed");
@@ -162,6 +231,7 @@ export function createBrowserAudioPlayer(): AudioPlayer {
       let activeSource: AudioBufferSourceNode | null = null;
       let meter: AnalyserNode | null = null;
       let fallbackPlayback: AudioPlayback | null = null;
+      let stopWatching: () => void = () => undefined;
       let finish!: (outcome: PlaybackOutcome) => void;
       const finished = new Promise<PlaybackOutcome>((resolve) => {
         finish = resolve;
@@ -170,6 +240,7 @@ export function createBrowserAudioPlayer(): AudioPlayer {
       const settle = (outcome: PlaybackOutcome) => {
         if (settled) return;
         settled = true;
+        stopWatching();
         if (activeSource) {
           activeSource.onended = null;
           activeSource = null;
@@ -179,6 +250,32 @@ export function createBrowserAudioPlayer(): AudioPlayer {
           meter = null;
         }
         finish(outcome);
+      };
+
+      /** ช่องทางหลักถูกขัดและกลับมาไม่ได้: เล่นส่วนที่เหลือด้วยตัวเล่นสำรอง ผู้ใช้จึงไม่ต้องฟังซ้ำตั้งแต่ต้น */
+      const continueWithElement = async (source: AudioBufferSourceNode, startedAt: number, duration: number) => {
+        if (stopped || settled) return;
+        stopWatching();
+        const offset = (ctx.currentTime - startedAt) * rate;
+        // ไม่ให้เสียงเดิมโผล่มาซ้อนเมื่อระบบเสียงกลับมาทีหลัง
+        source.onended = null;
+        activeSource = null;
+        try {
+          source.stop();
+        } catch {
+          // หยุดไปแล้ว
+        }
+        // บอกว่าเล่นอยู่แต่ไม่เดิน: ระบบเสียงตัวนี้เสียแล้ว รอบถัดไปเปิดตัวใหม่
+        if (ctx.state === "running" && sharedCtx === ctx) {
+          sharedCtx = null;
+          void ctx.close().catch(() => undefined);
+        }
+        if (duration - offset <= TAIL_SECONDS) {
+          settle("ended");
+          return;
+        }
+        fallbackPlayback = playWithElement(audio, rate, offset);
+        settle(await fallbackPlayback.finished);
       };
 
       void (async () => {
@@ -210,6 +307,23 @@ export function createBrowserAudioPlayer(): AudioPlayer {
           activeSource = source;
           source.onended = () => settle("ended");
           source.start(0);
+
+          const startedAt = ctx.currentTime;
+          const revive = () => {
+            if (stopped || settled || pageHidden() || ctx.state === "running" || ctx.state === "closed") return;
+            void ctx.resume().catch(() => undefined);
+          };
+          const stopProgress = watchProgress(
+            () => ctx.currentTime,
+            revive,
+            () => void continueWithElement(source, startedAt, decoded.duration),
+            START_STALL_MS
+          );
+          ctx.addEventListener("statechange", revive);
+          stopWatching = () => {
+            stopProgress();
+            ctx.removeEventListener("statechange", revive);
+          };
         } catch {
           if (stopped || settled) return;
           fallbackPlayback = playWithElement(audio, rate);

@@ -5,6 +5,7 @@ import { fetchCloudSpeech } from "../services/speechApi";
 import { transcribeAudio } from "../services/transcribeApi";
 import { createBrowserAudioPlayer } from "./audioPlayer";
 import { CloudVoiceSynthesizer } from "./cloudVoice";
+import { isHandheld } from "./device";
 import { canListenHandsFree } from "./handsFree";
 import { NativeSpeechRecognizer } from "./nativeRecognizer";
 import { NativeSpeechSynthesizer } from "./nativeSynthesizer";
@@ -16,6 +17,12 @@ import { WebSpeechSynthesizer } from "./webSynthesizer";
 export interface SpeechServices {
   recognizer: SpeechRecognizer;
   synthesizer: SpeechSynthesizer;
+}
+
+/** กำลังใช้งานบนมือถือหรือแท็บเล็ต ทั้งแอปที่ติดตั้งและเว็บ */
+export function isMobileDevice(): boolean {
+  if (Capacitor.isNativePlatform()) return true;
+  return typeof navigator !== "undefined" && isHandheld(navigator.userAgent, navigator.maxTouchPoints);
 }
 
 /** ที่นี่ฟังตลอดเวลาได้ไหม (เปิดหน้าแล้วพูดได้เลย) ดูเงื่อนไขใน src/speech/handsFree.ts */
