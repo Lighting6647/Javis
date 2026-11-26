@@ -6,7 +6,7 @@ import type { GestureCommand, HandShape } from "./gestureCommands";
 /**
  * การ์ดยืนยันที่รออยู่
  * - gesture: ยืนยันด้วยการดีดนิ้วได้ (เปิดแอป กรอกฟอร์ม)
- * - buttonOnly: ต้องกดปุ่มเอง (คำสั่งในเครื่อง คำสั่งโปรเจกต์ และเมื่อ PR เมลเข้า main: ส่งอีเมล แก้ปฏิทิน)
+ * - buttonOnly: ต้องกดปุ่มเอง (คำสั่งในเครื่อง คำสั่งโปรเจกต์ ส่งอีเมล แก้ปฏิทิน)
  */
 export type CardState = "none" | "gesture" | "buttonOnly";
 

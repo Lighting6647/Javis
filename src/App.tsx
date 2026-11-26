@@ -747,20 +747,38 @@ export default function App() {
           return;
         }
         if (pendingPcAction) cancelPcAction();
+        else if (pendingEmailDraft) cancelEmailDraft();
+        else if (pendingCalendarChange) cancelCalendarChange();
         else if (pendingAppLaunch) cancelAppLaunch();
         else if (pendingFill) cancelFill();
         else if (pendingProjectAction) cancelProjectAction();
       }),
-    [pendingPcAction, cancelPcAction, pendingAppLaunch, pendingFill, pendingProjectAction, confirmAppLaunch, confirmFill, cancelAppLaunch, cancelFill, cancelProjectAction]
+    [
+      pendingPcAction,
+      cancelPcAction,
+      pendingEmailDraft,
+      cancelEmailDraft,
+      pendingCalendarChange,
+      cancelCalendarChange,
+      pendingAppLaunch,
+      pendingFill,
+      pendingProjectAction,
+      confirmAppLaunch,
+      confirmFill,
+      cancelAppLaunch,
+      cancelFill,
+      cancelProjectAction
+    ]
   );
 
   // ดีดนิ้ว: ไม่มีการ์ดรอ = เรียกลูน่า, มีการ์ดเปิดแอปหรือกรอกฟอร์ม = ยืนยัน
   // การ์ดที่รันคำสั่งในเครื่องหรือคำสั่งโปรเจกต์ ยืนยันด้วยท่ามือไม่ได้ ต้องกดปุ่มเอง
-  // TODO(mail PR): เมื่อการ์ดส่งอีเมล/แก้ปฏิทินเข้า main ให้นับเป็น "buttonOnly" ด้วย
+  // การ์ดส่งอีเมลและแก้ปฏิทินก็ต้องกดเองเช่นกัน (👎 ยกเลิกได้) ถ้ามีการ์ดที่ต้องกดเองรออยู่ ดีดนิ้วจะไม่ยืนยันการ์ดใดเลย
   const cardStateRef = useRef<CardState>("none");
   useEffect(() => {
-    cardStateRef.current = pendingAppLaunch || pendingFill ? "gesture" : pendingPcAction || pendingProjectAction ? "buttonOnly" : "none";
-  }, [pendingAppLaunch, pendingFill, pendingPcAction, pendingProjectAction]);
+    const manualOnly = pendingPcAction || pendingProjectAction || pendingEmailDraft || pendingCalendarChange;
+    cardStateRef.current = manualOnly ? "buttonOnly" : pendingAppLaunch || pendingFill ? "gesture" : "none";
+  }, [pendingAppLaunch, pendingFill, pendingPcAction, pendingProjectAction, pendingEmailDraft, pendingCalendarChange]);
   const snapRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     snapRef.current = () => {
