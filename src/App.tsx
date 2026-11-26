@@ -14,6 +14,7 @@ import { ServerUnreachable, SessionSkeleton } from "./components/SessionFallback
 import { VoiceDock } from "./components/VoiceDock";
 import { BootSequence } from "./components/hud/BootSequence";
 import { CameraOnBadge, GestureRadialMenu, type RadialMenuItem } from "./components/hud/GestureRadialMenu";
+import { GestureHints } from "./components/hud/GestureHints";
 import { HandOverlay } from "./components/hud/HandOverlay";
 import { HandPointer } from "./components/hud/HandPointer";
 import { HudFrame } from "./components/hud/HudFrame";
@@ -59,6 +60,8 @@ import { customVoicesStore } from "./services/customVoicesStore";
 import { startWorkspacePreferencesSync } from "./services/preferencesSync";
 import type { GestureCommand, RadialMenuState } from "./services/gestureCommands";
 import { gestureIntents } from "./services/gestureEvents";
+import { type CardState, commandLabel, snapLabel } from "./services/gestureLabel";
+import { gestureHintStore } from "./services/gestureHintStore";
 import { type HandPointerState, startHandControl } from "./services/handControl";
 import { handFrameStore } from "./services/handFrameStore";
 import { hudEffectsStore } from "./services/hudEffectsStore";
@@ -741,6 +744,23 @@ export default function App() {
     [pendingPcAction, cancelPcAction, pendingAppLaunch, pendingFill, pendingProjectAction, confirmAppLaunch, confirmFill, cancelAppLaunch, cancelFill, cancelProjectAction]
   );
 
+  // ดีดนิ้ว: ไม่มีการ์ดรอ = เรียกลูน่า, มีการ์ดเปิดแอปหรือกรอกฟอร์ม = ยืนยัน
+  // การ์ดที่รันคำสั่งในเครื่องหรือคำสั่งโปรเจกต์ ยืนยันด้วยท่ามือไม่ได้ ต้องกดปุ่มเอง
+  // TODO(mail PR): เมื่อการ์ดส่งอีเมล/แก้ปฏิทินเข้า main ให้นับเป็น "buttonOnly" ด้วย
+  const cardStateRef = useRef<CardState>("none");
+  useEffect(() => {
+    cardStateRef.current = pendingAppLaunch || pendingFill ? "gesture" : pendingPcAction || pendingProjectAction ? "buttonOnly" : "none";
+  }, [pendingAppLaunch, pendingFill, pendingPcAction, pendingProjectAction]);
+  const snapRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    snapRef.current = () => {
+      const card = cardStateRef.current;
+      gestureHintStore.flash(snapLabel(card));
+      if (card === "gesture") gestureIntents.emit("confirm");
+      else if (card === "none") gestureCommandRef.current({ type: "listen" });
+    };
+  }, []);
+
   // ควบคุมด้วยท่ามือผ่านกล้อง (MediaPipe) ประมวลผลในเครื่องทั้งหมด
   useEffect(() => {
     if (!ready || !handControlEnabled || inMeeting) return;
@@ -764,8 +784,14 @@ export default function App() {
           }
         },
         onCommand: (command) => {
-          if (!cancelled) gestureCommandRef.current(command);
+          if (cancelled) return;
+          gestureHintStore.flash(commandLabel(command));
+          gestureCommandRef.current(command);
         },
+        onSnap: () => {
+          if (!cancelled) snapRef.current();
+        },
+        cardState: () => cardStateRef.current,
         onMenu: (menu) => {
           if (!cancelled) setGestureMenu(menu);
         },
@@ -972,7 +998,7 @@ export default function App() {
                   setSensorNotice({
                     tone: "info",
                     text: next
-                      ? "กำลังเปิดกล้องจับท่ามือ: ชี้นิ้วเพื่อเลื่อน และจีบนิ้วเพื่อคลิก"
+                      ? "กำลังเปิดกล้องจับท่ามือ: ชี้นิ้วเพื่อเลื่อน จีบนิ้วเพื่อคลิก ดีดนิ้วเพื่อเรียกลูน่า"
                       : "ปิดโหมดควบคุมด้วยท่ามือแล้ว"
                   });
                   return next;
@@ -980,7 +1006,7 @@ export default function App() {
               }}
               aria-pressed={handControlEnabled}
               aria-label="ควบคุมด้วยท่ามือ"
-              title={handControlEnabled ? "กำลังเปิดกล้องจับท่ามือ แตะเพื่อปิด" : "เปิดกล้องควบคุมหน้าจอด้วยท่ามือ (จีบนิ้วเพื่อคลิก)"}
+              title={handControlEnabled ? "กำลังเปิดกล้องจับท่ามือ แตะเพื่อปิด" : "เปิดกล้องควบคุมหน้าจอด้วยท่ามือ (จีบนิ้วคลิก ดีดนิ้วเรียกลูน่า)"}
             >
               <Hand size={16} aria-hidden />
               <span>ท่ามือ</span>
@@ -1322,6 +1348,7 @@ export default function App() {
           <>
             <CameraOnBadge />
             <HandOverlay />
+            <GestureHints />
             {gestureMenu && <GestureRadialMenu menu={gestureMenu} items={GESTURE_MENU_ITEMS} />}
             <HandPointer pointer={handPointer} />
           </>,

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { HoldKind } from "../../services/gestureCommands";
 import type { HandFrame } from "../../services/handControl";
+import { gestureHintStore } from "../../services/gestureHintStore";
 import { handFrameStore } from "../../services/handFrameStore";
 
 /** เส้นเชื่อมจุดบนมือ 21 จุดของ MediaPipe (นิ้วโป้ง ชี้ กลาง นาง ก้อย และฝ่ามือ) */
@@ -125,6 +126,23 @@ export function HandOverlay() {
         context.fillStyle = `rgba(${style.color}, 1)`;
         context.fillText(style.label, x, y + 58);
       }
+
+      // ป้ายชื่อท่า: ลอยเหนือนิ้วที่สูงที่สุด (ป้ายหลังสั่งงานสำเร็จแสดงแทนช่วงสั้น ๆ)
+      const label = gestureHintStore.get(now) ?? frame.label;
+      if (label && points.length > 0) {
+        const top = Math.min(...points.map((point) => point.y));
+        const x = Math.min(Math.max(frame.palm.x, 90), window.innerWidth - 90);
+        const y = Math.max(top - 22, 24);
+        context.font = "600 15px 'Plus Jakarta Sans', 'Noto Sans Thai', system-ui, sans-serif";
+        context.textAlign = "center";
+        const width = context.measureText(label).width + 20;
+        context.fillStyle = "rgba(9, 14, 22, 0.82)";
+        context.beginPath();
+        context.roundRect(x - width / 2, y - 17, width, 26, 13);
+        context.fill();
+        context.fillStyle = "rgba(230, 250, 255, 1)";
+        context.fillText(label, x, y + 1);
+      }
     };
 
     const draw = () => {
@@ -151,9 +169,11 @@ export function HandOverlay() {
 
     resize();
     const unsubscribe = handFrameStore.subscribe(schedule);
+    const unsubscribeHint = gestureHintStore.subscribe(schedule);
     window.addEventListener("resize", resize);
     return () => {
       unsubscribe();
+      unsubscribeHint();
       window.removeEventListener("resize", resize);
       if (rafId) cancelAnimationFrame(rafId);
     };
