@@ -1,6 +1,8 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { classifyHand, GestureEngine, type GestureCommand, type HoldProgress, palmCenter, type RadialMenuState } from "./gestureCommands";
+import { type CardState, gestureLabel } from "./gestureLabel";
 import { dueForDetection, type LandmarkPoint, OneEuroPoint, PINCH_ON, PinchDetector, pinchRatio } from "./handGestures";
+import { SnapDetector, snapHandFrom } from "./snapGesture";
 
 export interface HandPointerState {
   active: boolean;
@@ -20,6 +22,8 @@ export interface HandFrame {
   /** ท่าที่กำลังค้างอยู่ (วงนับถอยหลัง) */
   hold: HoldProgress | null;
   palm: LandmarkPoint;
+  /** ชื่อท่าที่เห็นและสิ่งที่ท่าจะทำ เช่น "แบมือ · เปิดเมนู" (null = ท่านี้ไม่ได้สั่งอะไร) */
+  label: string | null;
 }
 
 export interface HandControlCallbacks {
@@ -33,6 +37,10 @@ export interface HandControlCallbacks {
   onError: (message: string) => void;
   /** ลูน่ากำลังพูดอยู่หรือไม่ (แบมือตอนพูด = หยุดพูด แทนการเปิดเมนู) */
   isSpeaking: () => boolean;
+  /** ดีดนิ้วสำเร็จ (ผู้เรียกตัดสินเองว่าจะเรียกลูน่าหรือยืนยันการ์ด) */
+  onSnap?: () => void;
+  /** การ์ดยืนยันที่รออยู่ ใช้บอกในป้ายว่าดีดนิ้วแล้วจะเกิดอะไร */
+  cardState?: () => CardState;
 }
 
 export interface HandControlHandle {
@@ -106,6 +114,7 @@ export async function startHandControl(callbacks: HandControlCallbacks, menuItem
     const palmFilter = new OneEuroPoint(1.0, 0.01);
     const pinch = new PinchDetector();
     const gestures = new GestureEngine(menuItems);
+    const snap = new SnapDetector();
     let menu: RadialMenuState | null = null;
     const viewport = () => ({ width: window.innerWidth, height: window.innerHeight });
 
@@ -143,6 +152,7 @@ export async function startHandControl(callbacks: HandControlCallbacks, menuItem
         cursor.reset();
         palmFilter.reset();
         pinch.reset();
+        snap.reset();
         // ยังป้อนต่อ เพื่อให้เมนูปิดเองเมื่อมือหายนานพอ
         publishMenu(gestures.update({ shape: null, point: { x: 0, y: 0 }, now, speaking: isSpeaking(), viewport: viewport() }).menu);
         return;
@@ -160,10 +170,23 @@ export async function startHandControl(callbacks: HandControlCallbacks, menuItem
 
       const shape = classifyHand(hand);
       const ratio = pinchRatio(thumbTip, indexTip, wrist, middleMcp);
-      // กำมืออยู่ (ปลายนิ้วชิดกันเอง) หรือกำลังเลือกในเมนู: ไม่นับเป็นการจีบคลิก
-      const { pinching, click } = pinch.update(shape === "fist" || gestures.menuOpen ? null : ratio, now);
+      // ดีดนิ้วอยู่ในเมนูไม่นับ (มือกำลังเลือกช่อง)
+      const snapped = snap.update(gestures.menuOpen ? null : snapHandFrom(hand), now);
+      // กำมืออยู่ (ปลายนิ้วชิดกันเอง) กำลังเลือกในเมนู หรือนิ้วโป้งแตะนิ้วกลางเตรียมดีด: ไม่นับเป็นการจีบคลิก
+      const { pinching, click } = pinch.update(shape === "fist" || gestures.menuOpen || snapped.contact ? null : ratio, now);
 
-      const output = gestures.update({ shape: pinching ? "none" : shape, point: palmPoint, now, speaking: isSpeaking(), viewport: viewport() });
+      // ชูนิ้วชี้ค้างและนิ้วโป้งขึ้นค้างเลิกใช้แล้ว (ใช้ดีดนิ้วเรียกลูน่าและยืนยันแทน)
+      const engineShape = pinching || shape === "indexUp" || shape === "thumbsUp" ? "none" : shape;
+      const speaking = isSpeaking();
+      const output = gestures.update({ shape: engineShape, point: palmPoint, now, speaking, viewport: viewport() });
+      const label = gestureLabel({
+        shape,
+        pinching,
+        snapContact: snapped.contact,
+        menuOpen: gestures.menuOpen,
+        speaking,
+        card: callbacks.cardState?.() ?? "none"
+      });
 
       onUpdate({ active: true, x: smoothX, y: smoothY, pinching, openPalm: shape === "open" });
       onFrame({
@@ -171,10 +194,12 @@ export async function startHandControl(callbacks: HandControlCallbacks, menuItem
         pinch: ratio === null ? 0 : Math.min(1, Math.max(0, (1 - ratio) / (1 - PINCH_ON))),
         clicked: click,
         hold: output.hold,
-        palm: palmPoint
+        palm: palmPoint,
+        label
       });
       publishMenu(output.menu);
       output.commands.forEach(onCommand);
+      if (snapped.snapped) callbacks.onSnap?.();
       if (click) onPinchClick(smoothX, smoothY);
     };
 

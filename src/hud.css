@@ -814,3 +814,83 @@ html[data-theme="holo"] .app.has-stage:not(.show-main) .voice-waveform {
     display: none;
   }
 }
+
+/* ---------- ป้ายบอกท่ามือ และตารางท่ามือทั้งหมด ---------- */
+.gesture-hints {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 201;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 24px));
+  pointer-events: none;
+}
+.gesture-hints-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.gesture-hint-line {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(9, 14, 22, 0.82);
+  border: 1px solid rgba(56, 232, 255, 0.55);
+  color: #e6faff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.gesture-hint-line.idle {
+  border-color: rgba(56, 232, 255, 0.25);
+  color: rgba(230, 250, 255, 0.65);
+  font-weight: 500;
+}
+.gesture-guide-toggle {
+  pointer-events: auto;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(9, 14, 22, 0.86);
+  border: 1px solid rgba(56, 232, 255, 0.45);
+  color: #e6faff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.gesture-guide-toggle:hover { background: rgba(56, 232, 255, 0.16); border-color: rgba(56, 232, 255, 0.9); }
+.gesture-guide-toggle:active { background: rgba(56, 232, 255, 0.26); }
+.gesture-guide-toggle:focus-visible { outline: 2px solid #38e8ff; outline-offset: 2px; }
+.gesture-guide {
+  pointer-events: auto;
+  width: 100%;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(9, 14, 22, 0.92);
+  border: 1px solid rgba(56, 232, 255, 0.35);
+  color: #e6faff;
+}
+.gesture-guide h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+.gesture-guide dl { margin: 0; display: grid; gap: 6px; }
+.gesture-guide dl > div { display: grid; grid-template-columns: 9.5em 1fr; gap: 8px; font-size: 12.5px; line-height: 1.45; }
+.gesture-guide dt { font-weight: 600; color: #7dd3fc; }
+.gesture-guide dd { margin: 0; color: rgba(230, 250, 255, 0.85); }
+/* จอแคบ: ยกขึ้นเหนือปุ่มไมโครโฟนและปุ่มแชร์จอ */
+@media (max-width: 600px) {
+  .gesture-hints { bottom: 132px; }
+  .gesture-guide dl > div { grid-template-columns: 7.5em 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gesture-guide-toggle { transition: none; }
+}
