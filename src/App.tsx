@@ -7,6 +7,8 @@ import { AccessGate } from "./components/AccessGate";
 import { FillCard } from "./components/FillCard";
 import { AppLaunchCard } from "./components/AppLaunchCard";
 import { PcActionCard } from "./components/PcActionCard";
+import { CalendarChangeCard } from "./components/CalendarChangeCard";
+import { EmailDraftCard } from "./components/EmailDraftCard";
 import { MeetingSummaryCard } from "./components/MeetingSummaryCard";
 import { ProjectActionCard } from "./components/ProjectActionCard";
 import { ServiceBanner } from "./components/ServiceBanner";
@@ -36,6 +38,7 @@ import { buildMorningBriefingPrompt, isMorningBriefingCommand } from "./conversa
 import { fillersFor, pickThaiFiller, SEARCH_FILLER } from "./conversation/fillers";
 import { NOTICE_TEXT, PHASE_LABEL, WAITING_FOR_WAKE_LABEL } from "./conversation/messages";
 import { fetchMorningBriefing } from "./services/workspaceApi";
+import { useMorningBriefing } from "./hooks/useMorningBriefing";
 import { useAiStatus } from "./hooks/useAiStatus";
 import { useCalendarReminder } from "./hooks/useCalendarReminder";
 import { useCloudVoiceStatus } from "./hooks/useCloudVoiceStatus";
@@ -110,11 +113,16 @@ export default function App() {
     confirmAppLaunch,
     cancelAppLaunch,
     confirmPcAction,
-    cancelPcAction
+    cancelPcAction,
+    sendEmailDraft,
+    cancelEmailDraft,
+    confirmCalendarChange,
+    cancelCalendarChange,
+    announce
   } = useConversation({ ready });
   const installPrompt = useInstallPrompt();
   const browser = useSyncExternalStore(browserStore.subscribe, browserStore.get);
-  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, pendingPcAction, lastReplyMs } = state;
+  const { phase, wake, active, messages, partial, notice, onDeviceListening, searching, pendingFillId, pendingProjectAction, pendingAppLaunch, pendingPcAction, pendingEmailDraft, pendingCalendarChange, lastReplyMs } = state;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -143,6 +151,8 @@ export default function App() {
       return true;
     }
   });
+  // สรุปเช้าอัตโนมัติ: เปิดแอปครั้งแรกของวันก่อนเที่ยง หลังหน้าบูตจบ (ปิดได้ในหน้าตั้งค่า)
+  useMorningBriefing({ ready: ready && bootDone, announce });
   const [clapEnabled, setClapEnabled] = useState(false);
   const [handControlEnabled, setHandControlEnabled] = useState(false);
   const [sensorNotice, setSensorNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
@@ -270,13 +280,13 @@ export default function App() {
     showingWorkspace ||
     showingRouter ||
     inMeeting ||
-    Boolean(shownMeeting || pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || shownCapture || captureError || notice || meetingNotice || speechHint);
+    Boolean(shownMeeting || pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || pendingEmailDraft || pendingCalendarChange || shownCapture || captureError || notice || meetingNotice || speechHint);
   // ตลอดการประชุมไม่มีแถบล่าง: ปุ่มและข้อความแจ้งทั้งหมดอยู่ในแผงการประชุม
   const footerShown =
     !inMeeting &&
     (dockShown ||
       Boolean(
-        pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || shownCapture || captureError || sensorNotice || notice || meetingNotice || speechHint || heard
+        pendingFill || pendingProjectAction || pendingAppLaunch || pendingPcAction || pendingEmailDraft || pendingCalendarChange || shownCapture || captureError || sensorNotice || notice || meetingNotice || speechHint || heard
       ));
 
   // ออกจากระบบหรือเซสชันหมดอายุ: หยุดเสียง ล้างบทสนทนา และปิดหน้าเว็บของผู้ใช้คนก่อน
@@ -1178,6 +1188,12 @@ export default function App() {
               onConfirm={confirmProjectAction}
               onCancel={cancelProjectAction}
             />
+          )}
+          {pendingEmailDraft && (
+            <EmailDraftCard key={pendingEmailDraft.id} draft={pendingEmailDraft} onSend={(edited) => void sendEmailDraft(edited)} onCancel={cancelEmailDraft} />
+          )}
+          {pendingCalendarChange && (
+            <CalendarChangeCard change={pendingCalendarChange} onConfirm={() => void confirmCalendarChange()} onCancel={cancelCalendarChange} />
           )}
           {pendingAppLaunch && (
             <AppLaunchCard

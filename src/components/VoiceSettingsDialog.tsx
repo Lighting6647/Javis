@@ -9,6 +9,7 @@ import { micLevelStore } from "../services/micLevelStore";
 import { type Theme, themeStore } from "../services/themeStore";
 import { voiceSettingsStore } from "../services/voiceSettingsStore";
 import { wakeGateAllowed, wakeGateStore, wakePhrases } from "../services/wakeGateStore";
+import { autoBriefingStore, briefingWeatherStore } from "../services/briefingStore";
 import { handsFreeAvailable } from "../speech";
 import type { CloudVoiceStatus } from "../speech/cloudVoice";
 import { GEMINI_TTS_VOICES, getVoicePersona, isGeminiTtsVoice, VOICE_PERSONAS, type VoicePersonaOption } from "../speech/cloudVoices";
@@ -396,6 +397,48 @@ function WakeGateSection() {
   );
 }
 
+/** สรุปเช้าอัตโนมัติ และการใช้ตำแหน่งเพื่อบอกอากาศ */
+function BriefingSection() {
+  const enabled = useSyncExternalStore(autoBriefingStore.subscribe, autoBriefingStore.get);
+  const weather = useSyncExternalStore(briefingWeatherStore.subscribe, briefingWeatherStore.get);
+  const [locationNote, setLocationNote] = useState("");
+
+  const toggleWeather = (on: boolean) => {
+    briefingWeatherStore.set(on);
+    setLocationNote("");
+    if (!on || typeof navigator === "undefined" || !navigator.geolocation) return;
+    // ผู้ใช้เลือกเปิดเอง: ขอสิทธิ์ตำแหน่งตอนนี้ (สรุปเช้าจะไม่ถามสิทธิ์เองตอนเปิดแอป)
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationNote("อนุญาตตำแหน่งแล้ว ลูน่าจะบอกอากาศในสรุปเช้าค่ะ"),
+      () => setLocationNote("ยังไม่ได้อนุญาตตำแหน่ง ลูน่าจะสรุปเช้าโดยไม่บอกอากาศค่ะ"),
+      { timeout: 8000, maximumAge: 60 * 60_000, enableHighAccuracy: false }
+    );
+  };
+
+  return (
+    <fieldset>
+      <legend>สรุปเช้า</legend>
+      <label className="voice-option">
+        <input type="checkbox" checked={enabled} onChange={(event) => autoBriefingStore.set(event.target.checked)} />
+        <span>
+          สรุปเช้าอัตโนมัติ
+          <small>เปิดแอปครั้งแรกของวันก่อนเที่ยง ลูน่าบอกนัดวันนี้ เมลสำคัญ (ผู้ส่งและหัวเรื่อง) และอากาศ</small>
+        </span>
+      </label>
+      {enabled && (
+        <label className="voice-option">
+          <input type="checkbox" checked={weather} onChange={(event) => toggleWeather(event.target.checked)} />
+          <span>
+            บอกสภาพอากาศ
+            <small>ใช้ตำแหน่งคร่าว ๆ ของอุปกรณ์ (ราว 1 กม.) ดูอากาศจาก Open-Meteo เท่านั้น ไม่เก็บไว้ที่ใด</small>
+          </span>
+        </label>
+      )}
+      {locationNote && <p className="settings-note" role="status">{locationNote}</p>}
+    </fieldset>
+  );
+}
+
 function InstallSection({ installPrompt }: { installPrompt: InstallPrompt }) {
   const { canInstall, installed, install } = installPrompt;
 
@@ -528,6 +571,7 @@ export function VoiceSettingsDialog({
 
         <ThemeSection />
         <WakeGateSection />
+        <BriefingSection />
         {open && <VoiceSection synthesizer={synthesizer} settings={settings} onOpenRecorder={onOpenRecorder} />}
         <MemorySection />
         <MeetingHistorySection />

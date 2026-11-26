@@ -263,6 +263,7 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
       "propose_project_action",
       "check_important_emails",
       "manage_calendar",
+      "draft_email",
       "manage_notes",
       "remember",
       "forget_memory"
@@ -281,6 +282,7 @@ describe("POST /api/chat: Gemini ค้นด้วย Google ในคำขอ
     expect(app.apis()).toEqual(["chat"]);
     expect(chatToolNames(app.calls[0])).toEqual([
       "check_important_emails",
+      "draft_email",
       "forget_memory",
       "inspect_projects",
       "manage_calendar",
@@ -467,6 +469,7 @@ describe("POST /api/chat: Gemini ค้นเว็บด้วย Tavily", () =
     const [request, search, answer] = app.calls;
     expect(chatToolNames(request)).toEqual([
       "check_important_emails",
+      "draft_email",
       "forget_memory",
       "inspect_projects",
       "manage_calendar",
@@ -791,6 +794,7 @@ describe("POST /api/chat: Gemini ค้นด้วย Google เป็นขั
     expect(chat?.body.model).toBe("gemini-3.5-flash-lite");
     expect(chatToolNames(chat)).toEqual([
       "check_important_emails",
+      "draft_email",
       "forget_memory",
       "inspect_projects",
       "manage_calendar",

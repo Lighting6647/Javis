@@ -1,12 +1,18 @@
 import type { Request, RequestHandler } from "express";
 import { z } from "zod";
+import { buildRawEmail, MAX_EMAIL_BODY, MAX_EMAIL_RECIPIENTS, MAX_EMAIL_SUBJECT } from "./emailDraft.js";
 import {
   createCalendarEvent,
   createGoogleTask,
+  deleteCalendarEvent,
   getGoogleWorkspaceStatus,
   listCalendarEvents,
-  listImportantEmails
+  listImportantEmails,
+  resolveGoogleWorkspaceConfig,
+  sendGmailMessage,
+  updateCalendarEvent
 } from "./googleWorkspace.js";
+import { fetchWeather, readCoordinates } from "./weather.js";
 import { MAX_NOTE_CONTENT, MAX_NOTE_TITLE, type NotesStore } from "./notesStore.js";
 import type { PreferencesStore } from "./preferencesStore.js";
 import { ANONYMOUS_USER } from "./userStore.js";
@@ -18,6 +24,29 @@ const createEventSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   location: z.string().trim().max(200).optional()
 });
+
+/** อีเมลที่ผู้ใช้กดส่งในการ์ด ตรวจรูปแบบอีกชั้นที่เซิร์ฟเวอร์ */
+const sendEmailSchema = z.object({
+  to: z.array(z.string().trim().email()).min(1).max(MAX_EMAIL_RECIPIENTS),
+  subject: z.string().trim().min(1).max(MAX_EMAIL_SUBJECT),
+  body: z.string().trim().min(1).max(MAX_EMAIL_BODY),
+  threadId: z.string().trim().max(64).regex(/^[A-Za-z0-9_-]*$/).optional(),
+  inReplyTo: z.string().trim().max(300).optional(),
+  references: z.string().trim().max(2000).optional()
+});
+
+/** การแก้หรือลบนัดที่ผู้ใช้กดยืนยันในการ์ด */
+const calendarChangeSchema = z.object({
+  action: z.enum(["update", "delete"]),
+  eventId: z.string().trim().min(1).max(1024).regex(/^[A-Za-z0-9_@.-]+$/),
+  title: z.string().trim().max(180).optional(),
+  startIso: z.string().trim().min(10).max(60).optional(),
+  endIso: z.string().trim().min(10).max(60).optional()
+});
+
+/** ข้อความเมื่อเซิร์ฟเวอร์เปิดให้ทุกคนใช้ (ไม่บังคับเข้าสู่ระบบ) บนเว็บจริง จึงไม่ยอมให้ส่งอีเมลหรือแก้ปฏิทิน */
+export const ACTIONS_LOCKED_MESSAGE =
+  "เว็บนี้ยังไม่ได้ตั้งรหัสเข้าใช้ (ACCESS_CODES) ลูน่าจึงยังไม่ส่งอีเมลหรือแก้ปฏิทินแทนคุณบนเว็บนี้ เพื่อไม่ให้คนอื่นที่รู้ลิงก์ใช้ได้ค่ะ";
 
 const createNoteSchema = z.object({
   title: z.string().trim().max(MAX_NOTE_TITLE).optional(),
@@ -45,6 +74,8 @@ export interface WorkspaceRouteHandlers {
   listEmails: RequestHandler;
   listCalendar: RequestHandler;
   createCalendar: RequestHandler;
+  sendEmail: RequestHandler;
+  changeCalendar: RequestHandler;
   listNotes: RequestHandler;
   createNote: RequestHandler;
   updateNote: RequestHandler;
@@ -55,7 +86,12 @@ export interface WorkspaceRouteHandlers {
 
 export function createWorkspaceRoutes(
   getNotesStore: () => NotesStore,
-  getPreferencesStore?: () => PreferencesStore
+  getPreferencesStore?: () => PreferencesStore,
+  /**
+   * ส่งอีเมลและแก้ปฏิทินได้ไหม: ได้เมื่อบังคับเข้าสู่ระบบ หรือเซิร์ฟเวอร์รันบนเครื่องของผู้ใช้เอง
+   * เว็บสาธารณะที่ไม่ตั้งรหัสเข้าใช้ไม่ได้ เพราะใครรู้ลิงก์ก็จะส่งอีเมลในนามผู้ใช้ได้
+   */
+  actionsAllowed: () => boolean = () => true
 ): WorkspaceRouteHandlers {
   return {
     status: (_request, response) => {
@@ -69,10 +105,12 @@ export function createWorkspaceRoutes(
     briefing: async (request, response) => {
       const user = currentUser(request);
       const google = getGoogleWorkspaceStatus();
-      const [emailsRes, calendarRes, notes] = await Promise.all([
+      const coords = readCoordinates(request.query.lat, request.query.lon);
+      const [emailsRes, calendarRes, notes, weather] = await Promise.all([
         google.configured ? listImportantEmails({ maxResults: 5 }) : Promise.resolve(null),
         google.configured ? listCalendarEvents({ days: 2, maxResults: 6 }) : Promise.resolve(null),
-        getNotesStore().listNotes(user)
+        getNotesStore().listNotes(user),
+        coords ? fetchWeather(coords) : Promise.resolve(null)
       ]);
 
       const emails = emailsRes?.ok ? emailsRes.emails : [];
@@ -107,6 +145,7 @@ export function createWorkspaceRoutes(
         emails,
         events,
         notes: recentNotes,
+        weather,
         spokenSummary: parts.join(" ")
       });
     },
@@ -132,6 +171,53 @@ export function createWorkspaceRoutes(
         return;
       }
       response.set("Cache-Control", "no-store").json(result);
+    },
+
+    sendEmail: async (request, response) => {
+      if (!actionsAllowed()) {
+        response.status(403).json({ ok: false, error: ACTIONS_LOCKED_MESSAGE, code: "locked" });
+        return;
+      }
+      const parsed = sendEmailSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ ok: false, error: "ข้อมูลอีเมลไม่ครบหรือไม่ถูกต้องค่ะ" });
+        return;
+      }
+      const cfg = resolveGoogleWorkspaceConfig();
+      if (!cfg) {
+        response.status(503).json({ ok: false, error: "ยังไม่ได้เชื่อมต่อ Gmail ค่ะ" });
+        return;
+      }
+      const { to, subject, body, threadId, inReplyTo, references } = parsed.data;
+      const raw = buildRawEmail({ from: cfg.accountEmail, to, subject, body, ...(inReplyTo ? { inReplyTo } : {}), ...(references ? { references } : {}) });
+      const result = await sendGmailMessage(raw, threadId || undefined);
+      if (!result.ok) {
+        response.status(result.code === "scope" ? 403 : result.configured ? 502 : 503).json(result);
+        return;
+      }
+      response.status(201).json(result);
+    },
+
+    changeCalendar: async (request, response) => {
+      if (!actionsAllowed()) {
+        response.status(403).json({ ok: false, error: ACTIONS_LOCKED_MESSAGE, code: "locked" });
+        return;
+      }
+      const parsed = calendarChangeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ ok: false, error: "ข้อมูลนัดหมายไม่ครบหรือไม่ถูกต้องค่ะ" });
+        return;
+      }
+      const { action, eventId, title, startIso, endIso } = parsed.data;
+      const result =
+        action === "delete"
+          ? await deleteCalendarEvent(eventId)
+          : await updateCalendarEvent(eventId, { ...(title ? { title } : {}), ...(startIso ? { startIso } : {}), ...(endIso ? { endIso } : {}) });
+      if (!result.ok) {
+        response.status(result.code === "scope" ? 403 : result.code === "not-found" ? 404 : result.configured ? 502 : 503).json(result);
+        return;
+      }
+      response.json(result);
     },
 
     createCalendar: async (request, response) => {

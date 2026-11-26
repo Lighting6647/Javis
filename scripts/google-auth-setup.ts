@@ -5,17 +5,21 @@
  * วิธีใช้:
  *   1) ตั้งค่า GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET ใน .env.local
  *   2) รัน: npx.cmd tsx scripts/google-auth-setup.ts
- *   3) เปิดลิงก์ที่แสดง, อนุญาตบัญชี Lighting6647@gmail.com แล้วนำ code มาวางต่อท้ายคำสั่ง:
- *      npx.cmd tsx scripts/google-auth-setup.ts --code="<AUTHORIZATION_CODE>"
+ *   3) เปิดลิงก์ที่แสดง อนุญาตบัญชี Lighting6647@gmail.com แล้วคัดลอก URL ทั้งเส้นจากแถบที่อยู่
+ *      (หน้า localhost:8787/oauth2callback?code=...) มาวางในหน้าต่างเดิมที่สคริปต์รออยู่ แล้วกด Enter
+ *      หรือส่งเป็นอาร์กิวเมนต์ก็ได้: npx.cmd tsx scripts/google-auth-setup.ts --code="<CODE หรือ URL>"
  */
 import dotenv from "dotenv";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), quiet: true });
 
 const REDIRECT_URI = "http://localhost:8787/oauth2callback";
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
+  // ส่งอีเมลที่ผู้ใช้กดยืนยันในการ์ดแล้ว (ส่งได้อย่างเดียว ไม่ลบหรือแก้อีเมลเดิม)
+  "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks"
 ];
@@ -29,7 +33,18 @@ if (!clientId || !clientSecret) {
   process.exit(1);
 }
 
-const codeArg = process.argv.find((arg) => arg.startsWith("--code="))?.slice("--code=".length).trim();
+/**
+ * อ่านค่า code จากสิ่งที่ผู้ใช้วาง: URL ทั้งเส้นของหน้า oauth2callback หรือค่า code อย่างเดียว
+ * รับ URL ได้ทั้งเส้น เพราะการตัดเฉพาะ code ในหน้าต่างคำสั่งของ Windows พลาดง่าย (เครื่องหมาย & ตัดคำสั่ง)
+ */
+function readAuthCode(input: string): string {
+  const text = input.trim().replace(/^["']|["']$/g, "");
+  if (/^https?:\/\//i.test(text) && URL.canParse(text)) return new URL(text).searchParams.get("code")?.trim() ?? "";
+  const match = /(?:^|[?&])code=([^&\s]+)/.exec(text);
+  return decodeURIComponent(match?.[1] ?? text);
+}
+
+let codeArg = process.argv.find((arg) => arg.startsWith("--code="))?.slice("--code=".length).trim();
 
 if (!codeArg) {
   const params = new URLSearchParams({
@@ -43,9 +58,18 @@ if (!codeArg) {
   });
   process.stdout.write(`\n1) เปิดลิงก์นี้ในเบราว์เซอร์และเลือกบัญชี ${accountEmail}\n`);
   process.stdout.write(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}\n\n`);
-  process.stdout.write('2) หลังกดอนุญาต คัดลอกค่า ?code=... จากแถบ URL แล้วรัน:\n');
-  process.stdout.write('   npx.cmd tsx scripts/google-auth-setup.ts --code="<CODE_ที่คัดลอกมา>"\n\n');
-  process.exit(0);
+  process.stdout.write("2) หลังกดอนุญาต เบราว์เซอร์จะไปหน้า localhost:8787/oauth2callback?code=... (ขึ้นว่าไม่พบหน้าก็ไม่เป็นไร)\n");
+  process.stdout.write("   คัดลอก URL ทั้งเส้นจากแถบที่อยู่ แล้ววางที่นี่ จากนั้นกด Enter\n\n");
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  const pasted = await prompt.question("วาง URL หรือ code ตรงนี้: ");
+  prompt.close();
+  codeArg = pasted;
+}
+
+codeArg = readAuthCode(codeArg);
+if (!codeArg) {
+  console.error("ไม่พบค่า code ในข้อความที่วาง กรุณารันใหม่แล้ววาง URL ทั้งเส้นจากหน้า oauth2callback");
+  process.exit(1);
 }
 
 const body = new URLSearchParams({
