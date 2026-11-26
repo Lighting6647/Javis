@@ -32,6 +32,8 @@ export const CHECK_EMAILS_TOOL = "check_important_emails";
 export const MANAGE_CALENDAR_TOOL = "manage_calendar";
 /** เครื่องมือจด ค้นหา หรือดูรายการ Note / Google Tasks */
 export const MANAGE_NOTES_TOOL = "manage_notes";
+/** เครื่องมือร่างอีเมล (ตอบกลับหรือฉบับใหม่) ให้ผู้ใช้ตรวจและกดส่งเองในการ์ด */
+export const DRAFT_EMAIL_TOOL = "draft_email";
 export const MAX_SEARCH_QUERY_LENGTH = 200;
 /**
  * ช่วงเวลาของข้อมูลที่ AI ขอให้ค้น นับย้อนจากวันนี้ ("any" คือไม่จำกัด)
@@ -175,13 +177,25 @@ export interface ResponseReducer {
   readonly pcRequests: readonly ToolRequest[];
   /** AI ขอดูหรือบันทึกนัดหมายบน Google Calendar (null = ไม่ได้ขอ) */
   readonly calendarRequest: {
-    action: "list" | "create";
+    action: "list" | "create" | "update" | "delete";
     days?: number;
+    /** คำค้นชื่อนัดที่จะแก้หรือลบ (action = update / delete) */
+    eventQuery?: string;
+    /** วันที่ของนัดที่จะแก้หรือลบ YYYY-MM-DD ใช้แยกนัดชื่อซ้ำ */
+    eventDate?: string;
     title?: string;
     startIso?: string;
     endIso?: string;
     description?: string;
     location?: string;
+  } | null;
+  /** AI ร่างอีเมลให้ผู้ใช้ตรวจก่อนส่ง (null = ไม่ได้ขอ) */
+  readonly emailDraftRequest: {
+    mode: "reply" | "new";
+    replyQuery?: string;
+    to: string[];
+    subject: string;
+    body: string;
   } | null;
   /** AI ขอดู ค้นหา หรือจด Note / Google Tasks (null = ไม่ได้ขอ) */
   readonly noteRequest: {
@@ -230,6 +244,7 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
   const pcRequests: ToolRequest[] = [];
   const seenPcCalls = new Set<string>();
   let calendarRequest: ResponseReducer["calendarRequest"] = null;
+  let emailDraftRequest: ResponseReducer["emailDraftRequest"] = null;
   let noteRequest: ResponseReducer["noteRequest"] = null;
   /** ช่องที่หน้าเว็บของผู้ใช้มีจริง AI เสนอกรอกได้เฉพาะช่องในรายการนี้ */
   const fieldsById = new Map((options.pageFields ?? []).map((field) => [field.id, field]));
@@ -409,8 +424,10 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       };
     } else if (item.type === "function_call" && item.name === MANAGE_CALENDAR_TOOL && !calendarRequest) {
       const args = parseArguments(item.arguments);
-      const action = args.action === "create" ? "create" : "list";
+      const action = args.action === "create" || args.action === "update" || args.action === "delete" ? args.action : "list";
       const days = typeof args.days === "number" ? Math.min(Math.max(Math.trunc(args.days) || 7, 1), 30) : 7;
+      const eventQuery = typeof args.event_query === "string" ? cleanLine(args.event_query, 120) : "";
+      const eventDate = typeof args.event_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(args.event_date.trim()) ? args.event_date.trim() : "";
       const title = typeof args.title === "string" ? cleanLine(args.title, 180) : "";
       const startIso = typeof args.start_iso === "string" ? cleanLine(args.start_iso, 60) : "";
       const endIso = typeof args.end_iso === "string" ? cleanLine(args.end_iso, 60) : "";
@@ -419,11 +436,24 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
       calendarRequest = {
         action,
         days,
+        ...(eventQuery ? { eventQuery } : {}),
+        ...(eventDate ? { eventDate } : {}),
         ...(title ? { title } : {}),
         ...(startIso ? { startIso } : {}),
         ...(endIso ? { endIso } : {}),
         ...(description ? { description } : {}),
         ...(location ? { location } : {})
+      };
+    } else if (item.type === "function_call" && item.name === DRAFT_EMAIL_TOOL && !emailDraftRequest) {
+      const args = parseArguments(item.arguments);
+      const to = Array.isArray(args.to) ? args.to.filter((each): each is string => typeof each === "string").map((each) => each.trim()).filter(Boolean).slice(0, 10) : [];
+      const replyQuery = typeof args.reply_query === "string" ? cleanLine(args.reply_query, 160) : "";
+      emailDraftRequest = {
+        mode: args.mode === "reply" ? "reply" : "new",
+        ...(replyQuery ? { replyQuery } : {}),
+        to,
+        subject: typeof args.subject === "string" ? cleanLine(args.subject, 200) : "",
+        body: typeof args.body === "string" ? args.body.trim().slice(0, 5000) : ""
       };
     } else if (item.type === "function_call" && item.name === MANAGE_NOTES_TOOL && !noteRequest) {
       const args = parseArguments(item.arguments);
@@ -570,6 +600,9 @@ export function createResponseReducer(options: ResponseReducerOptions = {}): Res
     },
     get calendarRequest() {
       return calendarRequest;
+    },
+    get emailDraftRequest() {
+      return emailDraftRequest;
     },
     get noteRequest() {
       return noteRequest;
